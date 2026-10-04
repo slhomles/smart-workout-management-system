@@ -1,0 +1,37 @@
+# ================================
+# Smart Workout AI - AI Services
+# ================================
+
+# --- Core AI/ML ---
+torch==2.4.0
+torchvision==0.19.0
+ultralytics==8.2.0
+mediapipe==0.10.14
+opencv-python-headless==4.10.0.84
+
+# --- API Framework ---
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+
+# --- Image Processing ---
+Pillow==10.4.0
+numpy==1.26.4
+
+# --- Message Queue ---
+redis==5.1.0
+# aio-pika==9.4.0        # Uncomment nếu dùng RabbitMQ
+
+# --- Storage ---
+boto3==1.35.0
+
+# --- Utils ---
+python-dotenv==1.0.1
+pydantic==2.9.0
+
+# --- Jupyter (R&D) ---
+jupyter==1.0.0
+matplotlib==3.9.0
+seaborn==0.13.0
+
+# --- Testing ---
+pytest==8.3.0

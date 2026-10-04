@@ -1,0 +1,92 @@
+# ================================
+# Smart Workout AI - Docker Compose (Development)
+# ================================
+
+version: "3.9"
+
+services:
+  # --- Core Backend (FastAPI) ---
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sw-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - postgres
+      - mongodb
+      - redis
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+  # --- AI Services ---
+  ai-services:
+    build:
+      context: ./ai-services
+      dockerfile: Dockerfile
+    container_name: sw-ai
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./ai-services:/app
+    depends_on:
+      - redis
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # --- PostgreSQL ---
+  postgres:
+    image: postgres:16-alpine
+    container_name: sw-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: smart_workout
+      POSTGRES_PASSWORD: smart_workout_dev
+      POSTGRES_DB: smart_workout_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/postgresql/schemas:/docker-entrypoint-initdb.d
+
+  # --- MongoDB ---
+  mongodb:
+    image: mongo:7
+    container_name: sw-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  # --- Redis ---
+  redis:
+    image: redis:7-alpine
+    container_name: sw-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # --- Nginx (Reverse Proxy) ---
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: sw-nginx
+  #   ports:
+  #     - "80:80"
+  #   volumes:
+  #     - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf
+  #   depends_on:
+  #     - backend
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  redis_data:

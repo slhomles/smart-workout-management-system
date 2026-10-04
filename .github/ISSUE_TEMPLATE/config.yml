@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Tài liệu dự án
+    url: https://github.com/<your-org>/smart-workout-ai/tree/main/docs
+    about: Xem tài liệu trước khi tạo issue
