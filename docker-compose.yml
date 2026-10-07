@@ -53,9 +53,11 @@ services:
       POSTGRES_USER: smart_workout
       POSTGRES_PASSWORD: smart_workout_dev
       POSTGRES_DB: smart_workout_db
+      SW_SEED_TEST: "true"   # "false" để bỏ dữ liệu test (seeds/9*.sql), chỉ nạp master data
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/postgresql/schemas:/docker-entrypoint-initdb.d
+      # init.sh chạy schemas → views → seeds khi volume còn trống
+      - ./database/postgresql:/docker-entrypoint-initdb.d:ro
 
   # --- MongoDB ---
   mongodb:

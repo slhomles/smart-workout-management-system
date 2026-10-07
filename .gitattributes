@@ -1,3 +1,7 @@
+# Script & SQL luôn dùng LF (CRLF làm hỏng init.sh trong container Linux)
+*.sh text eol=lf
+*.sql text eol=lf
+
 # Đánh dấu file model AI để dùng Git LFS
 *.pt filter=lfs diff=lfs merge=lfs -text
 *.pth filter=lfs diff=lfs merge=lfs -text
