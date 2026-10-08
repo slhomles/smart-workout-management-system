@@ -24,14 +24,18 @@ Format: `<type>(<scope>): <description>`
 | `test` | Thêm/sửa tests |
 | `chore` | Cập nhật build, dependencies |
 
-**Scope**: `backend`, `frontend`, `ai`, `db`, `docs`, `infra`
+Thêm `design` (thiết kế DB/kiến trúc) và `style` (format) khi phù hợp.
+
+**Scope** (chọn một): `auth`, `exercise`, `workout`, `body`, `gallery`, `ai`, `report`, `core`, `db`, `docs`, `infra`, `frontend`
 
 **Ví dụ:**
 ```
-feat(backend): thêm API endpoint cho exercise wiki
+feat(exercise): thêm API tìm kiếm bài tập theo nhóm cơ
 fix(ai): sửa lỗi tính góc khớp trong pose estimation
-docs(api): cập nhật swagger specification
+docs(db): cập nhật data dictionary
 ```
+
+> Quy ước đầy đủ (nhánh, PR, test, migration) xem [`docs/architecture/05-tooling-workflow.md`](docs/architecture/05-tooling-workflow.md).
 
 ## 🌿 Branching Strategy
 
