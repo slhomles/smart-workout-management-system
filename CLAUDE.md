@@ -39,6 +39,7 @@ Khi tài liệu **không quy định** tình huống đang gặp, hoặc yêu c�
 | AI services, worker | [ai-services/README.md](ai-services/README.md) · [05-tooling-workflow.md](docs/architecture/05-tooling-workflow.md) §1.3, §6.3 (route `/ai/*`) |
 | Cấu hình, biến môi trường, Docker | [05-tooling-workflow.md](docs/architecture/05-tooling-workflow.md) §7.3, §7.6, §8.2 · [04-auth-strategy.md](docs/architecture/04-auth-strategy.md) §6.4 |
 | **Tạo nhánh, commit, PR** | [docs/architecture/Claude_git.md](docs/architecture/Claude_git.md) (toàn bộ) · [05-tooling-workflow.md](docs/architecture/05-tooling-workflow.md) §9.3–9.4 |
+| Agent flow tự động (orchestrator/implementer/spec-writer), bot Telegram, `team.json`, `modules.json`, spec module trong `docs/features/` | [scripts/agent-flow/README.md](scripts/agent-flow/README.md) · [docs/features/_TEMPLATE.md](docs/features/_TEMPLATE.md) · spec module tương ứng |
 
 ---
 
@@ -75,7 +76,7 @@ Các tài liệu được viết ở các thời điểm khác nhau và có ch�
 **Git** (theo `Claude_git.md`)
 - Nhánh: `<type>/<mo-ta-tieng-anh>`, ví dụ `feat/add-exercise-search`; tạo từ `main` mới nhất. KHÔNG dùng `feature/...`.
 - Commit: tiếng Anh, thể mệnh lệnh, type trong danh sách của `Claude_git.md` (KHÔNG có `design`).
-- **KHÔNG** thêm `Co-Authored-By`, `Generated with Claude Code` hay chữ ký AI nào; KHÔNG đổi git config, KHÔNG dùng `--author`.
+- **KHÔNG** thêm `Co-Authored-By`, `Generated with Claude Code` hay chữ ký AI nào; KHÔNG đổi git config, KHÔNG dùng `--author`. Ngoại lệ duy nhất: commit của agent flow đi qua `scripts/agent-flow/flow_commit.py`, script này xoay vòng tác giả theo `team.json` (`Claude_git.md` §2.8).
 - Chỉ tạo nhánh/commit/push khi người dùng yêu cầu.
 
 ---

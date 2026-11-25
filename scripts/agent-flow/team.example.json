@@ -1,0 +1,46 @@
+{
+  "git": {
+    "rotation": "owner"
+  },
+  "telegram": {
+    "enabled": true,
+    "common": {
+      "token": "<token bot chung từ @BotFather>",
+      "chat_ids": [
+        "<chat_id của group nhóm, dạng -100...>"
+      ]
+    }
+  },
+  "members": {
+    "phuc": {
+      "name": "<Họ tên hiện trên commit, vd Le Trung Phuc>",
+      "github": "<username GitHub>",
+      "git_email": "<email noreply GitHub, vd 1234567+username@users.noreply.github.com>",
+      "modules": [
+        "<module phụ trách, vd auth-users>"
+      ],
+      "telegram_token": "<token bot riêng>",
+      "telegram_chat_id": "<chat_id riêng>"
+    },
+    "member2": {
+      "name": "<Họ tên>",
+      "github": "<username GitHub>",
+      "git_email": "<email noreply GitHub>",
+      "modules": [
+        "<module phụ trách>"
+      ],
+      "telegram_token": "<token bot riêng>",
+      "telegram_chat_id": "<chat_id riêng>"
+    },
+    "member3": {
+      "name": "<Họ tên>",
+      "github": "<username GitHub>",
+      "git_email": "<email noreply GitHub>",
+      "modules": [
+        "<module phụ trách>"
+      ],
+      "telegram_token": "<token bot riêng>",
+      "telegram_chat_id": "<chat_id riêng>"
+    }
+  }
+}

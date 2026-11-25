@@ -120,6 +120,13 @@ git switch -c feat/add-patch-user-endpoint
    - KHÔNG đổi `user.name` / `user.email` trong git config (cả local lẫn global) và KHÔNG dùng `--author=` hay `GIT_AUTHOR_*` để đặt tác giả khác.
    - Tác giả commit luôn là danh tính Git sẵn có của người dùng. Nếu `git config user.name` / `user.email` đang trống hoặc trông không phải của người dùng thì **dừng lại và hỏi**, không tự điền.
    - Message chỉ gồm `type(scope): mô tả`, body (nếu cần) và footer `BREAKING CHANGE` (nếu có), không có gì khác.
+   - **Ngoại lệ duy nhất: agent flow** (`scripts/agent-flow/`, nhóm đã thống nhất ngày 2026-11-25). Commit do flow tạo PHẢI đi qua `scripts/agent-flow/flow_commit.py`. Script này đặt tác giả bằng `git -c user.name=… -c user.email=…` theo danh sách thành viên trong `scripts/agent-flow/team.json` và theo `git.rotation`:
+     - `owner` (nhóm chọn): mọi commit của module mang tên người phụ trách, tức `owner` trong spec;
+     - `commit`: mỗi commit một người kế tiếp;
+     - `branch`: cả nhánh module một người, theo lượt.
+     - Danh sách chỉ gồm thành viên **đã đồng ý** cho dùng tên/email của mình; nên dùng email noreply của GitHub.
+     - Agent KHÔNG được tự đặt tác giả bằng cách khác (`--author`, `GIT_AUTHOR_*`, sửa git config) và KHÔNG gọi `git commit` trực tiếp.
+     - Commit làm bằng tay ngoài flow vẫn theo quy tắc ở trên.
 
 ### Ví dụ ĐÚNG
 
@@ -177,7 +184,7 @@ BREAKING CHANGE: response field first_name was renamed to given_name
 - [ ] Commit chỉ làm **một việc**
 - [ ] Type hợp lệ, dòng đầu ≤ 72 ký tự, thể mệnh lệnh, không dấu chấm cuối
 - [ ] Message KHÔNG có `Co-Authored-By`, `Generated with Claude Code` hay chữ ký AI nào
-- [ ] Không đổi git config, không dùng `--author`: tác giả là người dùng
+- [ ] Không đổi git config, không dùng `--author`: tác giả là người dùng (ngoại lệ: commit của agent flow đi qua `flow_commit.py`, xem §2.8)
 
 ---
 

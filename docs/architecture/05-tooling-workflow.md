@@ -474,7 +474,11 @@ Các handler đăng ký trong `main.py`:
 | Kiểm tra schema/seed | chạy `database/postgresql/tools/verify_schema.sql`, `verify_seed.sql` (không được có dòng `FAIL`) |
 
 - `init.sh` chỉ chạy lần đầu khi volume rỗng. Muốn nạp lại seed phải xoá volume `postgres_data`.
-- Mỗi thành viên có DB local riêng; KHÔNG dùng chung một DB để dev/test.
+- ~~Mỗi thành viên có DB local riêng; KHÔNG dùng chung một DB để dev/test.~~ **Thay bằng quyết định 2026-11-25:** mọi dịch vụ chạy trên VM Google Cloud của nhóm (repo `team-stack`, truy cập qua Tailscale). DB dev/test dùng chung là `smart_workout_db` trên PostgreSQL của VM (đã dựng bằng schemas + views + seeds, có seed test); Redis là dịch vụ `smart-workout-redis` trên VM. Thông tin kết nối nằm trong `backend/.env` (không commit). Hệ quả bắt buộc:
+  - Test PHẢI chạy trong transaction rollback, không để lại dữ liệu (xem mục 10).
+  - Tại một thời điểm chỉ chạy **một** agent flow trên DB này.
+  - KHÔNG xoá dữ liệu, dựng lại DB hay chạy `docker compose down -v` trên VM khi chưa báo nhóm.
+  - Docker Compose local (bảng trên) chỉ còn dùng khi làm việc offline.
 
 ### 8.3. Quy ước (nhắc lại từ `docs/database/design-overview.md`)
 
@@ -542,7 +546,7 @@ Ví dụ: `feat(exercise): thêm API tìm kiếm bài tập theo nhóm cơ` · `
 - Công cụ: `pytest` + `pytest-asyncio` + `httpx.AsyncClient` (fixture trong `tests/conftest.py`). Lint `ruff`, kiểu `mypy app/`.
 - **Mỗi endpoint ≥ 2 test**: 1 thành công + 1 lỗi (sai input / thiếu quyền / không tồn tại). Endpoint có quyền PHẢI test thêm "không đăng nhập" và "thiếu permission".
 - Coverage tối thiểu **70%** (CI chạy `pytest --cov`).
-- **Test chạy trên PostgreSQL thật** được dựng bằng `init.sh` (seed test bật), KHÔNG dùng SQLite (khác kiểu `citext`, schema, enum). Mỗi test chạy trong transaction rollback hoặc dùng DB dựng lại; test KHÔNG được phụ thuộc thứ tự chạy hay dữ liệu do test khác tạo.
+- **Test chạy trên PostgreSQL thật** được dựng bằng `init.sh` (seed test bật), KHÔNG dùng SQLite (khác kiểu `citext`, schema, enum). Mỗi test chạy trong transaction rollback hoặc dùng DB dựng lại; test KHÔNG được phụ thuộc thứ tự chạy hay dữ liệu do test khác tạo. Vì DB dev/test giờ dùng chung trên VM (mục 8.2), bắt buộc dùng **transaction rollback**; test không được commit dữ liệu hay sửa seed.
 - Fixture chuẩn (`tests/conftest.py`, Core owner viết):
   - `client` — `AsyncClient` gắn app.
   - `db` — session có rollback.
