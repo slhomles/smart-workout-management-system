@@ -89,6 +89,7 @@ Phần tử của `details`:
 | 404 | `<resource>_not_found` | Không tìm thấy resource (vd `user_not_found`) |
 | 409 | `<mô_tả>` (vd `email_already_exists`) | Xung đột dữ liệu: trùng unique, sai version |
 | 422 | `validation_error` | Đúng cú pháp nhưng sai validation / nghiệp vụ (FastAPI mặc định) |
+| 423 | `account_locked` | Tài khoản bị khoá (chỉ dùng ở luồng auth, xem mục 11) |
 | 429 | `rate_limit_exceeded` | Vượt rate limit |
 | 500 | `internal_error` | Lỗi server không lường trước |
 | 502/503 | `service_unavailable` | Phụ thuộc bên ngoài lỗi / bảo trì |
@@ -267,8 +268,44 @@ Quy tắc code:
 | `internal_error` | 500 | Lỗi hệ thống |
 | `http_<status>` | khác | Lỗi mặc định của framework (route không tồn tại, 405...) |
 
+### 10.1. Auth (theo `04-auth-strategy.md` §5)
+
+| code | Status | Ý nghĩa |
+|---|---|---|
+| `invalid_credentials` | 401 | Sai email/mật khẩu, hoặc sai mật khẩu hiện tại |
+| `token_expired` | 401 | Access token hết hạn (client gọi `/auth/refresh`) hoặc refresh token hết hạn (đăng nhập lại) |
+| `token_invalid` | 401 | Token thiếu, sai chữ ký/định dạng/`type`, đã thu hồi, hoặc user không còn hợp lệ |
+| `token_reused` | 401 | Refresh token đã xoay vòng bị gửi lại; cả family bị thu hồi |
+| `account_disabled` | 403 | Tài khoản bị admin vô hiệu hoá |
+| `email_not_verified` | 403 | Chưa xác thực email |
+| `account_locked` | 423 | Tài khoản bị khoá (admin hoặc chống brute-force); `details` chứa `retry_after_seconds` |
+
+### 10.2. Body & Dashboard & Reports (chức năng 3)
+
+| code | Status | Ý nghĩa |
+|---|---|---|
+| `measurement_not_found` | 404 | Không có lần đo (hoặc không thuộc user) |
+| `goal_not_found` | 404 | Không có mục tiêu (hoặc không thuộc user) |
+| `report_not_found` | 404 | Không có báo cáo đã xuất (hoặc không thuộc user) |
+| `measurement_already_exists` | 409 | Đã có lần đo tại đúng `measured_at` này |
+| `active_goal_already_exists` | 409 | Đã có một mục tiêu `active`; phải đóng mục tiêu cũ trước |
+| `report_already_exists` | 409 | Đã xuất báo cáo cho kỳ này |
+
+### 10.3. Training: buổi tập, set/rep, tempo (chức năng 6)
+
+| code | Status | Ý nghĩa |
+|---|---|---|
+| `workout_session_not_found` | 404 | Không có buổi tập (hoặc không thuộc user, đã xoá mềm) |
+| `session_exercise_not_found` | 404 | Không có bài trong buổi tập |
+| `exercise_set_not_found` | 404 | Không có hiệp |
+| `exercise_not_found` | 404 | Bài tập không tồn tại / chưa xuất bản / đã xoá |
+| `session_already_in_progress` | 409 | User đã có một buổi `in_progress` |
+| `session_not_in_progress` | 409 | Buổi tập đã kết thúc, không thêm/sửa được |
+
 ---
 
 ## 11. Ngoại lệ đã được duyệt
 
-> Chưa có. Mọi ngoại lệ so với file này phải được ghi vào đây (endpoint, lý do, người duyệt) trước khi code.
+| Endpoint | Ngoại lệ | Lý do | Người duyệt |
+|---|---|---|---|
+| `POST /api/v1/auth/login` | Trả **423** `account_locked` (ngoài bảng mục 4) | Theo `04-auth-strategy.md` §4.3, §5: client cần phân biệt tài khoản bị khoá để hiện thời gian mở khoá | Pho Duc Phuong (2026-11-25) |
