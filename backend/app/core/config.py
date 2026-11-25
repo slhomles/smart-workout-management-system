@@ -6,6 +6,7 @@ Chỉ lấy cấu hình qua get_settings() (doc 05 §7.3).
 """
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -80,6 +81,13 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_S3_BUCKET: str = "smart-workout-media"
     AWS_S3_REGION: str = "ap-southeast-1"
+
+    # --- Object Storage ---
+    # "local": dev chưa có S3 — ghi file vào LOCAL_STORAGE_DIR/<bucket>/<object_key>, cùng bố cục key với S3.
+    STORAGE_BACKEND: Literal["local", "s3"] = "local"
+    LOCAL_STORAGE_DIR: str = ".storage"
+    # Font TrueType có dấu tiếng Việt để vẽ thẻ báo cáo; để trống thì tự dò font hệ thống.
+    REPORT_FONT_PATH: str = ""
 
     # --- AI Services ---
     AI_SERVICE_URL: str = "http://localhost:8001"
