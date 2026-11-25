@@ -9,7 +9,9 @@ Schema dùng chung cho mọi endpoint (Claude_api_respone.md §3, §5).
 import base64
 import binascii
 import json
+import uuid
 from collections.abc import Callable, Sequence
+from datetime import datetime
 from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, Field
@@ -70,6 +72,21 @@ def decode_cursor(cursor: str) -> dict[str, Any]:
             raise ValueError
         return value
     except (ValueError, binascii.Error, UnicodeError):
+        raise DataValidationError(
+            [ErrorDetail(field="cursor", message="Cursor không hợp lệ", code="invalid_cursor")]
+        ) from None
+
+
+def decode_keyset_cursor(cursor: str | None, key: str) -> tuple[datetime, uuid.UUID] | None:
+    """Giải mã cursor dạng {key: <ISO datetime>, "id": <uuid>} cho sắp xếp (key DESC, id DESC)."""
+    from app.core.exceptions import DataValidationError
+
+    if cursor is None:
+        return None
+    values = decode_cursor(cursor)
+    try:
+        return datetime.fromisoformat(values[key]), uuid.UUID(values["id"])
+    except (KeyError, ValueError, TypeError):
         raise DataValidationError(
             [ErrorDetail(field="cursor", message="Cursor không hợp lệ", code="invalid_cursor")]
         ) from None
