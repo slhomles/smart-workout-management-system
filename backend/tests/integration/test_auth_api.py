@@ -9,6 +9,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import LoginAttempt, RefreshToken, User, UserDevice
+from app.models.enums import TokenRevokeReason
 from tests.conftest import SEED_PASSWORD, persona_id
 
 LOGIN = "/api/v1/auth/login"
@@ -299,3 +300,164 @@ async def test_login_five_wrong_passwords_then_correct_password_returns_locked(
     db_now = await db.scalar(select(func.now()))
     assert locked_until is not None
     assert locked_until > db_now
+
+
+# ---------------------------------------------------------------------------
+# AUTH-07, AUTH-08, AUTH-09, AUTH-11: refresh / logout / me (spec docs/features/auth-users.md §5)
+# ---------------------------------------------------------------------------
+
+REFRESH = "/api/v1/auth/refresh"
+LOGOUT = "/api/v1/auth/logout"
+ME = "/api/v1/auth/me"
+
+
+def _sha256(raw: str) -> str:
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+async def _token_row(db: AsyncSession, raw: str):
+    """Đọc cột của `auth.refresh_tokens` theo token gốc (truy vấn cột → không dính cache identity map)."""
+    return (
+        await db.execute(
+            select(
+                RefreshToken.id,
+                RefreshToken.device_id,
+                RefreshToken.family_id,
+                RefreshToken.parent_token_id,
+                RefreshToken.revoked_at,
+                RefreshToken.revoke_reason,
+            ).where(RefreshToken.token_hash == _sha256(raw))
+        )
+    ).one()
+
+
+@pytest.mark.tc("AUTH-07")
+async def test_refresh_valid_then_reused_token_rotates_and_revokes_family(client: AsyncClient, db: AsyncSession):
+    old_raw = "seed-refresh-demo-2"
+    pixel_id = await _device_id(db, 3, "Pixel 8 của An")
+    old_before = await _token_row(db, old_raw)
+    assert old_before.revoked_at is None
+
+    # Lần 1: xoay vòng thành công
+    res = await client.post(REFRESH, json={"refresh_token": old_raw})
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert "user" not in body
+    assert isinstance(body["access_token"], str) and body["access_token"]
+    new_raw = body["refresh_token"]
+    assert isinstance(new_raw, str) and new_raw and new_raw != old_raw
+    assert body["expires_in"] == 1800
+    assert uuid.UUID(body["device_id"]) == pixel_id
+
+    old_row = await _token_row(db, old_raw)
+    new_row = await _token_row(db, new_raw)
+    assert old_row.revoked_at is not None
+    assert old_row.revoke_reason == TokenRevokeReason.ROTATED
+    assert new_row.revoked_at is None
+    assert new_row.family_id == old_row.family_id
+    assert new_row.parent_token_id == old_row.id
+    assert new_row.device_id == pixel_id
+
+    # Lần 2: gửi lại token đã xoay vòng → phát hiện tái sử dụng
+    _assert_error(await client.post(REFRESH, json={"refresh_token": old_raw}), 401, "token_reused")
+
+    # Lần 3: token mới cũng đã bị thu hồi theo family
+    _assert_error(await client.post(REFRESH, json={"refresh_token": new_raw}), 401, "token_invalid")
+
+    family_rows = (
+        await db.execute(
+            select(RefreshToken.id, RefreshToken.revoked_at, RefreshToken.revoke_reason).where(
+                RefreshToken.family_id == old_row.family_id
+            )
+        )
+    ).all()
+    assert {row.id for row in family_rows} >= {old_row.id, new_row.id}
+    assert all(row.revoked_at is not None for row in family_rows)
+    reasons = {row.id: row.revoke_reason for row in family_rows}
+    assert reasons[old_row.id] == TokenRevokeReason.ROTATED
+    assert reasons[new_row.id] == TokenRevokeReason.REUSE_DETECTED
+
+
+@pytest.mark.tc("AUTH-08")
+@pytest.mark.parametrize(
+    ("payload", "status", "code"),
+    [
+        ({"refresh_token": "seed-refresh-demo-1"}, 401, "token_reused"),
+        ({"refresh_token": "seed-refresh-dung-exp"}, 401, "token_expired"),
+        ({"refresh_token": "seed-refresh-locked-2"}, 401, "token_invalid"),
+        ({"refresh_token": "seed-refresh-disabled-1"}, 401, "token_invalid"),
+        ({"refresh_token": "khong-ton-tai"}, 401, "token_invalid"),
+        ({}, 422, "validation_error"),
+    ],
+    ids=["demo_1_rotated", "dung_exp_expired", "locked_2_reuse_detected", "disabled_1_admin_revoked", "unknown", "empty"],
+)
+async def test_refresh_invalid_token_returns_matching_error(client: AsyncClient, payload: dict, status: int, code: str):
+    error = _assert_error(await client.post(REFRESH, json=payload), status, code)
+    assert isinstance(error["message"], str) and error["message"]
+    if code == "validation_error":
+        assert any(d["field"] == "refresh_token" for d in error["details"])
+
+
+@pytest.mark.tc("AUTH-09")
+async def test_logout_own_token_twice_and_other_user_token_is_idempotent(client: AsyncClient, db: AsyncSession):
+    login = await client.post(LOGIN, json=_login_body("demo"))
+    assert login.status_code == 200, login.text
+    login_body = login.json()
+    headers = {"Authorization": f"Bearer {login_body['access_token']}"}
+    own_raw = login_body["refresh_token"]
+
+    first = await client.post(LOGOUT, json={"refresh_token": own_raw}, headers=headers)
+    assert first.status_code == 200, first.text
+    assert first.json() == {"is_revoked": True}
+
+    second = await client.post(LOGOUT, json={"refresh_token": own_raw}, headers=headers)
+    assert second.status_code == 200, second.text
+    assert second.json() == {"is_revoked": False}
+
+    own_row = await _token_row(db, own_raw)
+    assert own_row.revoked_at is not None
+    assert own_row.revoke_reason == TokenRevokeReason.LOGOUT
+    _assert_error(await client.post(REFRESH, json={"refresh_token": own_raw}), 401, "token_invalid")
+
+    # Token của power@: demo không thu hồi được
+    power_raw = "seed-refresh-power-ios"
+    other = await client.post(LOGOUT, json={"refresh_token": power_raw}, headers=headers)
+    assert other.status_code == 200, other.text
+    assert other.json() == {"is_revoked": False}
+    power_row = await _token_row(db, power_raw)
+    assert power_row.revoked_at is None
+
+    power_refresh = await client.post(REFRESH, json={"refresh_token": power_raw})
+    assert power_refresh.status_code == 200, power_refresh.text
+    assert isinstance(power_refresh.json()["access_token"], str) and power_refresh.json()["access_token"]
+
+
+@pytest.mark.tc("AUTH-11")
+async def test_me_demo_trainer_editor_returns_profile_roles_and_permissions(client: AsyncClient, auth_headers):
+    demo = await client.get(ME, headers=await auth_headers("demo"))
+    assert demo.status_code == 200, demo.text
+    body = demo.json()
+    assert "password_hash" not in body
+    assert body["id"] == DEMO_ID
+    assert body["display_name"] == "An"
+    assert body["full_name"] == "Nguyễn Văn An"
+    assert body["locale"] == "vi-VN"
+    assert body["timezone"] == "Asia/Ho_Chi_Minh"
+    assert body["unit_system"] == "metric"
+    assert body["status"] == "active"
+    assert body["roles"] == ["user"]
+    assert "workout:manage_own" in body["permissions"]
+    assert "user:read" not in body["permissions"]
+
+    trainer = await client.get(ME, headers=await auth_headers("trainer"))
+    assert trainer.status_code == 200, trainer.text
+    trainer_body = trainer.json()
+    assert trainer_body["roles"] == ["user"]
+    assert "exercise:create" not in trainer_body["permissions"]
+
+    editor = await client.get(ME, headers=await auth_headers("editor"))
+    assert editor.status_code == 200, editor.text
+    editor_body = editor.json()
+    assert editor_body["roles"] == ["content_editor"]
+    assert "exercise:create" in editor_body["permissions"]
+    assert "workout:manage_own" not in editor_body["permissions"]
