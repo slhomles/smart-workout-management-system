@@ -356,7 +356,13 @@ async def test_list_exercises_keyword_matches_equipment_synonym(client: AsyncCli
     assert {"dumbbell-row", "goblet-squat"} <= set(_slugs(body))
 
 
-# EXW-03(d) `q=test` chờ câu trả lời Q1: seed có bài published "World's Greatest Stretch" khớp "test".
+@pytest.mark.tc("EXW-03")
+async def test_list_exercises_keyword_matching_only_hidden_exercises_returns_empty(
+    client: AsyncClient, auth_headers
+):
+    # Dùng `[TEST]` thay `test` vì seed `worlds-greatest-stretch` khớp chuỗi con "test" (Q1, phương án A).
+    body = await _exercises(client, auth_headers, {"q": "[TEST]"})
+    assert body == {"data": [], "pagination": LAST_PAGE}
 
 
 async def test_list_exercises_blank_keyword_is_ignored(client: AsyncClient, auth_headers):
