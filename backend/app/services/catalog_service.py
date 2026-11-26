@@ -1,4 +1,4 @@
-"""Nghiệp vụ module Catalog/Wiki (chức năng 1): cây nhóm cơ, danh sách thiết bị.
+"""Nghiệp vụ module Catalog/Wiki (chức năng 1): tìm bài tập, cây nhóm cơ, danh sách thiết bị.
 
 Module chỉ đọc DB nên không có ranh giới transaction/commit.
 """
@@ -15,6 +15,8 @@ from app.schemas.catalog import (
     EquipmentCategorySchema,
     EquipmentQuery,
     EquipmentResponse,
+    ExerciseSearchQuery,
+    ExerciseSummaryResponse,
     MuscleGroupResponse,
 )
 
@@ -28,6 +30,32 @@ def _int_from_cursor(cursor: str, key: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= _INT4_MAX:
         raise DataValidationError([ErrorDetail(field="cursor", message="Cursor không hợp lệ", code="invalid_cursor")])
     return value
+
+
+# --- Bài tập ---
+def _search_filter(query: ExerciseSearchQuery) -> crud.ExerciseSearchFilter:
+    # Với hàm SQL, mảng rỗng nghĩa là "không có thiết bị/nhóm cơ nào" còn NULL là "không lọc";
+    # client không gửi param nào thì phải là không lọc.
+    keyword = query.q.strip() if query.q is not None else ""
+    return crud.ExerciseSearchFilter(
+        keyword=keyword or None,
+        muscle_group_ids=query.muscle_group_id or None,
+        is_primary_only=query.is_primary_only,
+        available_equipment_ids=query.available_equipment_id or None,
+        max_difficulty_rank=query.max_difficulty_rank,
+    )
+
+
+def _exercise_summary(row: Any) -> ExerciseSummaryResponse:
+    # Cột của crud đã đặt alias trùng tên field response.
+    return ExerciseSummaryResponse.model_validate(dict(row))
+
+
+async def search_exercises(db: AsyncSession, query: ExerciseSearchQuery) -> Page[ExerciseSummaryResponse]:
+    """Tìm & lọc bài tập đã xuất bản; cursor `{"offset": n}` vì hàm SQL chỉ hỗ trợ LIMIT/OFFSET."""
+    offset = _int_from_cursor(query.cursor, "offset") if query.cursor is not None else 0
+    rows = await crud.search_exercises(db, _search_filter(query), limit=query.limit + 1, offset=offset)
+    return build_page(rows, query.limit, _exercise_summary, lambda _row: {"offset": offset + query.limit})
 
 
 # --- Nhóm cơ ---

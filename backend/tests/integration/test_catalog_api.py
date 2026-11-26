@@ -22,6 +22,16 @@ MUSCLE_GROUP_KEYS = {
 }
 EQUIPMENT_KEYS = {"id", "code", "name", "name_en", "description", "category", "image_media_id", "synonyms"}
 LAST_PAGE = {"next_cursor": None, "has_more": False}
+EXERCISES_URL = "/api/v1/exercises"
+EXERCISE_SUMMARY_KEYS = {
+    "id", "slug", "name", "name_en", "category", "difficulty_code", "difficulty_name", "difficulty_rank",
+    "thumbnail_media_id",
+}
+HIDDEN_TEST_SLUGS = {"test-draft-exercise", "test-archived-exercise", "test-deleted-exercise"}
+LATS_KEYWORD_SLUGS = {
+    "dumbbell-row", "barbell-row", "lat-pulldown", "pull-up", "seated-cable-row", "chin-up", "inverted-row",
+    "rowing-machine", "medicine-ball-slam", "childs-pose", "ab-wheel-rollout",
+}
 
 
 def _err(res: Response, status: int, code: str) -> dict:
@@ -232,3 +242,196 @@ async def test_list_catalog_without_read_permission_returns_403(
     headers = await auth_headers("demo")
     monkeypatch.setattr(permission_service, "get_permissions", _only_granted)
     _err(await client.get(url, headers=headers), 403, "permission_denied")
+
+
+# --- GET /exercises ---
+async def _exercises(client: AsyncClient, auth_headers, params: dict) -> dict:
+    return _page(await client.get(EXERCISES_URL, params=params, headers=await auth_headers("demo")))
+
+
+async def _exercise_pages(client: AsyncClient, auth_headers, params: dict) -> list[dict]:
+    """Lần theo `next_cursor` tới trang cuối."""
+    pages = [await _exercises(client, auth_headers, params)]
+    for _ in range(10):  # chặn vòng lặp vô hạn nếu cursor không tiến
+        if not pages[-1]["pagination"]["has_more"]:
+            break
+        next_params = {**params, "cursor": pages[-1]["pagination"]["next_cursor"]}
+        pages.append(await _exercises(client, auth_headers, next_params))
+    return pages
+
+
+def _slugs(body: dict) -> list[str]:
+    return [item["slug"] for item in body["data"]]
+
+
+def _is_non_decreasing(values: list[int]) -> bool:
+    return all(left <= right for left, right in zip(values, values[1:]))
+
+
+async def _lats_with_dumbbell_bench(db: AsyncSession) -> dict:
+    """Bộ lọc EXW-04 (a): nhóm cơ lưng xô, thiết bị sẵn có tạ đơn + ghế phẳng (lặp param)."""
+    return {
+        "muscle_group_id": await _catalog_id(db, "muscle_groups", "lats"),
+        "available_equipment_id": [
+            await _catalog_id(db, "equipment", "dumbbell"),
+            await _catalog_id(db, "equipment", "flat_bench"),
+        ],
+    }
+
+
+@pytest.mark.tc("EXW-01")
+async def test_list_exercises_no_params_returns_first_20_easiest_first(client: AsyncClient, auth_headers):
+    body = await _exercises(client, auth_headers, {})
+    data = body["data"]
+    assert len(data) == 20 and body["pagination"]["has_more"] is True
+    assert isinstance(body["pagination"]["next_cursor"], str)
+    assert _is_non_decreasing([item["difficulty_rank"] for item in data])
+    first = data[0]
+    assert (first["difficulty_rank"], first["difficulty_code"], first["difficulty_name"]) == (1, "beginner", "Cơ bản")
+
+
+@pytest.mark.tc("EXW-01")
+async def test_list_exercises_items_have_exact_keys_and_json_types(client: AsyncClient, auth_headers):
+    data = (await _exercises(client, auth_headers, {}))["data"]
+    assert all(set(item) == EXERCISE_SUMMARY_KEYS for item in data)
+    assert all(type(item["id"]) is int for item in data)
+    assert all(str(uuid.UUID(item["thumbnail_media_id"])) == item["thumbnail_media_id"] for item in data)
+
+
+@pytest.mark.tc("EXW-01")
+async def test_list_exercises_keeps_search_function_order_with_card_fields(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    data = (await _exercises(client, auth_headers, {}))["data"]
+    function_ids = list(await db.scalars(text("SELECT exercise_id FROM catalog.fn_search_exercises(p_limit => 20)")))
+    card_rows = await db.execute(
+        text("SELECT exercise_id, difficulty_name, thumbnail_media_id FROM catalog.v_exercise_cards")
+    )
+    cards = {row.exercise_id: (row.difficulty_name, str(row.thumbnail_media_id)) for row in card_rows}
+    assert [item["id"] for item in data] == function_ids
+    assert [(item["difficulty_name"], item["thumbnail_media_id"]) for item in data] == [
+        cards[exercise_id] for exercise_id in function_ids
+    ]
+
+
+@pytest.mark.tc("EXW-02")
+async def test_list_exercises_limit_30_pages_until_last_page(client: AsyncClient, auth_headers):
+    pages = await _exercise_pages(client, auth_headers, {"limit": 30})
+    assert all(len(page["data"]) <= 30 for page in pages)
+    assert all(page["pagination"]["has_more"] is True for page in pages[:-1])
+    assert pages[-1]["pagination"] == LAST_PAGE
+
+
+@pytest.mark.tc("EXW-02")
+async def test_list_exercises_pages_cover_each_published_exercise_once(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    pages = await _exercise_pages(client, auth_headers, {"limit": 30})
+    items = [item for page in pages for item in page["data"]]
+    published = await db.scalar(
+        text("SELECT count(*) FROM catalog.exercises WHERE status = 'published' AND deleted_at IS NULL")
+    )
+    assert len(items) == len({item["id"] for item in items}) == published == 71
+    assert not HIDDEN_TEST_SLUGS & {item["slug"] for item in items}
+    assert _is_non_decreasing([item["difficulty_rank"] for item in items])
+
+
+@pytest.mark.tc("EXW-03")
+async def test_list_exercises_keyword_ignores_accents_and_case(client: AsyncClient, auth_headers):
+    plain = await _exercises(client, auth_headers, {"q": "lung xo"})
+    accented = await _exercises(client, auth_headers, {"q": "Lưng xô"})
+    assert [item["id"] for item in plain["data"]] == [item["id"] for item in accented["data"]]
+    assert len(plain["data"]) == 11 and set(_slugs(plain)) == LATS_KEYWORD_SLUGS
+    assert plain["data"][0]["difficulty_rank"] == 1
+    assert plain["pagination"] == LAST_PAGE
+
+
+@pytest.mark.tc("EXW-03")
+async def test_list_exercises_keyword_matches_equipment_synonym(client: AsyncClient, auth_headers):
+    body = await _exercises(client, auth_headers, {"q": "tạ tay", "limit": 100})
+    assert {"dumbbell-row", "goblet-squat"} <= set(_slugs(body))
+
+
+# EXW-03(d) `q=test` chờ câu trả lời Q1: seed có bài published "World's Greatest Stretch" khớp "test".
+
+
+async def test_list_exercises_blank_keyword_is_ignored(client: AsyncClient, auth_headers):
+    blank = await _exercises(client, auth_headers, {"q": "   "})
+    unfiltered = await _exercises(client, auth_headers, {})
+    assert blank == unfiltered
+
+
+@pytest.mark.tc("EXW-04")
+async def test_list_exercises_filter_lats_with_available_equipment(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    body = await _exercises(client, auth_headers, await _lats_with_dumbbell_bench(db))
+    assert set(_slugs(body)) == {"dumbbell-row", "childs-pose"}
+    assert body["pagination"] == LAST_PAGE
+
+
+@pytest.mark.tc("EXW-04")
+async def test_list_exercises_filter_primary_only_drops_secondary_lats(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    params = {**await _lats_with_dumbbell_bench(db), "is_primary_only": "true"}
+    body = await _exercises(client, auth_headers, params)
+    assert _slugs(body) == ["dumbbell-row"]
+
+
+@pytest.mark.tc("EXW-04")
+async def test_list_exercises_filter_parent_muscle_includes_children_up_to_max_rank(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    back_id = await _catalog_id(db, "muscle_groups", "back")
+    body = await _exercises(client, auth_headers, {"muscle_group_id": back_id, "max_difficulty_rank": 1, "limit": 100})
+    slugs = set(_slugs(body))
+    assert {"dumbbell-row", "lat-pulldown", "seated-cable-row"} <= slugs
+    assert "barbell-row" not in slugs
+    assert body["data"] and all(item["difficulty_rank"] == 1 for item in body["data"])
+
+
+@pytest.mark.tc("EXW-05")
+@pytest.mark.parametrize(
+    ("params", "field"),
+    [
+        ({"limit": 0}, "limit"),
+        ({"limit": 101}, "limit"),
+        ({"cursor": "!!!khong-phai-cursor"}, "cursor"),
+        ({"cursor": encode_cursor({"offset": -1})}, "cursor"),
+        ({"q": "a" * 101}, "q"),
+        ({"max_difficulty_rank": 0}, "max_difficulty_rank"),
+        ({"muscle_group_id": "abc"}, "muscle_group_id.0"),
+        ({"muscle_group_id": 40000}, "muscle_group_id.0"),
+        ({"available_equipment_id": 3000000000}, "available_equipment_id.0"),
+    ],
+)
+async def test_list_exercises_invalid_query_returns_422(client: AsyncClient, auth_headers, params: dict, field: str):
+    res = await client.get(EXERCISES_URL, params=params, headers=await auth_headers("demo"))
+    err = _err(res, 422, "validation_error")
+    assert [detail["field"] for detail in err["details"]] == [field]
+
+
+@pytest.mark.parametrize("payload", [{"offset": True}, {"offset": "5"}, {"offset": 2147483648}, {"id": 5}])
+async def test_list_exercises_cursor_with_bad_offset_returns_422(client: AsyncClient, auth_headers, payload: dict):
+    res = await client.get(EXERCISES_URL, params={"cursor": encode_cursor(payload)}, headers=await auth_headers("demo"))
+    err = _err(res, 422, "validation_error")
+    assert [detail["field"] for detail in err["details"]] == ["cursor"]
+
+
+async def test_list_exercises_without_token_returns_401(client: AsyncClient):
+    res = await client.get(EXERCISES_URL)
+    _err(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+
+
+async def test_list_exercises_without_exercise_read_returns_403(
+    client: AsyncClient, auth_headers, monkeypatch: pytest.MonkeyPatch
+):
+    # Mọi persona seed đều có quyền đọc; giả lập user có các quyền đọc catalog khác trừ `exercise:read`.
+    async def _without_exercise_read(_db: AsyncSession, _user_id: uuid.UUID) -> set[str]:
+        return {"muscle_group:read", "equipment:read", "plan_template:read"}
+
+    headers = await auth_headers("demo")
+    monkeypatch.setattr(permission_service, "get_permissions", _without_exercise_read)
+    _err(await client.get(EXERCISES_URL, headers=headers), 403, "permission_denied")

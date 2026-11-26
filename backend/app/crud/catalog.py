@@ -1,9 +1,46 @@
 """Truy vấn chỉ đọc schema `catalog` bằng `text()` (module Catalog/Wiki không có model ORM, không commit)."""
 
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+# --- Bài tập ---
+@dataclass(frozen=True)
+class ExerciseSearchFilter:
+    """Đối số lọc của `catalog.fn_search_exercises`; `None` = không lọc theo điều kiện đó."""
+
+    keyword: str | None
+    muscle_group_ids: list[int] | None
+    is_primary_only: bool
+    available_equipment_ids: list[int] | None
+    max_difficulty_rank: int | None
+
+
+# CAST để asyncpg biết kiểu tham số (NULL không mang kiểu). WITH ORDINALITY + ORDER BY s.ord giữ đúng thứ tự
+# hàm trả về (độ khó, mức khớp, tên) sau khi JOIN view lấy thêm tên độ khó và thumbnail.
+_SEARCH_EXERCISES_SQL = """
+SELECT s.exercise_id AS id, s.slug, s.name, s.name_en, s.category,
+       s.difficulty_code, s.difficulty_rank, c.difficulty_name, c.thumbnail_media_id
+FROM catalog.fn_search_exercises(
+         CAST(:keyword AS text), CAST(:muscle_group_ids AS smallint[]), CAST(:is_primary_only AS boolean),
+         CAST(:available_equipment_ids AS integer[]), CAST(:max_difficulty_rank AS smallint),
+         CAST(:limit AS integer), CAST(:offset AS integer)
+     ) WITH ORDINALITY
+       AS s(exercise_id, slug, name, name_en, difficulty_code, difficulty_rank, category, match_score, ord)
+LEFT JOIN catalog.v_exercise_cards c ON c.exercise_id = s.exercise_id
+ORDER BY s.ord
+"""
+
+
+async def search_exercises(
+    db: AsyncSession, search: ExerciseSearchFilter, *, limit: int, offset: int
+) -> list[Any]:
+    """Bài đã xuất bản khớp bộ lọc, theo thứ tự của `catalog.fn_search_exercises` (LIMIT/OFFSET)."""
+    params = {**asdict(search), "limit": limit, "offset": offset}
+    return list((await db.execute(text(_SEARCH_EXERCISES_SQL), params)).mappings().all())
 
 
 async def list_muscle_groups(db: AsyncSession) -> list[Any]:

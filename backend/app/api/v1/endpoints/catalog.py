@@ -1,4 +1,4 @@
-"""Endpoint module Catalog/Wiki (chức năng 1): /muscle-groups, /equipment.
+"""Endpoint module Catalog/Wiki (chức năng 1): /exercises, /muscle-groups, /equipment.
 
 Một `router` gộp các router con theo tiền tố của doc 05 §6.3; mỗi router con mang tag Swagger riêng (doc 05 §4).
 """
@@ -11,12 +11,45 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import CurrentUser, require_permission
 from app.schemas.base import ERROR_RESPONSES, Page
-from app.schemas.catalog import EquipmentQuery, EquipmentResponse, MuscleGroupResponse
+from app.schemas.catalog import (
+    EquipmentQuery,
+    EquipmentResponse,
+    ExerciseSearchQuery,
+    ExerciseSummaryResponse,
+    MuscleGroupResponse,
+)
 from app.services import catalog_service
 
 router = APIRouter()
+exercises_router = APIRouter(prefix="/exercises", tags=["Exercises"])
 muscle_groups_router = APIRouter(prefix="/muscle-groups", tags=["Exercises"])
 equipment_router = APIRouter(prefix="/equipment", tags=["Equipment"])
+
+
+# --- Bài tập ---
+@exercises_router.get(
+    "",
+    response_model=Page[ExerciseSummaryResponse],
+    status_code=200,
+    responses=ERROR_RESPONSES,
+    summary="Tìm và lọc bài tập, sắp theo độ khó tăng dần",
+    description=(
+        "Quyền: `exercise:read`. Chỉ trả bài đã xuất bản, qua `catalog.fn_search_exercises`. "
+        "`q` khớp tên bài, nhóm cơ, thiết bị và từ đồng nghĩa, không phân biệt dấu và hoa thường; "
+        "`muscle_group_id` (lặp param, chọn nhóm cha gồm cả nhóm con) kết hợp `is_primary_only`; "
+        "`available_equipment_id` (lặp param) chỉ giữ bài mà mọi thiết bị bắt buộc đều có sẵn; "
+        "`max_difficulty_rank` giới hạn độ khó. Sắp theo độ khó tăng dần, rồi mức khớp từ khoá, rồi tên; "
+        "không có tham số `sort`. Phân trang cursor (`limit` 1–100, mặc định 20). "
+        "Tham số hoặc cursor sai → 422 `validation_error`."
+    ),
+)
+async def search_exercises(
+    query: Annotated[ExerciseSearchQuery, Query()],
+    _: CurrentUser = Depends(require_permission("exercise", "read")),
+    db: AsyncSession = Depends(get_db),
+) -> Page[ExerciseSummaryResponse]:
+    """Tìm kiếm và lọc đa điều kiện cho bước 1–2 của Wiki."""
+    return await catalog_service.search_exercises(db, query)
 
 
 # --- Nhóm cơ ---
@@ -65,3 +98,4 @@ async def list_equipment(
 # include_router chép route tại thời điểm gọi, nên phải đặt sau khi router con đã khai báo đủ route.
 router.include_router(muscle_groups_router)
 router.include_router(equipment_router)
+router.include_router(exercises_router)
