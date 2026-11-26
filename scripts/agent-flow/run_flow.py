@@ -35,6 +35,8 @@ sys.path.insert(0, str(HERE))
 import check_done  # noqa: E402
 import notify  # noqa: E402
 import team  # noqa: E402
+import timeline  # noqa: E402
+import timeline_render  # noqa: E402
 import usage  # noqa: E402
 from notify import esc  # noqa: E402
 
@@ -486,6 +488,7 @@ class Flow:
         lines.append(f"Token: iteration này {usage.format_tokens(p.get('tokens'))} · "
                      f"cả flow {usage.format_tokens(self.run_info.get('usage_total'))}")
         lines.append(usage.format_quota(self.run_info.get("rate_limit")))
+        lines += self.timeline_lines(p.get("session_id"))
         if p["error"]:
             lines.append("Iteration lỗi" + (" (quá thời gian)" if p["timed_out"] else "")
                          + f", xem <code>{esc(self.logs)}</code>")
@@ -726,7 +729,9 @@ class Flow:
         cached = read_json(self.gate_file, {})
         if key and cached.get("cache_key") == key and "gates" in cached:
             log(f"cổng: HEAD {str(cached.get('head', ''))[:10]} không đổi, dùng lại kết quả lần trước")
+            self.mark("gate", cached=True, seconds=0, head=cached.get("head"))
             return cached
+        began = time.monotonic()
         try:
             report = check_done.evaluate(
                 self.wt, self.wt / self.spec_rel, self.base_sha, self.gates, str(self.python)
@@ -737,7 +742,37 @@ class Flow:
             key = None  # lỗi của chính cổng thì lần sau phải chạy lại
         report["cache_key"] = key
         write_json(self.gate_file, report)
+        self.mark("gate", cached=False, seconds=round(time.monotonic() - began, 1), head=report.get("head"),
+                  per_gate={n: g.get("seconds") for n, g in report.get("gates", {}).items() if g.get("seconds")})
         return report
+
+    def mark(self, kind: str, **fields) -> None:
+        """Ghi một sự kiện thời gian của runner vào state/timeline.jsonl (xem timeline.py)."""
+        entry = {"at": now(), "t": time.time(), "kind": kind, **fields}
+        try:
+            with (self.state_dir / "timeline.jsonl").open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except OSError as exc:
+            log(f"CẢNH BÁO: không ghi được timeline: {exc}")
+
+    def write_timeline(self) -> Path | None:
+        """Ghi state/TIMELINE.md; lỗi ở đây không được làm sập flow."""
+        try:
+            report = timeline.build_report(self.wt, self.state_dir)
+            path = self.state_dir / "TIMELINE.md"
+            path.write_text(timeline_render.markdown(self.module, report), encoding="utf-8")
+            return path
+        except Exception as exc:  # noqa: BLE001 - báo cáo thời gian chỉ để xem, không phải điều kiện của flow
+            log(f"CẢNH BÁO: không dựng được timeline: {exc}")
+            return None
+
+    def timeline_lines(self, session_id: str | None) -> list[str]:
+        try:
+            summary = timeline.session_summary(self.wt, session_id)
+        except Exception as exc:  # noqa: BLE001 - xem write_timeline
+            log(f"CẢNH BÁO: không tóm tắt được thời gian iteration: {exc}")
+            return []
+        return timeline_render.iteration_lines(summary) if summary else []
 
     def write_brief(self, i: int, gate: dict, notes: list[str]) -> Path:
         py = self.python
@@ -899,6 +934,8 @@ class Flow:
                 "result": str(data.get("result", ""))[:500],
             })
             self.track_usage(res)
+            self.mark("iteration", i=i, session_id=data.get("session_id"), started=started, ended=now(),
+                      tokens=res["tokens"], cost_usd=data.get("total_cost_usd"), turns=data.get("num_turns"))
 
             if res["is_limit"]:
                 i -= 1
@@ -916,6 +953,7 @@ class Flow:
                             f"tạm dừng đến khoảng {resume_at} rồi chạy tiếp")
                 self.save_run(i)
                 time.sleep(wait)
+                self.mark("wait", reason="hạn mức", seconds=wait)
                 self.tick = time.monotonic()  # thời gian chờ hạn mức không tính vào mốc thời gian của module
                 just_waited = True
                 continue
@@ -935,7 +973,8 @@ class Flow:
                              - dt.datetime.strptime(started, "%Y-%m-%d %H:%M:%S")).total_seconds() / 60)
             pending = {"i": i, "minutes": minutes, "error": res["is_error"],
                        "timed_out": res["timed_out"], "result": str(data.get("result", "")).strip(),
-                       "tokens": res["tokens"]}
+                       "tokens": res["tokens"], "session_id": data.get("session_id")}
+            self.write_timeline()
 
             current = git(self.wt, "rev-parse", "--abbrev-ref", "HEAD")
             if current != self.spec["branch"]:
@@ -1017,6 +1056,9 @@ class Flow:
                       for q in questions]
         if (self.state_dir / "REPORT.md").exists():
             lines += ["", f"Báo cáo của orchestrator: `{self.state_dir / 'REPORT.md'}`"]
+        timeline_file = self.write_timeline()
+        if timeline_file:
+            lines += ["", f"Thời gian đi đâu (từng iteration, từng task, bước chậm nhất): `{timeline_file}`"]
         lines += ["", "Runner KHÔNG push/merge. Xem lại nhánh rồi tự push/mở PR theo Claude_git.md."]
         report = self.mod_dir / "RUN-REPORT.md"
         report.write_text("\n".join(lines) + "\n", encoding="utf-8")

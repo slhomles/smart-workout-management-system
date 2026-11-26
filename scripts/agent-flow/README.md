@@ -26,6 +26,7 @@ runner tự chạy check_done.py trên HEAD → chỉ dừng "XONG" khi:
 | `.claude/agents/implementer.md` | Agent triển khai, mỗi lần làm đúng một task |
 | `scripts/agent-flow/run_flow.py` | Vòng lặp chạy không giám sát: worktree, preflight, giới hạn sử dụng, phát hiện kẹt, báo cáo |
 | `scripts/agent-flow/check_done.py` | Cổng "xong" chạy độc lập với model |
+| `scripts/agent-flow/timeline.py`, `transcript.py`, `timeline_render.py` | Dựng và hiển thị timeline thời gian của từng phiên (mục 4) |
 | `scripts/agent-flow/tc_plugin.py` | Plugin pytest ánh xạ `@pytest.mark.tc("ID")` → kết quả |
 | `scripts/agent-flow/flow-settings.json` | Quyền cho chế độ không giám sát + tắt chữ ký AI trong commit |
 | `scripts/agent-flow/team.example.json` | **Mẫu file thành viên**: danh tính git, module phụ trách, bot Telegram. Bản thật `team.json` bị gitignore |
@@ -99,7 +100,23 @@ Mọi thứ nằm trong `..\smart_workout-flow\<module>\`:
 | `state\state.json` | Kế hoạch task, trạng thái, câu hỏi |
 | `state\journal.md` | Nhật ký orchestrator theo từng iteration |
 | `state\REPORT.md` | Báo cáo nghiệm thu của orchestrator: TC → test → commit, checklist tài liệu |
+| `state\TIMELINE.md` | **Thời gian đi đâu**: từng iteration, từng task, bước chậm nhất (xem mục "Xem thời gian đi đâu" bên dưới) |
+| `state\timeline.jsonl` | Sự kiện thời gian của runner: cổng (chạy thật hay dùng lại kết quả cũ, mất bao lâu), chờ hạn mức, ranh giới iteration |
 | `logs\iter-NNN.*` | Output thô của từng phiên Claude |
+
+### Xem thời gian đi đâu
+
+Sau mỗi iteration, tin Telegram có thêm khối `⏱ Thời gian` (ví dụ `implementer 35,2 (53%) · chờ test chạy nền 10,9 (16%) · ...`, thời gian từng task, bước chậm nhất), và `state\TIMELINE.md` được ghi lại. Xem bất cứ lúc nào:
+
+- Telegram: `/timeline [module]` (kèm dòng "đang làm" của flow đang chạy); `/status` cũng có dòng "đang làm".
+- Máy tính: `python scripts\agent-flow\timeline.py <module>` (dùng được cả cho phiên đã chạy từ trước).
+
+Các nhóm thời gian: `implementer` (cả lần gọi implementer, bên trong tách tiếp pytest/đọc/ghi code/model), `chờ test chạy nền` (vòng lặp `sleep` đợi kết quả test hoặc cổng đang chạy nền), `cổng check_done`, `pytest`, `ruff/mypy`, `commit`, `đọc tài liệu/code`, `ghi state/journal`, `lệnh khác`. Đoạn không có lệnh nào đang chạy là `model suy nghĩ/viết`. Hai nhóm tính cạnh nhau thì nhóm ưu tiên (thứ tự ở trên) được tính, nên tổng các nhóm luôn bằng tổng thời gian phiên.
+
+Dữ liệu lấy từ transcript của Claude Code (`~/.claude/projects/...`, chỉ đọc) và `timeline.jsonl` của runner. Hạn chế:
+- chỉ có trên máy chạy flow; định dạng transcript là nội bộ của Claude Code nên có thể đổi theo phiên bản (khi đó chỉ mất phần timeline, flow vẫn chạy);
+- thời lượng mỗi lệnh là từ lúc gọi đến lúc có kết quả, sai số vài giây;
+- phiên chạy trước khi có tính năng này thiếu thời gian cổng của runner và thời gian chờ hạn mức.
 
 Xem lại code: `git log main..<branch>` hoặc mở thư mục worktree trong VS Code. Runner **không push, không mở PR**. Việc đó là của bạn, làm theo `Claude_git.md`.
 
@@ -183,6 +200,7 @@ Bot chặn Windows tự sleep trong lúc chạy. Muốn bot tự bật khi đăn
 |---|---|
 | `/run <module>` | Đưa module lên **đầu** hàng đợi (đã có trong hàng thì chuyển lên đầu); **không** dừng flow đang chạy. Nếu chưa có spec: agent `spec-writer` soạn `docs/features/<module>.md` từ Mô tả dự án + doc 05 + tài liệu DB. Bot kiểm tra spec (cấu trúc, owner, `error.code` phải có trong §10), gửi bảng test case lên Telegram, rồi **chạy luôn** flow (nhóm đã chọn không cần duyệt spec) |
 | `/run <module> --respec` | Soạn lại spec rồi chạy |
+| `/timeline [module]` | Thời gian đi đâu: từng iteration, từng task, bước chậm nhất, thời gian cổng và chờ hạn mức, và việc agent đang làm lúc này. Bỏ trống module thì dùng module đang chạy |
 | `/auto [on\|off]` | Bật/tắt **tự xếp hàng** (mặc định bật): khi rảnh, bot tự thêm vào cuối hàng đợi các module chưa xong, có owner, chưa từng chạy, theo thứ tự `modules.json`. Module đã chạy mà lỗi/kẹt/bị chặn không tự chạy lại. `/stop` một module đang xếp hàng thì bot không tự thêm lại nó |
 | `/run <module> --force` | Chạy lại module đã đánh dấu `"status": "done"` trong `modules.json`. Không có `--force` thì bot từ chối để tránh làm trùng việc đã xong (vd `core` đã làm tay qua PR #2, #3) |
 | `/status` | Flow đang chạy (iteration, TC pass, task, yêu cầu quyền đang chờ, **token đã dùng**), **hạn mức Claude còn lại** (cửa sổ 5 giờ và 7 ngày, giờ reset), hàng đợi, kết quả gần nhất |

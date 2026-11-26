@@ -9,6 +9,7 @@ Lệnh (gửi trong group cho bot chung, hoặc nhắn riêng bot của bạn):
   /run <module> [--respec]  đưa module lên ĐẦU hàng đợi (không dừng flow đang chạy); mỗi lúc chạy một flow
   /run <module> --force     chạy lại cả module đã đánh dấu xong (status: done trong modules.json)
   /status                   flow đang chạy, hàng đợi, kết quả gần nhất
+  /timeline [module]        thời gian đi đâu: từng iteration, từng task, bước chậm nhất, việc đang làm
   /stop <module>            dừng flow đang chạy hoặc bỏ khỏi hàng đợi
   /answer <module> <nội dung>  trả lời câu hỏi của agent (flow đang bị chặn sẽ chạy tiếp)
   /owner <module> <thành viên> đổi người phụ trách module (key trong team.json)
@@ -41,6 +42,8 @@ import check_done  # noqa: E402
 import notify  # noqa: E402
 import run_flow as rf  # noqa: E402
 import team  # noqa: E402
+import timeline  # noqa: E402
+import timeline_render  # noqa: E402
 import usage  # noqa: E402
 from notify import _call, esc  # noqa: E402
 
@@ -202,7 +205,7 @@ class Bot:
         self.log(f"lệnh từ {who}: {text[:200]}")
         handler = {
             "/start": self.cmd_help, "/help": self.cmd_help, "/modules": self.cmd_modules,
-            "/run": self.cmd_run, "/status": self.cmd_status, "/stop": self.cmd_stop,
+            "/run": self.cmd_run, "/status": self.cmd_status, "/timeline": self.cmd_timeline, "/stop": self.cmd_stop,
             "/answer": self.cmd_answer, "/owner": self.cmd_owner, "/auto": self.cmd_auto,
         }.get(cmd)
         if not handler:
@@ -292,6 +295,7 @@ class Bot:
                            if not p.with_name(p.name.replace(".req", ".res")).exists()]
                 if pending:
                     lines.append(f"   🔐 đang chờ duyệt {len(pending)} yêu cầu quyền")
+                lines += self.activity_lines(cur["module"])
         else:
             lines.append("Không có flow nào đang chạy.")
         lines += self.usage_lines(cur)
@@ -302,6 +306,31 @@ class Bot:
             lines.append("Gần nhất:")
             lines += [f"• {k}: {EXIT_TEXT.get(v['code'], v['code'])} ({v['at']})" for k, v in last.items()]
         self.reply(token, chat_id, "\n".join(lines))
+
+    def activity_lines(self, module: str) -> list[str]:
+        """Việc agent đang làm lúc này, đọc từ transcript đang ghi (không làm hỏng /status nếu lỗi)."""
+        try:
+            line = timeline_render.status_line(timeline.current_activity(self.root / module / "repo", time.time()))
+        except Exception as exc:  # noqa: BLE001 - dòng phụ, không phải lý do để /status thất bại
+            self.log(f"CẢNH BÁO: không đọc được việc đang làm của {module}: {exc}")
+            return []
+        return [f"   {line}"] if line else []
+
+    def cmd_timeline(self, token, chat_id, who, args) -> None:
+        with self.lock:
+            cur, last = self.state.get("current"), dict(self.state["last"])
+        key = args[0].strip().lower() if args else (cur or {}).get("module") or next(reversed(last), "")
+        if not key or not (self.root / key / "state").exists():
+            self.reply(token, chat_id, "Chưa có dữ liệu. Dùng: <code>/timeline &lt;module&gt;</code> "
+                       "cho module đã chạy flow.")
+            return
+        is_running = bool(cur and cur["module"] == key and cur["phase"] == "run")
+        try:
+            report = timeline.build_report(self.root / key / "repo", self.root / key / "state", is_running)
+        except Exception as exc:  # noqa: BLE001 - báo lỗi cho người hỏi thay vì im lặng
+            self.reply(token, chat_id, f"Không dựng được timeline của <code>{esc(key)}</code>: {esc(exc)}")
+            return
+        self.reply(token, chat_id, timeline_render.telegram(key, report))
 
     def usage_lines(self, cur: dict | None) -> list[str]:
         """Token flow đang chạy đã dùng (spec + iteration) và hạn mức Claude còn lại."""
