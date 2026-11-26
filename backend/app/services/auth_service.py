@@ -25,6 +25,7 @@ from app.models.auth import RefreshToken, User, UserDevice, UserProfile, UserRol
 from app.models.enums import LoginFailureReason, RoleCode, TokenRevokeReason, UserStatus
 from app.schemas.auth import (
     AuthUserSchema,
+    ChangePasswordRequest,
     DeviceInfoSchema,
     LoginRequest,
     LoginResponse,
@@ -269,6 +270,32 @@ async def logout(db: AsyncSession, user_id: uuid.UUID, raw_token: str) -> bool:
     token.revoke_reason = TokenRevokeReason.LOGOUT
     await db.commit()
     return True
+
+
+async def logout_all(db: AsyncSession, user_id: uuid.UUID) -> int:
+    """Thu hồi mọi refresh token chưa thu hồi trên mọi thiết bị của user (`logout`, doc 04 §4.5); trả số token."""
+    revoked = await crud.revoke_user_tokens(db, user_id, TokenRevokeReason.LOGOUT)
+    await db.commit()
+    return revoked
+
+
+async def change_password(db: AsyncSession, user: User, req: ChangePasswordRequest) -> MeResponse:
+    """
+    Đổi mật khẩu (doc 04 §4.7). Sai mật khẩu hiện tại, kể cả tài khoản chỉ OAuth → 401 invalid_credentials.
+    Thành công: băm mật khẩu mới, `password_changed_at = now()` (giờ DB), thu hồi mọi refresh token
+    (`password_changed`), xoá cache permission. Client phải đăng nhập lại.
+    """
+    if not verify_password(req.current_password, user.password_hash):
+        raise UnauthorizedError("invalid_credentials", "Mật khẩu hiện tại không đúng")
+
+    user_id = user.id
+    user.password_hash = hash_password(req.new_password)
+    user.password_changed_at = await _db_now(db)
+    await crud.revoke_user_tokens(db, user_id, TokenRevokeReason.PASSWORD_CHANGED)
+    result = await get_me(db, user)
+    await db.commit()
+    await permission_service.invalidate_permissions(user_id)
+    return result
 
 
 async def get_me(db: AsyncSession, user: User) -> MeResponse:

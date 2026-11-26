@@ -100,3 +100,19 @@ async def revoke_family(db: AsyncSession, family_id: uuid.UUID, reason: TokenRev
         .where(RefreshToken.family_id == family_id, RefreshToken.revoked_at.is_(None))
         .values(revoked_at=func.now(), revoke_reason=reason)
     )
+
+
+async def revoke_user_tokens(db: AsyncSession, user_id: uuid.UUID, reason: TokenRevokeReason) -> int:
+    """
+    Thu hồi mọi refresh token chưa thu hồi (kể cả đã quá hạn) trên mọi thiết bị của user; trả số token bị thu hồi.
+    `revoked_at` và `revoke_reason` gán cùng lúc (ck_refresh_tokens_revoke).
+    """
+    result = await db.execute(
+        update(RefreshToken)
+        .where(
+            RefreshToken.revoked_at.is_(None),
+            RefreshToken.device_id.in_(select(UserDevice.id).where(UserDevice.user_id == user_id)),
+        )
+        .values(revoked_at=func.now(), revoke_reason=reason)
+    )
+    return result.rowcount

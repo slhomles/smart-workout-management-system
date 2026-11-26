@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import CurrentUser, get_current_user
 from app.schemas.auth import (
+    ChangePasswordRequest,
     LoginRequest,
     LoginResponse,
     LogoutRequest,
@@ -16,6 +17,7 @@ from app.schemas.auth import (
     RefreshRequest,
     RegisterRequest,
     RegisterResponse,
+    RevokedTokensResponse,
     TokenPairResponse,
 )
 from app.schemas.base import ERROR_RESPONSES, ErrorResponse
@@ -35,6 +37,18 @@ REGISTER_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: {
         "model": ErrorResponse,
         "description": "validation_error (mật khẩu không đạt chính sách, email sai định dạng, field lạ)",
+    },
+}
+
+CHANGE_PASSWORD_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **ERROR_RESPONSES,
+    401: {
+        "model": ErrorResponse,
+        "description": "invalid_credentials (sai mật khẩu hiện tại) | token_invalid (chưa đăng nhập/token không hợp lệ)",
+    },
+    422: {
+        "model": ErrorResponse,
+        "description": "validation_error (mật khẩu mới không đạt chính sách, thiếu field)",
     },
 }
 
@@ -110,6 +124,24 @@ async def logout(
     return LogoutResponse(is_revoked=await auth_service.logout(db, current.id, body.refresh_token))
 
 
+@router.post(
+    "/logout-all",
+    response_model=RevokedTokensResponse,
+    status_code=200,
+    responses=ERROR_RESPONSES,
+    summary="Đăng xuất khỏi mọi thiết bị",
+    description=(
+        "Quyền: **đăng nhập**. Thu hồi mọi refresh token chưa thu hồi trên mọi thiết bị của user (`logout`); "
+        "`revoked_count` là số token vừa bị thu hồi. Access token đã cấp còn hiệu lực tới khi hết hạn (tối đa 30 phút)."
+    ),
+)
+async def logout_all(
+    current: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RevokedTokensResponse:
+    return RevokedTokensResponse(revoked_count=await auth_service.logout_all(db, current.id))
+
+
 @router.get(
     "/me",
     response_model=MeResponse,
@@ -120,3 +152,24 @@ async def logout(
 )
 async def me(current: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> MeResponse:
     return await auth_service.get_me(db, current.user)
+
+
+@router.patch(
+    "/change-password",
+    response_model=MeResponse,
+    status_code=200,
+    responses=CHANGE_PASSWORD_RESPONSES,
+    summary="Đổi mật khẩu",
+    description=(
+        "Quyền: **đăng nhập**. Sai `current_password` → 401 `invalid_credentials`. Mật khẩu mới 8–72 byte UTF-8, "
+        "có chữ cái và chữ số (không đạt → 422 `validation_error`). Thành công: thu hồi mọi refresh token "
+        "(`password_changed`), access token cấp trước đó bị từ chối; client phải đăng nhập lại. "
+        "Trả thông tin tài khoản như `GET /auth/me`."
+    ),
+)
+async def change_password(
+    body: ChangePasswordRequest,
+    current: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MeResponse:
+    return await auth_service.change_password(db, current.user, body)

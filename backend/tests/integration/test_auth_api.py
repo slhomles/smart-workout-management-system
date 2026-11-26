@@ -9,10 +9,11 @@ from sqlalchemy import cast, func, select, text
 from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import verify_password
+from app.core.security import create_access_token, verify_password
 from app.crud import auth as auth_crud
 from app.models.auth import LoginAttempt, RefreshToken, Role, User, UserDevice, UserProfile, UserRole
 from app.models.enums import TokenRevokeReason
+from app.schemas.auth import MeResponse
 from tests.conftest import SEED_PASSWORD, persona_id
 
 LOGIN = "/api/v1/auth/login"
@@ -696,3 +697,215 @@ async def test_register_invalid_body_returns_422_validation_error_without_creati
         assert all(overrides["password"] not in d["message"] for d in error["details"])
     assert await _count_users(db) == total_before
     assert await _count_users(db, payload["email"]) == by_email_before
+
+
+# ---------------------------------------------------------------------------
+# AUTH-10, AUTH-14, AUTH-15: logout-all / change-password (spec docs/features/auth-users.md §5)
+# ---------------------------------------------------------------------------
+
+LOGOUT_ALL = "/api/v1/auth/logout-all"
+CHANGE_PASSWORD = "/api/v1/auth/change-password"
+OAUTH_ID = persona_id(15)
+DEMO_REFRESH = "seed-refresh-demo-2"
+POWER_REFRESH = "seed-refresh-power-web"
+NEW_PASSWORD = "Moi@12345"
+
+
+async def _user_tokens(db: AsyncSession, user_id: str, *, revoked: bool) -> dict[uuid.UUID, tuple]:
+    """
+    Refresh token thuộc mọi thiết bị của user, lọc theo đã/chưa thu hồi:
+    id → (token_hash, revoked_at, revoke_reason). Truy vấn cột nên không dính identity map.
+    """
+    condition = RefreshToken.revoked_at.is_not(None) if revoked else RefreshToken.revoked_at.is_(None)
+    rows = await db.execute(
+        select(RefreshToken.id, RefreshToken.token_hash, RefreshToken.revoked_at, RefreshToken.revoke_reason)
+        .join(UserDevice, UserDevice.id == RefreshToken.device_id)
+        .where(UserDevice.user_id == uuid.UUID(user_id), condition)
+    )
+    return {row.id: (row.token_hash, row.revoked_at, row.revoke_reason) for row in rows}
+
+
+async def _tokens_by_id(db: AsyncSession, ids) -> dict[uuid.UUID, tuple]:
+    """id → (revoked_at, revoke_reason) của các refresh token theo id."""
+    rows = await db.execute(
+        select(RefreshToken.id, RefreshToken.revoked_at, RefreshToken.revoke_reason).where(RefreshToken.id.in_(ids))
+    )
+    return {row.id: (row.revoked_at, row.revoke_reason) for row in rows}
+
+
+async def _password_state(db: AsyncSession, user_id: str) -> tuple:
+    """(password_hash, password_changed_at) đọc thẳng từ `auth.users`."""
+    row = (
+        await db.execute(select(User.password_hash, User.password_changed_at).where(User.id == uuid.UUID(user_id)))
+    ).one()
+    return row.password_hash, row.password_changed_at
+
+
+@pytest.mark.tc("AUTH-10")
+async def test_logout_all_logged_in_user_revokes_tokens_of_every_device_and_returns_count(
+    client: AsyncClient, db: AsyncSession
+):
+    login = await client.post(LOGIN, json=_login_body("demo"))
+    assert login.status_code == 200, login.text
+    login_body = login.json()
+    raw_a = login_body["refresh_token"]
+    headers = {"Authorization": f"Bearer {login_body['access_token']}"}
+
+    active_before = await _user_tokens(db, DEMO_ID, revoked=False)
+    revoked_before = await _user_tokens(db, DEMO_ID, revoked=True)
+    active_hashes = {token_hash for token_hash, _, _ in active_before.values()}
+    assert _sha256(raw_a) in active_hashes
+    assert _sha256(DEMO_REFRESH) in active_hashes
+    n = len(active_before)
+    power_before = await _user_tokens(db, POWER_ID, revoked=False)
+    assert _sha256(POWER_REFRESH) in {token_hash for token_hash, _, _ in power_before.values()}
+
+    res = await client.post(LOGOUT_ALL, headers=headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json() == {"revoked_count": n}
+
+    # Đúng các token chưa thu hồi trước đó bị thu hồi với lý do `logout`
+    after = await _tokens_by_id(db, list(active_before))
+    assert set(after) == set(active_before)
+    for revoked_at, reason in after.values():
+        assert revoked_at is not None
+        assert reason == TokenRevokeReason.LOGOUT
+    assert await _user_tokens(db, DEMO_ID, revoked=False) == {}
+    # Token đã thu hồi từ trước giữ nguyên thời điểm và lý do
+    assert await _tokens_by_id(db, list(revoked_before)) == {
+        token_id: (revoked_at, reason) for token_id, (_, revoked_at, reason) in revoked_before.items()
+    }
+    # Token của power@ không bị đụng tới
+    assert await _user_tokens(db, POWER_ID, revoked=False) == power_before
+
+    _assert_error(await client.post(REFRESH, json={"refresh_token": raw_a}), 401, "token_invalid")
+    _assert_error(await client.post(REFRESH, json={"refresh_token": DEMO_REFRESH}), 401, "token_invalid")
+    power = await client.post(REFRESH, json={"refresh_token": POWER_REFRESH})
+    assert power.status_code == 200, power.text
+    assert isinstance(power.json()["access_token"], str) and power.json()["access_token"]
+
+
+@pytest.mark.tc("AUTH-14")
+async def test_change_password_correct_current_password_updates_hash_and_revokes_all_tokens(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    headers = await auth_headers("demo")
+    active_before = await _user_tokens(db, DEMO_ID, revoked=False)
+    assert _sha256(DEMO_REFRESH) in {token_hash for token_hash, _, _ in active_before.values()}
+    hash_before, changed_before = await _password_state(db, DEMO_ID)
+    me = await client.get(ME, headers=headers)
+    assert me.status_code == 200, me.text
+
+    res = await client.patch(
+        CHANGE_PASSWORD, json={"current_password": SEED_PASSWORD, "new_password": NEW_PASSWORD}, headers=headers
+    )
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert set(body) == set(me.json()) == set(MeResponse.model_fields)
+    assert body["id"] == DEMO_ID
+    assert body["email"] == "demo@smartworkout.local"
+    assert body["roles"] == ["user"]
+    assert "password_hash" not in body
+    assert NEW_PASSWORD not in res.text and SEED_PASSWORD not in res.text
+    assert "access_token" not in body and "refresh_token" not in body
+
+    # auth.users: hash mới khớp mật khẩu mới; password_changed_at = now() của DB
+    hash_after, changed_after = await _password_state(db, DEMO_ID)
+    assert hash_after != hash_before
+    assert verify_password(NEW_PASSWORD, hash_after)
+    assert not verify_password(SEED_PASSWORD, hash_after)
+    assert changed_after is not None
+    assert changed_after != changed_before
+    assert changed_after == await db.scalar(select(func.now()))
+
+    # Mọi refresh token chưa thu hồi trước đó (gồm seed-refresh-demo-2) bị thu hồi với lý do `password_changed`
+    after = await _tokens_by_id(db, list(active_before))
+    assert set(after) == set(active_before)
+    for revoked_at, reason in after.values():
+        assert revoked_at is not None
+        assert reason == TokenRevokeReason.PASSWORD_CHANGED
+    assert (await _token_row(db, DEMO_REFRESH)).revoke_reason == TokenRevokeReason.PASSWORD_CHANGED
+    assert await _user_tokens(db, DEMO_ID, revoked=False) == {}
+    _assert_error(await client.post(REFRESH, json={"refresh_token": DEMO_REFRESH}), 401, "token_invalid")
+
+    _assert_error(await client.post(LOGIN, json=_login_body("demo")), 401, "invalid_credentials")
+    login = await client.post(LOGIN, json=_login_body("demo", NEW_PASSWORD))
+    assert login.status_code == 200, login.text
+    assert login.json()["user"]["id"] == DEMO_ID
+
+
+@pytest.mark.tc("AUTH-15")
+@pytest.mark.parametrize(
+    ("payload", "status", "code", "field"),
+    [
+        ({"current_password": "Sai@1234", "new_password": NEW_PASSWORD}, 401, "invalid_credentials", None),
+        ({"current_password": SEED_PASSWORD, "new_password": "abcdefgh"}, 422, "validation_error", "new_password"),
+        ({"new_password": NEW_PASSWORD}, 422, "validation_error", "current_password"),
+    ],
+    ids=["wrong_current_password", "weak_new_password", "missing_current_password"],
+)
+async def test_change_password_invalid_request_returns_error_and_keeps_password_and_tokens(
+    client: AsyncClient, db: AsyncSession, auth_headers, payload: dict, status: int, code: str, field: str | None
+):
+    headers = await auth_headers("demo")
+    password_before = await _password_state(db, DEMO_ID)
+    active_before = await _user_tokens(db, DEMO_ID, revoked=False)
+    assert _sha256(DEMO_REFRESH) in {token_hash for token_hash, _, _ in active_before.values()}
+
+    res = await client.patch(CHANGE_PASSWORD, json=payload, headers=headers)
+
+    error = _assert_error(res, status, code)
+    assert isinstance(error["message"], str) and error["message"]
+    if field is not None:
+        assert field in [d["field"] for d in error["details"]], error["details"]
+    for value in payload.values():
+        assert value not in res.text, "lỗi không được phản hồi lại mật khẩu"
+
+    # Không đổi gì: hash, password_changed_at, token chưa thu hồi
+    assert await _password_state(db, DEMO_ID) == password_before
+    assert await _user_tokens(db, DEMO_ID, revoked=False) == active_before
+    assert (await _token_row(db, DEMO_REFRESH)).revoked_at is None
+    login = await client.post(LOGIN, json=_login_body("demo"))
+    assert login.status_code == 200, login.text
+
+
+async def test_change_password_oauth_only_account_returns_401_invalid_credentials(
+    client: AsyncClient, db: AsyncSession
+):
+    """Tài khoản chỉ OAuth (`password_hash = NULL`) không đổi được mật khẩu ở đây (doc 04 §4.7)."""
+    # oauth@ không đăng nhập bằng mật khẩu được → tự cấp access token hợp lệ cho …15 để gọi endpoint.
+    token = create_access_token(user_id=uuid.UUID(OAUTH_ID), roles=["user"], device_id=uuid.uuid4())
+    headers = {"Authorization": f"Bearer {token}"}
+    password_before = await _password_state(db, OAUTH_ID)
+    assert password_before[0] is None
+
+    res = await client.patch(
+        CHANGE_PASSWORD, json={"current_password": SEED_PASSWORD, "new_password": NEW_PASSWORD}, headers=headers
+    )
+
+    _assert_error(res, 401, "invalid_credentials")
+    assert await _password_state(db, OAUTH_ID) == password_before
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        ("POST", LOGOUT_ALL, None),
+        ("PATCH", CHANGE_PASSWORD, {"current_password": SEED_PASSWORD, "new_password": NEW_PASSWORD}),
+    ],
+    ids=["logout_all", "change_password"],
+)
+async def test_logout_all_and_change_password_without_token_return_401_token_invalid(
+    client: AsyncClient, db: AsyncSession, method: str, path: str, payload: dict | None
+):
+    password_before = await _password_state(db, DEMO_ID)
+    active_before = await _user_tokens(db, DEMO_ID, revoked=False)
+
+    res = await client.request(method, path, json=payload)
+
+    _assert_error(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+    assert await _password_state(db, DEMO_ID) == password_before
+    assert await _user_tokens(db, DEMO_ID, revoked=False) == active_before

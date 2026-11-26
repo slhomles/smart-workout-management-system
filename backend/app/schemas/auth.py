@@ -104,6 +104,23 @@ class LogoutResponse(BaseModel):
     is_revoked: bool = Field(..., description="TRUE nếu token được thu hồi ở lần gọi này")
 
 
+class RevokedTokensResponse(BaseModel):
+    """Kết quả `POST /auth/logout-all`: số refresh token bị thu hồi ở lần gọi này."""
+
+    revoked_count: int = Field(..., ge=0, description="Số refresh token chưa thu hồi vừa bị thu hồi")
+
+
+class ChangePasswordRequest(BaseModel):
+    """Body `PATCH /auth/change-password` (doc 04 §4.7). Mật khẩu mới theo chính sách doc 04 §6.1."""
+
+    current_password: str = Field(..., min_length=1, max_length=128)
+    new_password: NewPassword
+
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"current_password": "Demo@123", "new_password": "Moi@12345"}}
+    )
+
+
 class RegisterRequest(BaseModel):
     """Body `POST /auth/register` (doc 04 §4.2). Không nhận field lạ: client không tự đặt `status`/`roles`."""
 
