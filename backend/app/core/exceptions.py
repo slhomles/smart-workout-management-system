@@ -74,8 +74,8 @@ class DataValidationError(AppException):
 
 
 class ServiceUnavailableError(AppException):
-    def __init__(self, message: str = "Dịch vụ tạm thời không khả dụng"):
-        super().__init__(503, "service_unavailable", message)
+    def __init__(self, message: str = "Dịch vụ tạm thời không khả dụng", details: list[ErrorDetail] | None = None):
+        super().__init__(503, "service_unavailable", message, details)
 
 
 def _request_id(request: Request) -> str | None:
@@ -131,11 +131,12 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(IntegrityError)
     async def _integrity(request: Request, exc: IntegrityError) -> JSONResponse:
         # Dịch vi phạm ràng buộc DB theo tên constraint, không để lộ 500 (doc 05 §3.3, §7.4).
+        # Tên constraint/bảng chỉ ghi log server, không trả về client (Claude_api_respone.md §3).
         name = _constraint_name(exc)
         text = str(exc.orig)
-        logger.info("integrity_error constraint=%s", name)
+        logger.info("integrity_error constraint=%s request_id=%s", name, _request_id(request))
         if name.startswith("ck_") or (name.startswith("fk_") and "is not present" in text):
-            detail = ErrorDetail(field=None, message=f"Vi phạm ràng buộc {name}", code=name)
+            detail = ErrorDetail(field=None, message="Giá trị vi phạm ràng buộc dữ liệu", code="constraint_violation")
             return _error_json(request, 422, "validation_error", "Dữ liệu gửi lên không hợp lệ", [detail])
         return _error_json(request, 409, "conflict", "Dữ liệu bị xung đột")
 
