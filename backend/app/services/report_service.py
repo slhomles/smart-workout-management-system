@@ -175,11 +175,10 @@ async def get_report_image(db: AsyncSession, user_id: uuid.UUID, report_id: uuid
     if report is None:
         raise NotFoundError("report_not_found", "Không tìm thấy báo cáo")
     media = await crud.get_media(db, report.media_id)
-    data = (
-        await storage_service.read_object(media.bucket, media.object_key)
-        if media is not None and media.status == MediaStatus.AVAILABLE
-        else None
-    )
+    missing = NotFoundError("report_not_found", "Ảnh báo cáo không còn trên kho lưu trữ")
+    if media is None or media.status != MediaStatus.AVAILABLE:
+        raise missing
+    data = await storage_service.read_object(media.bucket, media.object_key)
     if data is None:
-        raise NotFoundError("report_not_found", "Ảnh báo cáo không còn trên kho lưu trữ")
+        raise missing
     return data, media.mime_type

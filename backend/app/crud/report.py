@@ -3,7 +3,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import select, tuple_
+from sqlalchemy import literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.analytics import ReportExport
@@ -38,7 +38,7 @@ async def list_reports(
     if report_type is not None:
         stmt = stmt.where(ReportExport.report_type == report_type)
     if after is not None:
-        stmt = stmt.where(tuple_(ReportExport.created_at, ReportExport.id) < tuple_(*after))
+        stmt = stmt.where(tuple_(ReportExport.created_at, ReportExport.id) < tuple_(literal(after[0]), literal(after[1])))
     stmt = stmt.order_by(ReportExport.created_at.desc(), ReportExport.id.desc()).limit(limit)
     return list((await db.scalars(stmt)).all())
 

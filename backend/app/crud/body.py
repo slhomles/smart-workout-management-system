@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import delete, select, text, tuple_
+from sqlalchemy import delete, literal, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import UserProfile
@@ -167,7 +167,7 @@ async def list_goals(
     if status is not None:
         stmt = stmt.where(UserGoal.status == status)
     if after is not None:
-        stmt = stmt.where(tuple_(UserGoal.created_at, UserGoal.id) < tuple_(*after))
+        stmt = stmt.where(tuple_(UserGoal.created_at, UserGoal.id) < tuple_(literal(after[0]), literal(after[1])))
     stmt = stmt.order_by(UserGoal.created_at.desc(), UserGoal.id.desc()).limit(limit)
     return list((await db.scalars(stmt)).all())
 
