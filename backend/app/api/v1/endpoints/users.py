@@ -10,12 +10,13 @@ from app.core.database import get_db
 from app.core.dependencies import CurrentUser, require_permission
 from app.models.enums import UserStatus
 from app.schemas.base import ERROR_RESPONSES, ErrorResponse, Page
-from app.schemas.user import UserAdminOut
+from app.schemas.user import UpdateUserRolesRequest, UserAdminOut
 from app.services import user_service
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
 READ_USERS = require_permission("user", "read")
+ASSIGN_ROLES = require_permission("role", "assign")
 
 USER_READ_RESPONSES: dict[int | str, dict[str, Any]] = {
     **ERROR_RESPONSES,
@@ -46,6 +47,27 @@ LIST_USERS_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: {
         "model": ErrorResponse,
         "description": "validation_error (`limit` ngoài 1–100, `cursor` hỏng, `status` sai)",
+    },
+}
+
+REPLACE_ROLES_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **ERROR_RESPONSES,
+    401: USER_READ_RESPONSES[401],
+    403: {
+        "model": ErrorResponse,
+        "description": "permission_denied (thiếu quyền `role:assign`)",
+    },
+    404: GET_USER_RESPONSES[404],
+    409: {
+        "model": ErrorResponse,
+        "description": "conflict (tự gỡ role `admin` khi là admin hiệu lực cuối cùng)",
+    },
+    422: {
+        "model": ErrorResponse,
+        "description": (
+            "validation_error (`roles` rỗng, thiếu `user`, mã role không hợp lệ, "
+            "field lạ, `user_id` không phải UUID)"
+        ),
     },
 }
 
@@ -92,3 +114,28 @@ async def get_user(
     db: AsyncSession = Depends(get_db),
 ) -> UserAdminOut:
     return await user_service.get_user(db, user_id)
+
+
+@router.put(
+    "/{user_id}/roles",
+    response_model=UserAdminOut,
+    status_code=200,
+    responses=REPLACE_ROLES_RESPONSES,
+    summary="Thay thế tập role của người dùng (quản trị)",
+    description=(
+        "Quyền: permission **`role:assign`**. Thay thế toàn bộ tập role của user bằng `roles` "
+        "(không rỗng, bắt buộc có `user`, mã trùng được bỏ); role mới ghi `granted_by` = admin đang gọi, "
+        "role đã hết hạn được cấp lại, role không còn trong tập bị xoá. "
+        "Không được tự gỡ `admin` của chính mình khi là admin hiệu lực cuối cùng (409 `conflict`). "
+        "Xoá cache quyền `perm:{user_id}`. Trả user sau cập nhật, `roles` chỉ gồm role còn hiệu lực."
+    ),
+)
+async def replace_user_roles(
+    user_id: uuid.UUID,
+    body: UpdateUserRolesRequest,
+    current: CurrentUser = Depends(ASSIGN_ROLES),
+    db: AsyncSession = Depends(get_db),
+) -> UserAdminOut:
+    return await user_service.replace_roles(
+        db, user_id, body.roles, actor_id=current.id
+    )

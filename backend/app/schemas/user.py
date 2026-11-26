@@ -3,9 +3,35 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.enums import UnitSystem, UserStatus
+from app.models.enums import RoleCode, UnitSystem, UserStatus
+
+
+class UpdateUserRolesRequest(BaseModel):
+    """
+    Body `PUT /users/{user_id}/roles`: tập role mới thay thế toàn bộ tập cũ (doc 04 §4.10).
+    Không rỗng, bắt buộc có `user`, mã trùng được bỏ (giữ thứ tự xuất hiện đầu tiên).
+    """
+
+    roles: list[RoleCode] = Field(
+        ...,
+        min_length=1,
+        description="Mã role (`user`, `content_editor`, `admin`); bắt buộc có `user`",
+    )
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={"example": {"roles": ["user", "content_editor"]}},
+    )
+
+    @field_validator("roles")
+    @classmethod
+    def _require_user_role(cls, roles: list[RoleCode]) -> list[RoleCode]:
+        # field_validator (không phải model_validator) để lỗi gắn `field="roles"`.
+        if RoleCode.USER not in roles:
+            raise ValueError("Tập role phải luôn có `user`")
+        return list(dict.fromkeys(roles))
 
 
 class UserAdminOut(BaseModel):
