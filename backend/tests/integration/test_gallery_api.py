@@ -530,3 +530,231 @@ async def test_list_photos_invalid_params_returns_422(client, auth_headers, case
 async def test_list_photos_user_without_photos_returns_empty_page(client, auth_headers):
     body = await _list(client, await auth_headers("newbie"))
     assert body == {"data": [], "pagination": {"next_cursor": None, "has_more": False}}
+
+
+# --- GAL-09..13: /photo-comparisons ---
+COMPARISON_URL = "/api/v1/photo-comparisons"
+KEYS_COMPARISON = {"id", "title", "before", "after", "created_at"}
+MISSING_PHOTO_ID = "00000000-0000-4000-8000-000000000000"
+
+
+def _assert_comparison_shape(comparison: dict) -> None:
+    assert set(comparison) == KEYS_COMPARISON
+    assert _is_uuid(comparison["id"]) and comparison["created_at"].endswith("Z")
+    _assert_photo_shape(comparison["before"])
+    _assert_photo_shape(comparison["after"])
+
+
+async def _compare(client: AsyncClient, headers: dict, payload: dict) -> Response:
+    return await client.post(COMPARISON_URL, headers=headers, json=payload)
+
+
+async def _upload_new_photo(client: AsyncClient, headers: dict) -> str:
+    res = await _upload(client, headers, {"angle": "front"}, VALID_FILE)
+    assert res.status_code == 201, res.text
+    return res.json()["id"]
+
+
+async def _comparison_count(db: AsyncSession) -> int:
+    return await _scalar(db, "SELECT count(*) FROM media.photo_comparisons")
+
+
+async def _pair_titles(db: AsyncSession, before_id: str, after_id: str) -> list:
+    rows = await db.execute(
+        text("SELECT title FROM media.photo_comparisons WHERE before_photo_id = :b AND after_photo_id = :a"),
+        {"b": uuid.UUID(before_id), "a": uuid.UUID(after_id)},
+    )
+    return list(rows.scalars().all())
+
+
+@pytest.mark.tc("GAL-09")
+@pytest.mark.usefixtures("local_storage")
+async def test_create_comparison_valid_pair_returns_created_with_embedded_photos(client, db, auth_headers):
+    headers = await auth_headers("demo")
+    w00, side = await _seed_ids(db, "demo-w00", "demo-side")
+    payload = {"before_photo_id": w00, "after_photo_id": side, "title": "Trước/Sau mặt bên"}
+    res = await _compare(client, headers, payload)
+    assert res.status_code == 201, res.text
+    comparison = res.json()
+    assert res.headers["Location"] == f"{COMPARISON_URL}/{comparison['id']}"
+    _assert_comparison_shape(comparison)
+    assert comparison["title"] == "Trước/Sau mặt bên"
+    assert _pick(comparison["before"], "id", "weight_kg") == {"id": w00, "weight_kg": 72.4}
+    assert _pick(comparison["after"], "id", "weight_kg") == {"id": side, "weight_kg": 70.0}
+    assert await _pair_titles(db, w00, side) == ["Trước/Sau mặt bên"]
+
+    new_photo = await _upload_new_photo(client, headers)
+    second = await _compare(client, headers, {"before_photo_id": w00, "after_photo_id": new_photo})
+    assert second.status_code == 201, second.text
+    _assert_comparison_shape(second.json())
+    assert second.json()["title"] is None
+    assert await _pair_titles(db, w00, new_photo) == [None]
+
+
+# (tên ca, before, after, title, field lỗi mong đợi). Alias ảnh seed được đổi sang id trong test;
+# after/title = None nghĩa là không gửi key đó.
+INVALID_COMPARISONS = [
+    ("same_photo", "demo-w00", "demo-w00", None, "after_photo_id"),
+    ("before_of_other_user", "dung-w00", "demo-w06", None, "before_photo_id"),
+    ("after_soft_deleted", "demo-w00", "demo-w03-deleted", None, "after_photo_id"),
+    ("before_missing", MISSING_PHOTO_ID, "demo-w06", None, "before_photo_id"),
+    ("before_taken_after_after", "demo-w06", "demo-w00", None, "after_photo_id"),
+    ("before_not_uuid", "abc", "demo-w06", None, "before_photo_id"),
+    ("after_absent", "demo-w00", None, None, "after_photo_id"),
+    ("title_too_long", "demo-w00", "demo-side", "x" * 101, "title"),
+]
+
+
+async def _resolve_photo(db: AsyncSession, value: str) -> str:
+    return str(await _seed_photo_id(db, value)) if value in SEED_KEYS else value
+
+
+async def _comparison_payload(db: AsyncSession, before: str, after: str | None, title: str | None) -> dict:
+    payload = {"before_photo_id": await _resolve_photo(db, before)}
+    if after is not None:
+        payload["after_photo_id"] = await _resolve_photo(db, after)
+    if title is not None:
+        payload["title"] = title
+    return payload
+
+
+@pytest.mark.tc("GAL-10")
+@pytest.mark.parametrize("case", INVALID_COMPARISONS, ids=[c[0] for c in INVALID_COMPARISONS])
+async def test_create_comparison_invalid_input_returns_422_without_rows(client, db, auth_headers, case):
+    _, before, after, title, expected_field = case
+    count_before = await _comparison_count(db)
+    res = await _compare(client, await auth_headers("demo"), await _comparison_payload(db, before, after, title))
+    error = _err(res, 422, "validation_error")
+    assert expected_field in [d["field"] for d in error["details"]]
+    assert await _comparison_count(db) == count_before
+
+
+@pytest.mark.tc("GAL-10")
+async def test_create_comparison_foreign_and_missing_photo_share_same_message(client, db, auth_headers):
+    headers = await auth_headers("demo")
+    messages = []
+    for before in ("dung-w00", MISSING_PHOTO_ID):
+        res = await _compare(client, headers, await _comparison_payload(db, before, "demo-w06", None))
+        error = _err(res, 422, "validation_error")
+        messages.append((error["message"], [(d["field"], d["message"]) for d in error["details"]]))
+    assert messages[0] == messages[1]
+
+
+@pytest.mark.tc("GAL-11")
+async def test_create_comparison_existing_pair_returns_409_and_keeps_seed_row(client, db, auth_headers):
+    w00, w06 = await _seed_ids(db, "demo-w00", "demo-w06")
+    payload = {"before_photo_id": w00, "after_photo_id": w06, "title": "lặp"}
+    res = await _compare(client, await auth_headers("demo"), payload)
+    error = _err(res, 409, "conflict")
+    assert error["details"] == []
+    assert await _pair_titles(db, w00, w06) == ["6 tuần giảm mỡ"]
+
+
+async def _list_comparisons(client: AsyncClient, headers: dict, **params) -> dict:
+    res = await client.get(COMPARISON_URL, headers=headers, params=params)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert set(body) == {"data", "pagination"} and set(body["pagination"]) == {"next_cursor", "has_more"}
+    for comparison in body["data"]:
+        _assert_comparison_shape(comparison)
+    return body
+
+
+@pytest.mark.tc("GAL-12")
+async def test_list_comparisons_demo_returns_seed_pair_with_measurements(client, db, auth_headers):
+    body = await _list_comparisons(client, await auth_headers("demo"))
+    assert body["pagination"] == {"next_cursor": None, "has_more": False}
+    assert len(body["data"]) == 1
+    comparison = body["data"][0]
+    w00, w06 = await _seed_ids(db, "demo-w00", "demo-w06")
+    assert comparison["title"] == "6 tuần giảm mỡ"
+    assert _pick(comparison["before"], "id", "weight_kg") == {"id": w00, "weight_kg": 72.4}
+    assert _pick(comparison["after"], "id", "weight_kg") == {"id": w06, "weight_kg": 70.0}
+
+
+@pytest.mark.tc("GAL-12")
+async def test_list_comparisons_power_returns_front_pair_before_earlier(client, auth_headers):
+    body = await _list_comparisons(client, await auth_headers("power"))
+    assert [c["title"] for c in body["data"]] == ["6 tháng tăng cơ"]
+    comparison = body["data"][0]
+    assert _iso(comparison["before"]["taken_at"]) < _iso(comparison["after"]["taken_at"])
+    assert comparison["before"]["angle"] == comparison["after"]["angle"] == "front"
+
+
+@pytest.mark.tc("GAL-12")
+async def test_list_comparisons_user_without_pairs_returns_empty_page(client, auth_headers):
+    body = await _list_comparisons(client, await auth_headers("newbie"))
+    assert body == {"data": [], "pagination": {"next_cursor": None, "has_more": False}}
+
+
+@pytest.mark.tc("GAL-12")
+async def test_list_comparisons_with_soft_deleted_photo_hides_pair(client, db, auth_headers):
+    w06 = await _seed_photo_id(db, "demo-w06")
+    await db.execute(text("UPDATE media.progress_photos SET deleted_at = now() WHERE id = :id"), {"id": w06})
+    body = await _list_comparisons(client, await auth_headers("demo"))
+    assert body["data"] == []
+
+
+async def _collect_comparison_pages(client: AsyncClient, headers: dict, limit: int) -> list[dict]:
+    pages, cursor = [], None
+    while True:
+        params = {"limit": limit} | ({"cursor": cursor} if cursor else {})
+        body = await _list_comparisons(client, headers, **params)
+        pages.append(body)
+        cursor = body["pagination"]["next_cursor"]
+        if not body["pagination"]["has_more"]:
+            return pages
+        assert cursor is not None and len(pages) < 10
+
+
+async def _create_two_demo_pairs(client: AsyncClient, db: AsyncSession, headers: dict) -> None:
+    w00, w06, side = await _seed_ids(db, "demo-w00", "demo-w06", "demo-side")
+    new_photo = await _upload_new_photo(client, headers)
+    for before, after in ((w00, side), (w06, new_photo)):
+        res = await _compare(client, headers, {"before_photo_id": before, "after_photo_id": after})
+        assert res.status_code == 201, res.text
+
+
+async def _demo_seed_pair_id(db: AsyncSession) -> str:
+    w00, w06 = await _seed_ids(db, "demo-w00", "demo-w06")
+    return await _scalar(
+        db, "SELECT id::text FROM media.photo_comparisons WHERE before_photo_id = :b AND after_photo_id = :a",
+        b=uuid.UUID(w00), a=uuid.UUID(w06),
+    )
+
+
+def _assert_created_newest_first(comparisons: list[dict]) -> None:
+    # Các cặp tạo trong cùng transaction test có thể trùng created_at; id DESC phá hoà nên chỉ yêu cầu không tăng.
+    created = [_iso(c["created_at"]) for c in comparisons]
+    assert created == sorted(created, reverse=True)
+
+
+@pytest.mark.tc("GAL-13")
+@pytest.mark.usefixtures("local_storage")
+async def test_list_comparisons_with_limit_follows_cursor_to_end(client, db, auth_headers):
+    headers = await auth_headers("demo")
+    await _create_two_demo_pairs(client, db, headers)
+    pages = await _collect_comparison_pages(client, headers, 2)
+    assert [(len(p["data"]), p["pagination"]["has_more"]) for p in pages] == [(2, True), (1, False)]
+    assert pages[-1]["pagination"]["next_cursor"] is None
+    comparisons = [c for page in pages for c in page["data"]]
+    ids = {c["id"] for c in comparisons}
+    assert len(ids) == len(comparisons) == 3
+    assert await _demo_seed_pair_id(db) in ids
+    _assert_created_newest_first(comparisons)
+
+
+INVALID_COMPARISON_LIST_PARAMS = [
+    ("limit_zero", {"limit": 0}, "limit"),
+    ("limit_too_large", {"limit": 101}, "limit"),
+    ("garbage_cursor", {"cursor": "!!!khong-phai-cursor"}, "cursor"),
+]
+
+
+@pytest.mark.tc("GAL-13")
+@pytest.mark.parametrize("case", INVALID_COMPARISON_LIST_PARAMS, ids=[c[0] for c in INVALID_COMPARISON_LIST_PARAMS])
+async def test_list_comparisons_invalid_params_returns_422(client, auth_headers, case):
+    _, params, expected_field = case
+    res = await client.get(COMPARISON_URL, headers=await auth_headers("demo"), params=params)
+    error = _err(res, 422, "validation_error")
+    assert [d["field"] for d in error["details"]] == [expected_field]
