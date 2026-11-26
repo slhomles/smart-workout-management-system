@@ -414,7 +414,9 @@ class Bot:
                 self.state["current"]["phase"] = "run"
                 self.save()
             cmd = [sys.executable, str(HERE / "run_flow.py"), str(spec_path.relative_to(REPO)),
-                   "--ask-permissions", "--flow-root", str(self.root)]
+                   "--flow-root", str(self.root)]
+            if self.args.ask_permissions:  # mặc định tắt: thao tác không chắc chắn bị từ chối ngay, không chờ ai
+                cmd.append("--ask-permissions")
             if job.get("resume"):
                 cmd.append("--resume-blocked")
             cmd += shlex.split(self.args.runner_args, posix=os.name != "nt") if self.args.runner_args else []
@@ -575,6 +577,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--model", default="opus", help="model cho spec-writer")
     ap.add_argument("--flow-root", help="thư mục worktree + state (mặc định ../<repo>-flow)")
+    ap.add_argument("--ask-permissions", action="store_true",
+                    help="gửi thao tác cần duyệt lên Telegram (nút ✅/⛔) thay vì tự từ chối ngay")
     ap.add_argument("--runner-args", default="", help='tham số thêm cho run_flow.py, vd "--max-iterations 60"')
     Bot(ap.parse_args()).serve()
     return 0

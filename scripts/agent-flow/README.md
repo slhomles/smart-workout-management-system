@@ -186,7 +186,7 @@ Bot chặn Windows tự sleep trong lúc chạy. Muốn bot tự bật khi đăn
 - Gõ lệnh trong group cho bot chung, hoặc nhắn riêng bot của mình. Trong group nên gõ dạng `/run@ten_bot_chung …`, hoặc tắt privacy mode của bot chung (@BotFather → `/setprivacy` → Disable) để bot nhận được `/run …`.
 - Chỉ 3 tài khoản Telegram trong `team.json` ra lệnh và bấm nút được; người khác nhận "⛔".
 - Mỗi lúc chỉ chạy **một** flow (DB dùng chung, doc 05 §8.2); các lệnh `/run` khác xếp hàng.
-- **Xin quyền**: thao tác thuộc danh sách `ask` trong `flow-settings.json` (hiện để trống), hoặc thao tác auto mode không chắc chắn, sẽ được gửi lên owner + group kèm nút ✅/⛔. Ai trong nhóm bấm trước thì quyết định. Quá 30 phút không ai bấm thì tự từ chối, agent làm cách khác. Thao tác trong danh sách `deny` (push, reset --hard, git config, …) luôn bị chặn, không hỏi.
+- **Xin quyền**: mặc định **không hỏi**. Thao tác thuộc danh sách `ask` trong `flow-settings.json` (hiện để trống) hoặc thao tác auto mode không chắc chắn bị từ chối ngay, agent tự làm cách khác hoặc ghi câu hỏi (trả lời bằng `/answer`). Muốn duyệt bằng nút ✅/⛔ trên Telegram thì bật bot với `bot.py --ask-permissions`: khi đó yêu cầu được gửi lên owner + group, ai bấm trước thì quyết định, quá 30 phút không ai bấm thì tự từ chối. Thao tác trong danh sách `deny` (push, reset --hard, git config, …) luôn bị chặn, không hỏi.
 - Bot tắt giữa chừng thì flow vẫn chạy; bật lại bot sẽ nhận lại flow đó. Riêng nút xin quyền chỉ hoạt động khi bot đang bật.
 - Lệnh `notify.py chat-id` dùng `getUpdates`, nên chỉ chạy được khi bot đang tắt.
 
