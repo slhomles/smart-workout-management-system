@@ -59,7 +59,7 @@
         "training"
       ],
       "owner": null,
-      "notes": "Lịch tập, ghi buổi tập, volume, trạng thái phục hồi cơ."
+      "notes": "Lịch tập, ghi buổi tập, volume, trạng thái phục hồi cơ. Đã có sẵn /workout-sessions (buổi tập, bài, hiệp, rep events, tempo) từ PR #6; còn lại /workout-plans, /scheduled-workouts, /recovery."
     },
     "body-dashboard": {
       "title": "Dashboard thống kê kế hoạch tập, Body & Weight Tracking",
@@ -74,7 +74,9 @@
         "training"
       ],
       "owner": "member3",
-      "notes": "Cân nặng, % mỡ, số đo vòng, BMI/BMR/TDEE (dùng view SQL), tiến độ giáo án. KHÔNG có dinh dưỡng."
+      "notes": "Cân nặng, % mỡ, số đo vòng, BMI/BMR/TDEE (dùng view SQL), tiến độ giáo án. KHÔNG có dinh dưỡng.",
+      "status": "done",
+      "done_note": "Làm tay ngoài flow, đã merge vào main qua PR #4: /body (hồ sơ, lần đo, mục tiêu) và /dashboard. Không có dinh dưỡng (ngoài phạm vi)."
     },
     "progress-gallery": {
       "title": "Progress Gallery: Nhật ký ảnh",
@@ -143,7 +145,9 @@
         "analytics"
       ],
       "owner": null,
-      "notes": "Báo cáo tổng hợp từ schema analytics (materialized view)."
+      "notes": "Báo cáo tổng hợp từ schema analytics (materialized view).",
+      "status": "done",
+      "done_note": "Làm tay ngoài flow, đã merge vào main qua PR #4: /reports xuất thẻ báo cáo tuần/tháng (PNG)."
     }
   }
 }
