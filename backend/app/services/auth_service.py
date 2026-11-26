@@ -41,7 +41,7 @@ def _account_locked(locked_until: datetime | None, now: datetime) -> AppExceptio
 
 
 async def _db_now(db: AsyncSession) -> datetime:
-    return await db.scalar(select(func.now()))
+    return (await db.execute(select(func.now()))).scalar_one()
 
 
 async def _upsert_device(db: AsyncSession, user: User, info: DeviceInfoSchema, now: datetime) -> UserDevice:
@@ -104,21 +104,23 @@ async def login(db: AsyncSession, req: LoginRequest, ip: str | None, user_agent:
         raise await fail(LoginFailureReason.ACCOUNT_LOCKED, _account_locked(user.locked_until, now))
 
     # Sai email/mật khẩu/không có mật khẩu → cùng một thông báo.
-    if not verify_password(req.password, user.password_hash if user else None):
-        if user is not None:
-            await crud.add_login_attempt(
-                db, user_id=user.id, email=req.email, ip=ip, user_agent=user_agent,
-                failure_reason=LoginFailureReason.INVALID_CREDENTIALS,
-            )
-            since = now - timedelta(minutes=settings.LOGIN_FAILURE_WINDOW_MINUTES)
-            if await crud.count_recent_failures(db, user.id, since) >= settings.LOGIN_MAX_FAILED_ATTEMPTS:
-                user.locked_until = now + timedelta(minutes=settings.LOGIN_LOCK_MINUTES)
-            await db.commit()
-            raise UnauthorizedError("invalid_credentials", "Email hoặc mật khẩu không đúng")
+    # verify_password luôn chạy (kể cả khi không có user) để thời gian phản hồi không lộ email nào tồn tại.
+    password_ok = verify_password(req.password, user.password_hash if user else None)
+    if user is None:
         raise await fail(
             LoginFailureReason.INVALID_CREDENTIALS,
             UnauthorizedError("invalid_credentials", "Email hoặc mật khẩu không đúng"),
         )
+    if not password_ok:
+        await crud.add_login_attempt(
+            db, user_id=user.id, email=req.email, ip=ip, user_agent=user_agent,
+            failure_reason=LoginFailureReason.INVALID_CREDENTIALS,
+        )
+        since = now - timedelta(minutes=settings.LOGIN_FAILURE_WINDOW_MINUTES)
+        if await crud.count_recent_failures(db, user.id, since) >= settings.LOGIN_MAX_FAILED_ATTEMPTS:
+            user.locked_until = now + timedelta(minutes=settings.LOGIN_LOCK_MINUTES)
+        await db.commit()
+        raise UnauthorizedError("invalid_credentials", "Email hoặc mật khẩu không đúng")
 
     # Chỉ báo lỗi trạng thái cụ thể sau khi mật khẩu đúng.
     if user.status == UserStatus.DISABLED:
