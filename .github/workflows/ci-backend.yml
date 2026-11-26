@@ -5,10 +5,12 @@ on:
     branches: [main, develop]
     paths:
       - "backend/**"
+      - "database/**"
   pull_request:
     branches: [main, develop]
     paths:
       - "backend/**"
+      - "database/**"
 
 jobs:
   test:
@@ -59,6 +61,18 @@ jobs:
           cd backend
           mypy app/ --ignore-missing-imports
       
+      # Test tích hợp chạy trên PostgreSQL thật có sẵn schema + persona seed (doc 05 §10).
+      # DB của service container ban đầu trống nên nạp bằng chính init.sh của dự án.
+      - name: Initialize test database (schemas, views, seeds)
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: test_user
+          PGPASSWORD: test_pass
+          PGDATABASE: test_db
+          SW_SEED_TEST: "true"
+        run: bash database/postgresql/init.sh
+
       - name: Run tests
         env:
           POSTGRES_HOST: localhost
