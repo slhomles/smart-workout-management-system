@@ -9,7 +9,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.enums import ExerciseCategory
+from app.models.enums import ExerciseCategory, ForceType, JointType, MechanicType, MediaRole, MuscleRole
 
 # Giới hạn trên khớp kiểu cột DB để giá trị tràn kiểu trả 422 thay vì lỗi 500 từ PostgreSQL.
 _SMALLINT_MAX = 32767
@@ -60,6 +60,126 @@ class ExerciseSummaryResponse(BaseModel):
                 "difficulty_name": "Cơ bản",
                 "difficulty_rank": 1,
                 "thumbnail_media_id": "9ea73eb9-82e2-421b-866f-91f82ebffcbb",
+            }
+        }
+    )
+
+
+class DifficultySchema(BaseModel):
+    """Độ khó (`catalog.difficulty_levels`); `rank` tăng theo độ khó."""
+
+    id: int
+    code: str
+    name: str
+    rank: int = Field(description="Hạng độ khó, 1 là dễ nhất")
+
+
+class ExerciseMuscleSchema(BaseModel):
+    """Nhóm cơ bài tập tác động, kèm vai trò và tỷ lệ kích hoạt."""
+
+    muscle_group_id: int
+    code: str
+    name: str
+    name_en: str | None
+    role: MuscleRole
+    activation_ratio: float = Field(description="Tỷ lệ kích hoạt trong (0, 1]")
+
+
+class ExerciseEquipmentSchema(BaseModel):
+    """Thiết bị (chưa xoá mềm) bài tập cần; `is_optional=true` là thiết bị tuỳ chọn."""
+
+    equipment_id: int
+    code: str
+    name: str
+    name_en: str | None
+    is_optional: bool
+
+
+class ExerciseInstructionSchema(BaseModel):
+    """Một bước thực hiện, `step_no` bắt đầu từ 1."""
+
+    step_no: int
+    content: str
+
+
+class ExerciseMistakeSchema(BaseModel):
+    """Lỗi sai thường gặp; `code` là mã model AI trả về khi phát hiện lỗi."""
+
+    id: int
+    code: str
+    title: str
+    description: str | None
+    correction_cue: str | None = Field(description="Gợi ý sửa lỗi")
+    at_risk_joint: JointType | None = Field(description="Khớp có nguy cơ chấn thương; null nếu không xác định")
+    is_ai_detectable: bool = Field(description="AI có thể phát hiện lỗi này tự động")
+    display_order: int
+
+
+class ExerciseMediaSchema(BaseModel):
+    """Metadata media minh hoạ. Không có URL: DB chỉ lưu bucket/object_key (design-overview §2)."""
+
+    media_id: uuid.UUID
+    media_role: MediaRole
+    is_primary: bool = Field(description="Media chính của vai trò đó")
+    display_order: int
+    caption: str | None
+    mime_type: str
+    width_px: int | None
+    height_px: int | None
+    duration_ms: int | None = Field(description="Thời lượng GIF/video (ms); null với ảnh")
+
+
+class ExerciseDetailResponse(BaseModel):
+    """Chi tiết kỹ thuật của bài đã xuất bản; thứ tự các danh sách theo spec exercise-wiki §6 mục 9."""
+
+    id: int
+    slug: str
+    name: str
+    name_en: str | None
+    description: str | None
+    category: ExerciseCategory
+    mechanic: MechanicType | None = Field(description="null với bài cardio/giãn cơ")
+    force_type: ForceType | None
+    is_unilateral: bool = Field(description="Tập từng bên (một tay/một chân)")
+    met_value: float | None = Field(description="Chỉ số MET để ước tính calo")
+    supports_ai_tracking: bool = Field(description="Có AI chấm tư thế/đếm rep cho bài này")
+    difficulty: DifficultySchema
+    muscles: list[ExerciseMuscleSchema] = Field(description="Sắp theo vai trò, tỷ lệ kích hoạt giảm, tên")
+    equipment: list[ExerciseEquipmentSchema] = Field(description="Bắt buộc trước, tuỳ chọn sau, rồi theo tên")
+    instructions: list[ExerciseInstructionSchema] = Field(description="Sắp theo `step_no`")
+    mistakes: list[ExerciseMistakeSchema] = Field(description="Sắp theo `display_order`, `id`")
+    media: list[ExerciseMediaSchema] = Field(description="Chỉ file sẵn sàng; sắp theo `display_order`, `media_role`")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": 10, "slug": "dumbbell-row", "name": "Chèo tạ đơn một tay", "name_en": "One-Arm Dumbbell Row",
+                "description": "Kéo tạ đơn về hông, tay và gối tựa ghế.",
+                "category": "strength", "mechanic": "compound", "force_type": "pull", "is_unilateral": True,
+                "met_value": 4.5, "supports_ai_tracking": True,
+                "difficulty": {"id": 1, "code": "beginner", "name": "Cơ bản", "rank": 1},
+                "muscles": [
+                    {"muscle_group_id": 16, "code": "lats", "name": "Lưng xô", "name_en": "Latissimus Dorsi",
+                     "role": "primary", "activation_ratio": 1.0},
+                    {"muscle_group_id": 14, "code": "upper_back", "name": "Lưng giữa", "name_en": "Rhomboids",
+                     "role": "secondary", "activation_ratio": 0.6},
+                ],
+                "equipment": [
+                    {"equipment_id": 3, "code": "dumbbell", "name": "Tạ đơn", "name_en": "Dumbbell", "is_optional": False},
+                ],
+                "instructions": [
+                    {"step_no": 1, "content": "Tì gối và tay cùng bên lên ghế, lưng song song sàn, tay kia cầm tạ."},
+                ],
+                "mistakes": [
+                    {"id": 30, "code": "DB_ROW_TORSO_ROTATION", "title": "Xoay thân khi kéo",
+                     "description": "Xoay vai/hông để kéo tạ nặng.", "correction_cue": "Giữ vai song song sàn, giảm tạ.",
+                     "at_risk_joint": "spine", "is_ai_detectable": True, "display_order": 1},
+                ],
+                "media": [
+                    {"media_id": "4ff3c43a-baa6-4929-ab9d-2d3b4bfebe5d", "media_role": "gif", "is_primary": True,
+                     "display_order": 1, "caption": None, "mime_type": "image/gif", "width_px": 480,
+                     "height_px": 360, "duration_ms": 4310},
+                ],
             }
         }
     )

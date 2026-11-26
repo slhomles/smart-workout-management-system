@@ -1,26 +1,40 @@
-"""Nghiệp vụ module Catalog/Wiki (chức năng 1): tìm bài tập, cây nhóm cơ, danh sách thiết bị.
+"""Nghiệp vụ module Catalog/Wiki (chức năng 1): tìm và xem chi tiết bài tập, cây nhóm cơ, danh sách thiết bị.
 
 Module chỉ đọc DB nên không có ranh giới transaction/commit.
 """
 
-from typing import Any
+import re
+from typing import Any, TypeVar
 
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import DataValidationError
+from app.core.exceptions import DataValidationError, NotFoundError
 from app.crud import catalog as crud
 from app.schemas.base import ErrorDetail, Page, Pagination, build_page, decode_cursor
 from app.schemas.catalog import (
     BodyRegionSchema,
+    DifficultySchema,
     EquipmentCategorySchema,
     EquipmentQuery,
     EquipmentResponse,
+    ExerciseDetailResponse,
+    ExerciseEquipmentSchema,
+    ExerciseInstructionSchema,
+    ExerciseMediaSchema,
+    ExerciseMistakeSchema,
+    ExerciseMuscleSchema,
     ExerciseSearchQuery,
     ExerciseSummaryResponse,
     MuscleGroupResponse,
 )
 
 _INT4_MAX = 2147483647
+_SchemaT = TypeVar("_SchemaT", bound=BaseModel)
+# `[0-9]` thay cho `\d` vì `\d` của Python khớp cả chữ số Unicode; `fullmatch` không nhận "10\n" như `^…$`.
+_DIGITS = re.compile(r"[0-9]+")
+# Cùng mẫu với ràng buộc `ck_exercises_slug_format` của DB.
+_SLUG_FORMAT = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 
 
 def _int_from_cursor(cursor: str, key: str) -> int:
@@ -56,6 +70,69 @@ async def search_exercises(db: AsyncSession, query: ExerciseSearchQuery) -> Page
     offset = _int_from_cursor(query.cursor, "offset") if query.cursor is not None else 0
     rows = await crud.search_exercises(db, _search_filter(query), limit=query.limit + 1, offset=offset)
     return build_page(rows, query.limit, _exercise_summary, lambda _row: {"offset": offset + query.limit})
+
+
+def _exercise_id_in_range(digits: str) -> int | None:
+    significant = digits.lstrip("0") or "0"
+    # So độ dài trước int(): int() từ chối chuỗi quá 4300 chữ số, và số quá dài chắc chắn tràn `integer`.
+    if len(significant) > len(str(_INT4_MAX)):
+        return None
+    exercise_id = int(significant)
+    return exercise_id if exercise_id <= _INT4_MAX else None
+
+
+async def _get_published_exercise(db: AsyncSession, id_or_slug: str) -> Any:
+    """Bài đã xuất bản, chưa xoá mềm theo `id` (chuỗi chữ số) hoặc `slug`; không có → 404 `exercise_not_found`.
+
+    Giá trị ngoài khoảng `integer` hoặc sai định dạng slug chắc chắn không tồn tại nên trả 404 mà không truy vấn:
+    truy vấn với giá trị đó làm PostgreSQL báo lỗi (tràn kiểu, ký tự NUL) thành 500 (spec exercise-wiki §6 mục 8).
+    """
+    row = None
+    if _DIGITS.fullmatch(id_or_slug):
+        exercise_id = _exercise_id_in_range(id_or_slug)
+        if exercise_id is not None:
+            row = await crud.get_published_exercise_by_id(db, exercise_id)
+    elif _SLUG_FORMAT.fullmatch(id_or_slug):
+        row = await crud.get_published_exercise_by_slug(db, id_or_slug)
+    if row is None:
+        raise NotFoundError("exercise_not_found", "Không tìm thấy bài tập")
+    return row
+
+
+def _models(schema: type[_SchemaT], rows: list[Any]) -> list[_SchemaT]:
+    # Cột của crud đã đặt alias trùng tên field schema.
+    return [schema.model_validate(dict(row)) for row in rows]
+
+
+def _difficulty(row: Any) -> DifficultySchema:
+    return DifficultySchema(
+        id=row["difficulty_id"], code=row["difficulty_code"], name=row["difficulty_name"], rank=row["difficulty_rank"]
+    )
+
+
+async def get_exercise_detail(db: AsyncSession, id_or_slug: str) -> ExerciseDetailResponse:
+    """Chi tiết kỹ thuật bài đã xuất bản: độ khó, nhóm cơ, thiết bị, các bước, lỗi sai, media (không URL)."""
+    row = await _get_published_exercise(db, id_or_slug)
+    exercise_id = row["id"]
+    return ExerciseDetailResponse(
+        id=exercise_id,
+        slug=row["slug"],
+        name=row["name"],
+        name_en=row["name_en"],
+        description=row["description"],
+        category=row["category"],
+        mechanic=row["mechanic"],
+        force_type=row["force_type"],
+        is_unilateral=row["is_unilateral"],
+        met_value=row["met_value"],
+        supports_ai_tracking=row["supports_ai_tracking"],
+        difficulty=_difficulty(row),
+        muscles=_models(ExerciseMuscleSchema, await crud.list_exercise_muscles(db, exercise_id)),
+        equipment=_models(ExerciseEquipmentSchema, await crud.list_exercise_equipment(db, exercise_id)),
+        instructions=_models(ExerciseInstructionSchema, await crud.list_exercise_instructions(db, exercise_id)),
+        mistakes=_models(ExerciseMistakeSchema, await crud.list_exercise_mistakes(db, exercise_id)),
+        media=_models(ExerciseMediaSchema, await crud.list_exercise_media(db, exercise_id)),
+    )
 
 
 # --- Nhóm cơ ---

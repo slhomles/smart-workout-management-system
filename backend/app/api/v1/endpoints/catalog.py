@@ -5,7 +5,7 @@ Một `router` gộp các router con theo tiền tố của doc 05 §6.3; mỗi 
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -14,6 +14,7 @@ from app.schemas.base import ERROR_RESPONSES, Page
 from app.schemas.catalog import (
     EquipmentQuery,
     EquipmentResponse,
+    ExerciseDetailResponse,
     ExerciseSearchQuery,
     ExerciseSummaryResponse,
     MuscleGroupResponse,
@@ -50,6 +51,28 @@ async def search_exercises(
 ) -> Page[ExerciseSummaryResponse]:
     """Tìm kiếm và lọc đa điều kiện cho bước 1–2 của Wiki."""
     return await catalog_service.search_exercises(db, query)
+
+
+@exercises_router.get(
+    "/{id_or_slug}",
+    response_model=ExerciseDetailResponse,
+    status_code=200,
+    responses=ERROR_RESPONSES,
+    summary="Chi tiết kỹ thuật bài tập theo id hoặc slug",
+    description=(
+        "Quyền: `exercise:read`. `id_or_slug` toàn chữ số thì tra theo `id`, ngược lại tra theo `slug`. "
+        "Gồm độ khó, nhóm cơ kèm vai trò và tỷ lệ kích hoạt, thiết bị (bắt buộc trước, tuỳ chọn sau), các bước, "
+        "lỗi sai thường gặp và metadata media minh hoạ (`media_id`, không có URL). "
+        "Bài không tồn tại, chưa xuất bản, đã lưu trữ hoặc đã xoá → 404 `exercise_not_found`."
+    ),
+)
+async def get_exercise_detail(
+    id_or_slug: Annotated[str, Path(description="`id` (số nguyên) hoặc `slug` của bài tập, vd `dumbbell-row`")],
+    _: CurrentUser = Depends(require_permission("exercise", "read")),
+    db: AsyncSession = Depends(get_db),
+) -> ExerciseDetailResponse:
+    """Chi tiết kỹ thuật cho bước 3 của Wiki."""
+    return await catalog_service.get_exercise_detail(db, id_or_slug)
 
 
 # --- Nhóm cơ ---

@@ -435,3 +435,190 @@ async def test_list_exercises_without_exercise_read_returns_403(
     headers = await auth_headers("demo")
     monkeypatch.setattr(permission_service, "get_permissions", _without_exercise_read)
     _err(await client.get(EXERCISES_URL, headers=headers), 403, "permission_denied")
+
+
+# --- GET /exercises/{id_or_slug} ---
+EXERCISE_DETAIL_KEYS = {
+    "id", "slug", "name", "name_en", "description", "category", "mechanic", "force_type", "is_unilateral",
+    "met_value", "supports_ai_tracking", "difficulty", "muscles", "equipment", "instructions", "mistakes", "media",
+}
+EXERCISE_MUSCLE_KEYS = {"muscle_group_id", "code", "name", "name_en", "role", "activation_ratio"}
+EXERCISE_EQUIPMENT_KEYS = {"equipment_id", "code", "name", "name_en", "is_optional"}
+EXERCISE_MISTAKE_KEYS = {
+    "id", "code", "title", "description", "correction_cue", "at_risk_joint", "is_ai_detectable", "display_order",
+}
+EXERCISE_MEDIA_KEYS = {
+    "media_id", "media_role", "is_primary", "display_order", "caption", "mime_type", "width_px", "height_px",
+    "duration_ms",
+}
+DUMBBELL_ROW_URL = f"{EXERCISES_URL}/dumbbell-row"
+
+
+async def _exercise_id(db: AsyncSession, slug: str) -> int:
+    value = await db.scalar(text("SELECT id FROM catalog.exercises WHERE slug = :slug"), {"slug": slug})
+    assert value is not None, f"không có exercises.slug='{slug}' trong seed"
+    return value
+
+
+async def _exercise_detail(client: AsyncClient, auth_headers, id_or_slug: str) -> dict:
+    res = await client.get(f"{EXERCISES_URL}/{id_or_slug}", headers=await auth_headers("demo"))
+    assert res.status_code == 200, res.text
+    return res.json()
+
+
+async def _assert_exercise_not_found(client: AsyncClient, auth_headers, id_or_slug: str) -> None:
+    res = await client.get(f"{EXERCISES_URL}/{id_or_slug}", headers=await auth_headers("demo"))
+    assert _err(res, 404, "exercise_not_found")["details"] == []
+
+
+def _values(items: list[dict], key: str) -> list:
+    return [item[key] for item in items]
+
+
+def _all_have_keys(items: list[dict], keys: set[str]) -> bool:
+    return all(set(item) == keys for item in items)
+
+
+@pytest.mark.tc("EXW-06")
+async def test_get_exercise_by_slug_or_id_returns_identical_body(client: AsyncClient, db: AsyncSession, auth_headers):
+    by_slug = await _exercise_detail(client, auth_headers, "dumbbell-row")
+    exercise_id = await _exercise_id(db, "dumbbell-row")
+    by_id = await _exercise_detail(client, auth_headers, str(exercise_id))
+    assert by_slug == by_id
+    assert set(by_slug) == EXERCISE_DETAIL_KEYS
+    assert type(by_slug["id"]) is int and by_slug["id"] == exercise_id and by_slug["slug"] == "dumbbell-row"
+
+
+@pytest.mark.tc("EXW-06")
+async def test_get_exercise_dumbbell_row_has_seed_general_info(client: AsyncClient, db: AsyncSession, auth_headers):
+    detail = await _exercise_detail(client, auth_headers, "dumbbell-row")
+    assert (detail["name"], detail["name_en"]) == ("Chèo tạ đơn một tay", "One-Arm Dumbbell Row")
+    assert (detail["category"], detail["mechanic"], detail["force_type"]) == ("strength", "compound", "pull")
+    assert detail["is_unilateral"] is True and detail["supports_ai_tracking"] is True
+    assert type(detail["met_value"]) is float and detail["met_value"] == 4.5
+    beginner_id = await _catalog_id(db, "difficulty_levels", "beginner")
+    assert detail["difficulty"] == {"id": beginner_id, "code": "beginner", "name": "Cơ bản", "rank": 1}
+
+
+@pytest.mark.tc("EXW-06")
+async def test_get_exercise_dumbbell_row_lists_muscles_with_role_and_ratio(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    muscles = (await _exercise_detail(client, auth_headers, "dumbbell-row"))["muscles"]
+    assert len(muscles) == 4 and set(_values(muscles, "code")) == {"lats", "upper_back", "rear_delts", "biceps"}
+    assert _all_have_keys(muscles, EXERCISE_MUSCLE_KEYS)
+    assert {type(ratio) for ratio in _values(muscles, "activation_ratio")} == {float}
+    lats = muscles[0]
+    assert (lats["code"], lats["role"], lats["activation_ratio"]) == ("lats", "primary", 1.0)
+    assert lats["muscle_group_id"] == await _catalog_id(db, "muscle_groups", "lats")
+
+
+@pytest.mark.tc("EXW-06")
+async def test_get_exercise_dumbbell_row_lists_required_equipment_and_steps(client: AsyncClient, auth_headers):
+    detail = await _exercise_detail(client, auth_headers, "dumbbell-row")
+    equipment, instructions = detail["equipment"], detail["instructions"]
+    assert set(_values(equipment, "code")) == {"dumbbell", "flat_bench"}
+    assert _all_have_keys(equipment, EXERCISE_EQUIPMENT_KEYS)
+    assert _values(equipment, "is_optional") == [False, False]
+    assert _all_have_keys(instructions, {"step_no", "content"})
+    assert _values(instructions, "step_no") == [1, 2, 3]
+    assert instructions[0]["content"].startswith("Tì gối")
+
+
+@pytest.mark.tc("EXW-06")
+async def test_get_exercise_dumbbell_row_lists_ai_detectable_mistakes(client: AsyncClient, auth_headers):
+    mistakes = (await _exercise_detail(client, auth_headers, "dumbbell-row"))["mistakes"]
+    assert _values(mistakes, "code") == ["DB_ROW_TORSO_ROTATION", "DB_ROW_ROUNDED_BACK"]
+    assert _all_have_keys(mistakes, EXERCISE_MISTAKE_KEYS)
+    assert _values(mistakes, "at_risk_joint") == ["spine", "spine"]
+    assert _values(mistakes, "is_ai_detectable") == [True, True]
+
+
+@pytest.mark.tc("EXW-06")
+async def test_get_exercise_dumbbell_row_has_one_primary_thumbnail_and_gif(client: AsyncClient, auth_headers):
+    media = (await _exercise_detail(client, auth_headers, "dumbbell-row"))["media"]
+    for role in ("thumbnail", "gif"):
+        items = [item for item in media if item["media_role"] == role]
+        assert _values(items, "is_primary") == [True]
+    assert _all_have_keys(media, EXERCISE_MEDIA_KEYS)
+    assert all(str(uuid.UUID(media_id)) == media_id for media_id in _values(media, "media_id"))
+
+
+@pytest.mark.tc("EXW-07")
+async def test_get_exercise_back_squat_orders_muscles_and_mistakes(client: AsyncClient, auth_headers):
+    detail = await _exercise_detail(client, auth_headers, "barbell-back-squat")
+    assert _values(detail["muscles"], "code") == ["quads", "glutes", "hamstrings", "lower_back", "abs"]
+    assert _values(detail["mistakes"], "code") == [
+        "SQUAT_BACK_ROUNDING", "SQUAT_KNEE_VALGUS", "SQUAT_HEEL_LIFT", "SQUAT_SHALLOW_DEPTH",
+    ]
+    assert detail["mistakes"][-1]["at_risk_joint"] is None
+
+
+@pytest.mark.tc("EXW-07")
+async def test_get_exercise_back_squat_orders_media_by_display_order(client: AsyncClient, auth_headers):
+    media = (await _exercise_detail(client, auth_headers, "barbell-back-squat"))["media"]
+    assert _all_have_keys(media, EXERCISE_MEDIA_KEYS)
+    assert _values(media, "display_order") == [0, 1, 2, 3, 4, 5]
+    assert _values(media, "media_role") == ["thumbnail", "gif", "video", "image", "image", "image"]
+    images = media[3:]
+    assert _values(images, "is_primary") == [False, False, False]
+    assert _values(images, "caption") == ["Tư thế bắt đầu", "Điểm thấp nhất", "Đứng lên hoàn thành"]
+
+
+@pytest.mark.tc("EXW-07")
+async def test_get_exercise_back_squat_video_has_mime_type_and_duration(client: AsyncClient, auth_headers):
+    media = (await _exercise_detail(client, auth_headers, "barbell-back-squat"))["media"]
+    videos = [item for item in media if item["media_role"] == "video"]
+    assert len(videos) == 1 and videos[0]["mime_type"] == "video/mp4"
+    assert type(videos[0]["duration_ms"]) is int and videos[0]["duration_ms"] > 0
+
+
+@pytest.mark.tc("EXW-07")
+async def test_get_exercise_bench_press_lists_optional_equipment_last(client: AsyncClient, auth_headers):
+    equipment = (await _exercise_detail(client, auth_headers, "barbell-bench-press"))["equipment"]
+    assert [item["is_optional"] for item in equipment] == [False, False, True]
+    assert equipment[-1]["code"] == "power_rack"
+
+
+@pytest.mark.tc("EXW-08")
+@pytest.mark.parametrize(
+    "id_or_slug",
+    [
+        "test-draft-exercise", "test-archived-exercise", "test-deleted-exercise", "khong-ton-tai",
+        "999999", "99999999999",
+    ],
+)
+async def test_get_exercise_hidden_or_unknown_returns_404(client: AsyncClient, auth_headers, id_or_slug: str):
+    await _assert_exercise_not_found(client, auth_headers, id_or_slug)
+
+
+@pytest.mark.tc("EXW-08")
+async def test_get_exercise_draft_by_id_returns_404(client: AsyncClient, db: AsyncSession, auth_headers):
+    draft_id = await _exercise_id(db, "test-draft-exercise")
+    await _assert_exercise_not_found(client, auth_headers, str(draft_id))
+
+
+# Ngoài các ca của EXW-08: chuỗi không thể là id/slug hợp lệ vẫn phải 404, không để DB hay int() báo lỗi thành 500.
+@pytest.mark.parametrize(
+    "id_or_slug", ["Dumbbell-Row", "abc%00", pytest.param("9" * 5000, id="5000-digits"), "0"]
+)
+async def test_get_exercise_malformed_identifier_returns_404(client: AsyncClient, auth_headers, id_or_slug: str):
+    await _assert_exercise_not_found(client, auth_headers, id_or_slug)
+
+
+async def test_get_exercise_without_token_returns_401(client: AsyncClient):
+    res = await client.get(DUMBBELL_ROW_URL)
+    _err(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+
+
+async def test_get_exercise_without_exercise_read_returns_403(
+    client: AsyncClient, auth_headers, monkeypatch: pytest.MonkeyPatch
+):
+    # Mọi persona seed đều có quyền đọc; giả lập user có các quyền đọc catalog khác trừ `exercise:read`.
+    async def _without_exercise_read(_db: AsyncSession, _user_id: uuid.UUID) -> set[str]:
+        return {"muscle_group:read", "equipment:read", "plan_template:read"}
+
+    headers = await auth_headers("demo")
+    monkeypatch.setattr(permission_service, "get_permissions", _without_exercise_read)
+    _err(await client.get(DUMBBELL_ROW_URL, headers=headers), 403, "permission_denied")

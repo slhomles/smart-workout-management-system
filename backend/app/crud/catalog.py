@@ -43,6 +43,96 @@ async def search_exercises(
     return list((await db.execute(text(_SEARCH_EXERCISES_SQL), params)).mappings().all())
 
 
+_PUBLISHED_EXERCISE_SELECT = """
+SELECT e.id, e.slug, e.name, e.name_en, e.description, e.category, e.mechanic, e.force_type,
+       e.is_unilateral, e.met_value, e.supports_ai_tracking,
+       d.id AS difficulty_id, d.code AS difficulty_code, d.name AS difficulty_name, d.rank AS difficulty_rank
+FROM catalog.exercises e
+JOIN catalog.difficulty_levels d ON d.id = e.difficulty_level_id
+WHERE e.status = 'published' AND e.deleted_at IS NULL
+"""
+
+
+async def get_published_exercise_by_id(db: AsyncSession, exercise_id: int) -> Any | None:
+    """Bài đã xuất bản, chưa xoá mềm, kèm độ khó, theo `id`; None nếu không có."""
+    sql = _PUBLISHED_EXERCISE_SELECT + " AND e.id = :exercise_id"
+    return (await db.execute(text(sql), {"exercise_id": exercise_id})).mappings().first()
+
+
+async def get_published_exercise_by_slug(db: AsyncSession, slug: str) -> Any | None:
+    """Bài đã xuất bản, chưa xoá mềm, kèm độ khó, theo `slug`; None nếu không có."""
+    sql = _PUBLISHED_EXERCISE_SELECT + " AND e.slug = :slug"
+    return (await db.execute(text(sql), {"slug": slug})).mappings().first()
+
+
+async def _rows_of_exercise(db: AsyncSession, sql: str, exercise_id: int) -> list[Any]:
+    return list((await db.execute(text(sql), {"exercise_id": exercise_id})).mappings().all())
+
+
+# Thứ tự cố định theo spec exercise-wiki §6 mục 9; cột cuối (id) chỉ để thứ tự ổn định khi trùng.
+# `ORDER BY em.role` / `em.media_role` theo thứ tự khai báo của enum PostgreSQL, không theo chữ cái.
+async def list_exercise_muscles(db: AsyncSession, exercise_id: int) -> list[Any]:
+    """Nhóm cơ của bài: vai trò (primary → secondary → stabilizer), tỷ lệ kích hoạt giảm, tên."""
+    sql = """
+    SELECT em.muscle_group_id, mg.code, mg.name, mg.name_en, em.role, em.activation_ratio
+    FROM catalog.exercise_muscles em
+    JOIN catalog.muscle_groups mg ON mg.id = em.muscle_group_id
+    WHERE em.exercise_id = :exercise_id
+    ORDER BY em.role, em.activation_ratio DESC, mg.name, mg.id
+    """
+    return await _rows_of_exercise(db, sql, exercise_id)
+
+
+async def list_exercise_equipment(db: AsyncSession, exercise_id: int) -> list[Any]:
+    """Thiết bị chưa xoá mềm của bài: bắt buộc trước, tuỳ chọn sau, rồi theo tên."""
+    sql = """
+    SELECT ee.equipment_id, eq.code, eq.name, eq.name_en, ee.is_optional
+    FROM catalog.exercise_equipment ee
+    JOIN catalog.equipment eq ON eq.id = ee.equipment_id
+    WHERE ee.exercise_id = :exercise_id AND eq.deleted_at IS NULL
+    ORDER BY ee.is_optional, eq.name, eq.id
+    """
+    return await _rows_of_exercise(db, sql, exercise_id)
+
+
+async def list_exercise_instructions(db: AsyncSession, exercise_id: int) -> list[Any]:
+    """Các bước thực hiện theo `step_no`."""
+    sql = """
+    SELECT step_no, content FROM catalog.exercise_instructions
+    WHERE exercise_id = :exercise_id
+    ORDER BY step_no
+    """
+    return await _rows_of_exercise(db, sql, exercise_id)
+
+
+async def list_exercise_mistakes(db: AsyncSession, exercise_id: int) -> list[Any]:
+    """Lỗi sai thường gặp theo `display_order, id`; cột `ai_detectable` đổi tên thành `is_ai_detectable`."""
+    sql = """
+    SELECT id, code, title, description, correction_cue, at_risk_joint,
+           ai_detectable AS is_ai_detectable, display_order
+    FROM catalog.exercise_mistakes
+    WHERE exercise_id = :exercise_id
+    ORDER BY display_order, id
+    """
+    return await _rows_of_exercise(db, sql, exercise_id)
+
+
+async def list_exercise_media(db: AsyncSession, exercise_id: int) -> list[Any]:
+    """Media sẵn sàng (chưa xoá) của bài theo `display_order, media_role`; chỉ metadata, không bucket/object_key.
+
+    Đọc `media.media_files` chỉ đọc bằng `text()` vì module Gallery & Media chưa có service (spec §6 mục 9).
+    """
+    sql = """
+    SELECT em.media_id, em.media_role, em.is_primary, em.display_order, em.caption,
+           f.mime_type, f.width_px, f.height_px, f.duration_ms
+    FROM catalog.exercise_media em
+    JOIN media.media_files f ON f.id = em.media_id
+    WHERE em.exercise_id = :exercise_id AND f.status = 'available' AND f.deleted_at IS NULL
+    ORDER BY em.display_order, em.media_role, em.media_id
+    """
+    return await _rows_of_exercise(db, sql, exercise_id)
+
+
 async def list_muscle_groups(db: AsyncSession) -> list[Any]:
     """Mọi nhóm cơ (cây phẳng) kèm vùng cơ thể của nút gốc, sắp `display_order, id`."""
     sql = """
