@@ -122,6 +122,8 @@ async def _owned_set(db: AsyncSession, se: SessionExercise, set_id: int) -> Exer
 async def get_session(db: AsyncSession, user_id: uuid.UUID, session_id: uuid.UUID) -> WorkoutSessionResponse:
     session = await _owned_session(db, user_id, session_id)
     summary = await crud.session_summary(db, user_id, session.id)
+    if summary is None:  # view lọc cùng điều kiện với _owned_session; chỉ xảy ra nếu buổi vừa bị xoá mềm
+        raise NotFoundError(*_SESSION_NOT_FOUND)
     return WorkoutSessionResponse(
         **summary,
         session_rpe=session.session_rpe,
