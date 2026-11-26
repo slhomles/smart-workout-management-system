@@ -2,6 +2,7 @@
 
 import hashlib
 import uuid
+from typing import NamedTuple
 
 import pytest
 from httpx import AsyncClient
@@ -1116,3 +1117,68 @@ async def test_patch_me_profile_missing_returns_404_user_not_found(
         select(func.count()).select_from(UserProfile).where(UserProfile.user_id == uuid.UUID(NEWBIE_ID))
     )
     assert count == 0
+
+
+# ---------------------------------------------------------------------------
+# AUTH-24: endpoint /auth cần đăng nhập, gọi không có Authorization (spec docs/features/auth-users.md §5)
+# ---------------------------------------------------------------------------
+
+AuthEndpoint = tuple[str, str, dict | None]
+# Body hợp lệ để lỗi chắc chắn đến từ thiếu token, không phải 422.
+AUTH_ENDPOINTS: list[AuthEndpoint] = [
+    ("POST", LOGOUT, {"refresh_token": DEMO_REFRESH}),
+    ("POST", LOGOUT_ALL, None),
+    ("GET", ME, None),
+    ("PATCH", ME, {"display_name": "Tên Mới"}),
+    ("PATCH", CHANGE_PASSWORD, {"current_password": SEED_PASSWORD, "new_password": NEW_PASSWORD}),
+]
+
+
+class DemoSnapshot(NamedTuple):
+    """Dữ liệu của …03 mà các endpoint /auth có thể đổi."""
+
+    account: tuple
+    profile: tuple
+    unrevoked_tokens: dict[uuid.UUID, tuple]
+    active_roles: set[str]
+
+
+async def _demo_snapshot(db: AsyncSession) -> DemoSnapshot:
+    """Đọc thẳng cột từ DB (không qua identity map) để so sánh trước/sau một request."""
+    demo_id = uuid.UUID(DEMO_ID)
+    account = (
+        await db.execute(
+            select(User.status, User.locked_until, User.password_hash, User.password_changed_at).where(
+                User.id == demo_id
+            )
+        )
+    ).one()
+    roles = await db.scalars(
+        select(Role.code)
+        .join(UserRole, UserRole.role_id == Role.id)
+        .where(UserRole.user_id == demo_id, UserRole.expires_at.is_(None) | (UserRole.expires_at > func.now()))
+    )
+    return DemoSnapshot(
+        account=tuple(account),
+        profile=await _profile_row(db, DEMO_ID),
+        unrevoked_tokens=await _user_tokens(db, DEMO_ID, revoked=False),
+        active_roles=set(roles),
+    )
+
+
+@pytest.mark.tc("AUTH-24")
+@pytest.mark.parametrize(
+    "endpoint", AUTH_ENDPOINTS, ids=["logout", "logout_all", "get_me", "patch_me", "change_password"]
+)
+async def test_auth_endpoints_without_token_return_token_invalid(
+    client: AsyncClient, db: AsyncSession, endpoint: AuthEndpoint
+):
+    method, path, payload = endpoint
+    before = await _demo_snapshot(db)
+    assert _sha256(DEMO_REFRESH) in {token_hash for token_hash, _, _ in before.unrevoked_tokens.values()}
+
+    res = await client.request(method, path, json=payload)
+
+    _assert_error(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+    assert await _demo_snapshot(db) == before

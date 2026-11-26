@@ -1,9 +1,11 @@
 """Integration test /users (quản trị người dùng) trên PostgreSQL thật (persona seed, docs/database/test-dataset.md)."""
 
 import hashlib
+import itertools
 import uuid
 from collections.abc import AsyncGenerator, Collection
 from datetime import datetime
+from typing import NamedTuple
 
 import pytest
 import pytest_asyncio
@@ -13,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis_client import get_redis
-from app.models.auth import RefreshToken, Role, User, UserDevice, UserRole
+from app.models.auth import RefreshToken, Role, User, UserDevice, UserProfile, UserRole
 from app.models.enums import TokenRevokeReason, UserStatus
 from app.services.permission_service import cache_key
 from tests.conftest import SEED_PASSWORD, persona_id
@@ -689,3 +691,93 @@ async def test_unlock_active_user_returns_active_unchanged(
     assert res.json()["status"] == "active"
     assert res.json()["locked_until"] is None
     assert await _user_state(db, demo) == (UserStatus.ACTIVE, None)
+
+
+# --- AUTH-24, AUTH-25: /users* thiếu token / thiếu permission ---
+TARGET_ID = persona_id(3)
+Endpoint = tuple[str, str, dict | None]
+USERS_ENDPOINTS: list[Endpoint] = [
+    ("GET", USERS, None),
+    ("GET", f"{USERS}/{TARGET_ID}", None),
+    ("PUT", _roles_url(TARGET_ID), EDITOR_AND_USER),
+    ("POST", _action_url(TARGET_ID, "lock"), None),
+    ("POST", _action_url(TARGET_ID, "unlock"), None),
+]
+USERS_ENDPOINT_IDS = ["list_users", "get_user", "replace_roles", "lock", "unlock"]
+# demo (role user) và editor (role content_editor) đều không có user:read, role:assign, user:lock.
+NO_PERMISSION_PERSONAS = ("demo", "editor")
+NO_PERMISSION_CASES = list(itertools.product(NO_PERMISSION_PERSONAS, USERS_ENDPOINTS))
+NO_PERMISSION_IDS = [
+    f"{persona}-{endpoint_id}"
+    for persona, endpoint_id in itertools.product(NO_PERMISSION_PERSONAS, USERS_ENDPOINT_IDS)
+]
+
+
+class UserSnapshot(NamedTuple):
+    """Dữ liệu của một user mà các endpoint /auth, /users có thể đổi."""
+
+    state: UserState
+    password: tuple
+    profile: tuple
+    unrevoked_token_ids: set[uuid.UUID]
+    active_roles: set[str]
+
+
+async def _user_snapshot(db: AsyncSession, user_id: str) -> UserSnapshot:
+    """Đọc thẳng cột từ DB (không qua identity map) để so sánh trước/sau một request."""
+    uid = uuid.UUID(user_id)
+    password = (
+        await db.execute(select(User.password_hash, User.password_changed_at).where(User.id == uid))
+    ).one()
+    profile = (
+        await db.execute(
+            select(
+                UserProfile.display_name,
+                UserProfile.full_name,
+                UserProfile.locale,
+                UserProfile.timezone,
+                UserProfile.unit_system,
+            ).where(UserProfile.user_id == uid)
+        )
+    ).one()
+    return UserSnapshot(
+        state=await _user_state(db, user_id),
+        password=tuple(password),
+        profile=tuple(profile),
+        unrevoked_token_ids=await _unrevoked_token_ids(db, user_id),
+        active_roles=await _active_role_codes(db, user_id),
+    )
+
+
+@pytest.mark.tc("AUTH-24")
+@pytest.mark.parametrize("endpoint", USERS_ENDPOINTS, ids=USERS_ENDPOINT_IDS)
+async def test_users_endpoints_without_token_return_token_invalid(
+    client: AsyncClient, db: AsyncSession, endpoint: Endpoint
+):
+    method, url, body = endpoint
+    before = await _user_snapshot(db, TARGET_ID)
+
+    res = await client.request(method, url, json=body)
+
+    _assert_error(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+    assert await _user_snapshot(db, TARGET_ID) == before
+
+
+@pytest.mark.tc("AUTH-25")
+@pytest.mark.parametrize("case", NO_PERMISSION_CASES, ids=NO_PERMISSION_IDS)
+@pytest.mark.usefixtures("perm_cache")
+async def test_users_endpoints_without_permission_return_permission_denied(
+    client: AsyncClient, db: AsyncSession, auth_headers, case: tuple[str, Endpoint]
+):
+    persona, (method, url, body) = case
+    headers = await auth_headers(persona)
+    # Chụp sau khi đăng nhập: login của demo thêm một refresh token mới cho …03.
+    before = await _user_snapshot(db, TARGET_ID)
+    assert before.state[0] == UserStatus.ACTIVE
+    assert before.active_roles == {"user"}
+
+    res = await client.request(method, url, json=body, headers=headers)
+
+    _assert_error(res, 403, "permission_denied")
+    assert await _user_snapshot(db, TARGET_ID) == before
