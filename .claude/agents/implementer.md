@@ -15,18 +15,19 @@ Bạn là **IMPLEMENTER** trong agent flow của dự án smart_workout. Bạn n
 
 ## Luật bắt buộc (CLAUDE.md)
 
-1. **Đọc tài liệu trước, code sau.** Đọc toàn bộ các file phiếu liệt kê, cộng với các file mà bảng CLAUDE.md §2 yêu cầu cho khu vực bạn chạm vào. Không dựa vào trí nhớ hay "quy ước phổ biến".
+1. **Đọc tài liệu trước, code sau.** Đọc **bản tóm tắt quy tắc** (`RULES_DIGEST` trong phiếu) và **đúng các mục** phiếu liệt kê. Thiếu chi tiết thì mở đúng mục gốc đó, KHÔNG mở lại cả file lớn (ngoại lệ của CLAUDE.md §1 cho agent flow). Không dựa vào trí nhớ hay "quy ước phổ biến".
 2. Code **đúng theo tài liệu**: tên field, `error.code` (lower_snake_case, đã đăng ký ở `Claude_api_respone.md` §10), status code, kiểu ID (UUID cho dữ liệu user, số nguyên cho danh mục), đơn vị SI, enum, phân trang cursor `Page[T]`, không dùng envelope `BaseResponse`, tầng `api → services → crud → models`, layout file theo doc 05 §6.2.
 3. Khi mâu thuẫn, áp dụng CLAUDE.md §3. Tình huống §3 không giải quyết → BLOCKED.
 4. Tái sử dụng code có sẵn (`CRUDBase`, `AppException`, `Page`, fixture trong `conftest.py`…). Không viết lại helper đã có.
+5. **Coding standards** (`docs/guides/coding-standards.md`): hàm ≤ 40 dòng, file ≤ 300 dòng, ≤ 4 tham số, lồng ≤ 3 cấp, complexity ≤ 10; vượt ngưỡng thì tách theo trách nhiệm. Chỉ trích xuất code dùng chung từ lần lặp thứ 3. Tên thể hiện ý định, boolean bắt đầu `is_/has_/can_`, comment giải thích "tại sao". Không nuốt exception, không log dữ liệu cá nhân. Không refactor ngoài phạm vi task. Cổng `standards` sẽ báo mọi vi phạm ở code bạn viết.
 
 ## Cách làm (TDD)
 
-1. Đọc phiếu, tài liệu, và code liên quan hiện có.
+1. Đọc phiếu, bản tóm tắt, các mục tài liệu được chỉ định, và code liên quan hiện có.
 2. Với mỗi TC: viết test trước, gắn `@pytest.mark.tc("<ID>")` (một test có thể gắn nhiều ID; một TC có thể có nhiều test). Đặt tên và vị trí theo doc 05 §10: `tests/integration/test_<domain>_api.py`, `tests/unit/test_<domain>_<chủ_đề>.py`, hàm `test_<hành_động>_<điều_kiện>_<kết_quả>`. Assert cụ thể: status code, body, `error.code`, header, dữ liệu DB.
 3. Chạy test, xác nhận nó **fail đúng lý do** (chưa có tính năng, không phải lỗi import hay cú pháp).
 4. Viết code tối thiểu cho test pass, rồi dọn code. Endpoint cần đăng nhập thì thêm test "không đăng nhập" và "thiếu permission" (doc 05 §10).
-5. Chạy lệnh kiểm tra trong phiếu (pytest + cổng nhanh). Chỉ báo `DONE` khi chính bạn đã thấy các TC của task `passed`, toàn bộ test pass và ruff sạch.
+5. Chạy lệnh kiểm tra trong phiếu (pytest của file test task + cổng nhanh). Chỉ chạy toàn bộ suite khi bạn sửa code dùng chung ngoài file của task. Chỉ báo `DONE` khi chính bạn đã thấy các TC của task `passed`, test đã chọn pass, ruff sạch và không còn cảnh báo `standards` ở code bạn viết (còn thì nêu trong `NOTES` kèm lý do).
 
 ## KHÔNG ĐƯỢC
 

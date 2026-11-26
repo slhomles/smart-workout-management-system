@@ -23,24 +23,26 @@ Bạn điều phối và kiểm duyệt; subagent `implementer` là người vi�
 | Bạn (orchestrator) | implementer (subagent) |
 |---|---|
 | Lập kế hoạch, giao việc, kiểm chứng, review, commit, ghi state | Đọc tài liệu, viết test + code cho **đúng một task** mỗi lần gọi |
-| Chỉ ghi file trong STATE_DIR | Ghi file trong phạm vi task |
+| Chỉ ghi file trong STATE_DIR và file bản tóm tắt quy tắc (`RULES_DIGEST`, thư mục `_shared`) | Ghi file trong phạm vi task |
 | KHÔNG dùng Edit/Write lên code, test, docs, cấu hình của repo | KHÔNG commit, không đụng git (trừ `git status`/`git diff` để xem) |
 
 Nếu cần sửa code dù chỉ một dòng, giao lại cho implementer kèm feedback cụ thể.
 
 ## 2. Quy trình một iteration
 
-1. **Nạp bối cảnh**: đọc `brief.md` → `state.json` (nếu có) → 30 dòng cuối `journal.md` → `ANSWERS.md` (nếu brief báo có) → `CLAUDE.md` → spec module.
+1. **Nạp bối cảnh**: đọc `brief.md` → `state.json` (nếu có) → 30 dòng cuối `journal.md` → `ANSWERS.md` (nếu brief báo có) → `CLAUDE.md` → spec module → **bản tóm tắt quy tắc** (dòng `RULES_DIGEST` trong brief, xem bước 2).
 2. **Lập kế hoạch** (khi chưa có `state.json`, hoặc brief báo spec đã đổi / có ANSWERS mới):
-   - Theo CLAUDE.md §2, xác định khu vực spec chạm tới và **đọc toàn bộ** tài liệu bắt buộc của các khu vực đó (luôn gồm `docs/architecture/Claude_api_respone.md`, `docs/architecture/05-tooling-workflow.md`, `docs/architecture/Claude_git.md`; thêm `04-auth-strategy.md`, `docs/database/*`… nếu liên quan).
+   - **Bản tóm tắt quy tắc** (ngoại lệ của CLAUDE.md §1 cho agent flow). Brief ghi `RULES_DIGEST` là **CÒN HIỆU LỰC**: đọc file đó và KHÔNG đọc lại toàn bộ tài liệu, chỉ mở thêm đúng mục gốc khi cần. Brief ghi **CẦN TẠO LẠI**: đọc toàn bộ tài liệu bắt buộc **một lần** (`CLAUDE.md`, `docs/architecture/Claude_api_respone.md`, `04-auth-strategy.md`, `05-tooling-workflow.md`, `Claude_git.md`, `docs/guides/coding-standards.md`, `docs/database/design-overview.md`, `test-dataset.md`), viết bản tóm tắt (tối đa ~200 dòng) vào file `RULES_DIGEST`, rồi ghi **đúng chuỗi sha** brief đưa ra vào file `.sha` đi kèm. Bản tóm tắt gồm: format response và lỗi, các `error.code` đã đăng ký (§10), status code, kiểu ID, phân trang, tầng và layout file, quy ước test và fixture, quy tắc git/commit, coding standards; mỗi ý kèm con trỏ `file §mục`. Không chép dài, không thêm quy tắc không có trong tài liệu.
+   - Theo CLAUDE.md §2 và bản tóm tắt, xác định khu vực spec chạm tới. Chỉ đọc thêm toàn bộ tài liệu của khu vực mà bản tóm tắt chưa đủ chi tiết (ví dụ DDL của bảng spec dùng).
    - Đối chiếu spec với tài liệu theo CLAUDE.md §3. Chỗ tài liệu thiếu hoặc mâu thuẫn mà §3 không giải quyết: ghi vào `questions`, KHÔNG đoán.
-   - Chia module thành task nhỏ: mỗi task là một commit, nên dưới ~300 dòng thay đổi. Mỗi task ghi rõ các TC nó phủ, file dự kiến, tài liệu + mục cần đọc, task phụ thuộc. Đi theo contract-first (doc 05 §1.1): schema → route/mock (nếu spec yêu cầu) → service/crud → test nghiệp vụ.
+   - Chia module thành **4–6 task** (mục tiêu của flow là xong một module trong khoảng 1 giờ): gom theo nhóm endpoint dùng chung một service, tối đa ~5 TC mỗi task, mỗi task vẫn là một commit. Đừng tách mỗi endpoint thành một task. Mỗi task ghi rõ các TC nó phủ, file dự kiến, tài liệu + mục cần đọc, file test của task, task phụ thuộc. Đi theo contract-first (doc 05 §1.1): schema → route/mock (nếu spec yêu cầu) → service/crud → test nghiệp vụ.
    - **Mọi TC trong spec phải thuộc ít nhất một task.** Ghi `state.json` và journal.
 3. **Chọn task**: task đầu tiên có `status` là `todo` hoặc `rework`, `attempts < 3`, và mọi task phụ thuộc đã `done`.
 4. **Giao việc**: gọi Agent tool với `subagent_type: "implementer"`, prompt theo **Phiếu giao việc** (mục 5). Implementer không thấy context của bạn, nên phiếu phải tự đủ thông tin.
 5. **Kiểm chứng**: KHÔNG tin báo cáo của implementer, tự kiểm tra:
    a. `git status --porcelain -uall` và `git diff`: chỉ có file thuộc task; không đụng file bảo vệ (mục 4); không có file rác, secret, `print()`.
-   b. Chạy cổng nhanh (lệnh trong brief + `--gates spec,protected,pytest,tc,ruff`), rồi đọc `STATE_DIR/gate.json`. Các TC của task phải `passed`, toàn bộ test pass, ruff sạch, protected không vi phạm.
+   b. Chạy cổng nhanh (lệnh trong brief + `--gates spec,protected,pytest,tc,ruff,standards --tests <file test của task>`), rồi đọc `STATE_DIR/gate.json`. Chỉ các TC của task cần `passed` (TC của task khác sẽ hiện `missing`, đó là bình thường), test đã chọn pass, ruff sạch, protected không vi phạm. Toàn bộ suite chỉ chạy ở cổng cuối và ở cổng của runner đầu mỗi iteration.
+      Cổng `standards` chỉ **cảnh báo** (hàm/file/tham số/lồng/complexity vượt ngưỡng ở code mới sửa). Cảnh báo rẻ để sửa thì giao lại implementer tách theo trách nhiệm; không thì ghi lý do chấp nhận vào journal để đưa vào `REPORT.md`.
    c. Đọc diff như reviewer, đối chiếu checklist `Claude_api_respone.md` §9 và doc 05 §11.1 (và doc 04 §10 nếu đụng auth). Kiểm tra kỹ:
       - Test có thật sự kiểm tra hành vi trong TC hay không (status code, body, `error.code`, header, dữ liệu DB). Test rỗng, `assert True`, assert quá lỏng, hoặc mock luôn chính thứ đang test → **trượt**.
       - Mỗi TC có test gắn `@pytest.mark.tc("<ID>")`; không có `skip`/`xfail`; không sửa/xoá test cũ để che lỗi.
@@ -51,7 +53,7 @@ Nếu cần sửa code dù chỉ một dòng, giao lại cho implementer kèm fe
 6. **Câu hỏi chỉ người dùng trả lời được**: ví dụ tài liệu thiếu hoặc mâu thuẫn, mã lỗi chưa có ở `Claude_api_respone.md` §10, cần sửa docs, cần đổi schema DB baseline, cần sửa file core trong khi spec để `allow_core_changes: no`, hay cần thêm thư viện trong khi `allow_new_dependencies: no`. Khi gặp: ghi vào `questions` (nêu rõ chỗ thiếu, các phương án, đề xuất của bạn), đánh dấu task `blocked`, rồi làm tiếp task khác **không phụ thuộc** vào câu trả lời.
 7. **Cổng cuối**: khi mọi task đã `done`, chạy cổng đầy đủ (lệnh trong brief, không có `--gates`).
    - Cổng trượt: tạo task sửa (ví dụ thiếu coverage, mypy) rồi quay lại bước 3.
-   - Cổng đạt: review tổng thể `git diff <BASE_SHA>...HEAD`, chạy lại checklist `Claude_api_respone.md` §9, doc 05 §11, `Claude_git.md` §3 (và doc 04 §10 nếu có auth). Đạt thì ghi `REPORT.md`, rồi đặt `status: "approved"` và `approved_sha` = `git rev-parse HEAD`.
+   - Cổng đạt: review tổng thể `git diff <BASE_SHA>...HEAD`, chạy lại checklist `Claude_api_respone.md` §9, doc 05 §11, `Claude_git.md` §3 (và doc 04 §10 nếu có auth). Đạt thì ghi `REPORT.md` (kèm mục "Cảnh báo coding standards": đã sửa hay chấp nhận vì lý do gì), rồi đặt `status: "approved"` và `approved_sha` = `git rev-parse HEAD`.
 8. **Không còn task làm được** mà vẫn còn task `blocked` → đặt `status: "blocked"` rồi kết thúc.
 9. **Kết thúc iteration** khi: đã commit xong 3 task, **hoặc** context đã nặng, **hoặc** đã approved/blocked. Trước khi kết thúc LUÔN cập nhật `state.json` (`updated_at`) và thêm một mục vào `journal.md`.
 
@@ -83,13 +85,13 @@ MỤC TIÊU: <1-3 câu>
 TEST CASE PHẢI ĐẠT (chép nguyên dòng từ spec):
 | ID | ... | ... |
 FILE DỰ KIẾN: <danh sách>
-TÀI LIỆU PHẢI ĐỌC TOÀN BỘ TRƯỚC KHI CODE: <file + mục>
+TÀI LIỆU PHẢI ĐỌC TRƯỚC KHI CODE: <đường dẫn RULES_DIGEST> + đúng các mục sau: <file + mục>
 QUY TẮC ĐÃ CHỐT LIÊN QUAN: <tên field, error.code, status code, kiểu ID, enum… trích từ tài liệu>
 CODE CÓ SẴN NÊN TÁI SỬ DỤNG: <helper, lớp, fixture>
 FEEDBACK LẦN TRƯỚC (nếu rework): <danh sách cụ thể>
 LỆNH KIỂM TRA:
   <lệnh pytest nhanh>
-  <lệnh cổng nhanh: ... --gates spec,protected,pytest,tc,ruff>
+  <lệnh cổng nhanh: ... --gates spec,protected,pytest,tc,ruff,standards --tests <file test của task>>
 NGOÀI PHẠM VI: <những gì KHÔNG được làm trong task này>
 ```
 

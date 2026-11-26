@@ -41,7 +41,18 @@ from notify import esc  # noqa: E402
 AGENT_FILES = [".claude/agents/orchestrator.md", ".claude/agents/implementer.md",
                ".claude/agents/spec-writer.md"]
 SETTINGS = HERE / "flow-settings.json"
-MANDATORY_GATES = ["spec", "protected", "clean", "pytest", "tc"]
+MANDATORY_GATES = ["spec", "protected", "clean", "pytest", "tc", "standards"]
+# Tài liệu nguồn của bản tóm tắt quy tắc dùng chung; một trong số này đổi thì phải lập lại bản tóm tắt.
+DIGEST_SOURCES = [
+    "CLAUDE.md",
+    "docs/architecture/Claude_api_respone.md",
+    "docs/architecture/04-auth-strategy.md",
+    "docs/architecture/05-tooling-workflow.md",
+    "docs/architecture/Claude_git.md",
+    "docs/guides/coding-standards.md",
+    "docs/database/design-overview.md",
+    "docs/database/test-dataset.md",
+]
 
 EXIT_DONE, EXIT_ERROR, EXIT_BLOCKED, EXIT_STALLED, EXIT_BUDGET, EXIT_PREFLIGHT = 0, 1, 2, 3, 4, 5
 
@@ -374,6 +385,7 @@ class Flow:
         self.module = self.spec.get("module") or "unknown"
         root = Path(args.flow_root) if args.flow_root else REPO.parent / f"{REPO.name}-flow"
         self.quota_file = root / "quota-alerts.json"  # mốc hạn mức đã báo, dùng chung mọi module
+        self.shared_dir = root / "_shared"  # bản tóm tắt quy tắc, dùng chung mọi module
         self.mod_dir = root / self.module
         self.wt = self.mod_dir / "repo"
         self.state_dir = self.mod_dir / "state"
@@ -383,6 +395,7 @@ class Flow:
         self.state_file = self.state_dir / "state.json"
         self.gate_file = self.state_dir / "gate-runner.json"
         self.warnings: list[str] = []
+        self.tick = time.monotonic()  # mốc đo thời gian chạy thật của module (xem check_timebox)
         self.gates = list(dict.fromkeys(MANDATORY_GATES + self.spec.get("gates", [])))
         self.owner = self.spec.get("owner") or None
         self.notifier = notify.Notifier.load(log)
@@ -671,8 +684,41 @@ class Flow:
         if git(self.wt, "status", "--porcelain", "-uall", check=False).strip():
             return None
         parts = [git(self.wt, "rev-parse", "HEAD"), self.run_info.get("spec_sha", ""), self.base_sha,
-                 ",".join(self.gates), str(self.python), sha256(HERE / "check_done.py")]
+                 ",".join(self.gates), str(self.python), sha256(HERE / "check_done.py"), sha256(HERE / "standards.py")]
         return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
+
+    def check_timebox(self, gate: dict, state: dict) -> None:
+        """Quá mốc thời gian thì báo MỘT lần; flow vẫn chạy tiếp (quyết định của người phụ trách module)."""
+        now_tick = time.monotonic()
+        spent = self.run_info.get("active_seconds", 0) + (now_tick - self.tick)
+        self.run_info["active_seconds"], self.tick = spent, now_tick
+        limit = self.args.time_box_minutes
+        if not limit or self.run_info.get("timebox_warned") or spent < limit * 60:
+            return
+        self.run_info["timebox_warned"] = True
+        write_json(self.run_file, self.run_info)
+        tasks = state.get("tasks", [])
+        done = sum(1 for t in tasks if t.get("status") == "done")
+        tc = gate.get("gates", {}).get("tc", {}).get("summary", "?")
+        self.notify(f"⏱ {self.tag()} đã chạy {round(spent / 60)} phút (mốc {limit} phút, không tính thời gian "
+                    f"chờ hạn mức): {esc(tc)}, task {done}/{len(tasks)} xong. Flow vẫn chạy tiếp.")
+
+    def docs_sha(self) -> str:
+        """Băm nội dung các tài liệu nguồn; khác lần lập bản tóm tắt trước thì phải đọc và lập lại."""
+        digest = hashlib.sha256()
+        for rel in DIGEST_SOURCES:
+            path = self.wt / rel
+            digest.update(rel.encode("utf-8") + (path.read_bytes() if path.exists() else b"-"))
+        return digest.hexdigest()
+
+    def digest_lines(self) -> list[str]:
+        digest, sha_file = self.shared_dir / "rules-digest.md", self.shared_dir / "rules-digest.sha"
+        current = self.docs_sha()
+        is_fresh = digest.exists() and sha_file.exists() and sha_file.read_text(encoding="utf-8").strip() == current
+        if is_fresh:
+            return [f"- RULES_DIGEST: `{digest}` · **CÒN HIỆU LỰC**: đọc nó thay vì đọc lại toàn bộ tài liệu."]
+        return [f"- RULES_DIGEST: `{digest}` · **CẦN TẠO LẠI** (tài liệu đã đổi hoặc chưa có): đọc toàn bộ "
+                f"tài liệu một lần, ghi bản tóm tắt vào file này, rồi ghi đúng chuỗi `{current}` vào `{sha_file}`."]
 
     def run_gate(self) -> dict:
         # Bộ test chạy trên DB ở VM mất 10+ phút; HEAD không đổi thì kết quả cổng cũng không đổi.
@@ -706,6 +752,7 @@ class Flow:
             f"- SPEC (đã khoá, KHÔNG sửa): `{self.spec_rel}`",
             f"- BRANCH: `{self.spec['branch']}` · BASE_SHA: `{self.base_sha}` · HEAD: `{gate.get('head', '')}`",
             f"- STATE_DIR: `{self.state_dir}` (state.json, journal.md, REPORT.md, gate.json)",
+            *self.digest_lines(),
             f"- PYTHON (venv backend): `{py}`",
             f"- Cổng do runner bật: {', '.join(self.gates)} · coverage_min: {self.spec['coverage_min']:g}",
             f"- allow_core_changes: {self.spec['allow_core_changes']} · "
@@ -718,7 +765,8 @@ class Flow:
             "",
             "Cổng đầy đủ (chạy từ WORKTREE):",
             f"```\n{gate_cmd}\n```",
-            "Cổng nhanh cho một task: thêm `--gates spec,protected,pytest,tc,ruff`.",
+            "Cổng nhanh cho một task: thêm `--gates spec,protected,pytest,tc,ruff,standards "
+            "--tests <file test của task>` (chỉ chạy file test đó; cổng đầy đủ không có `--tests`).",
             "",
             "Commit (CÁCH DUY NHẤT; `git commit` trực tiếp bị chặn). Viết message vào file, "
             "`git add <đường dẫn cụ thể>`, rồi chạy từ WORKTREE:",
@@ -814,6 +862,7 @@ class Flow:
             if state.get("status") == "blocked":
                 return self.finish(EXIT_BLOCKED, "BỊ CHẶN: cần người dùng trả lời câu hỏi trong state.json", gate)
             self.alert_new_questions(state)
+            self.check_timebox(gate, state)
 
             tc_status = gate.get("gates", {}).get("tc", {}).get("per_tc", {})
             fp = json.dumps([head, sorted(k for k, v in tc_status.items() if v["status"] == "passed"),
@@ -838,8 +887,9 @@ class Flow:
                       "Kết thúc bằng một dòng tóm tắt việc đã làm.")
             perm_config = (perm_mcp_config(self.state_dir, self.module, self.owner, args.perm_timeout)
                            if args.ask_permissions else None)
-            res = call_claude(args, prompt, self.wt, [self.state_dir], self.logs / f"iter-{i:03d}",
-                              perm_config)
+            self.shared_dir.mkdir(parents=True, exist_ok=True)
+            res = call_claude(args, prompt, self.wt, [self.state_dir, self.shared_dir],
+                              self.logs / f"iter-{i:03d}", perm_config)
             data = res["data"]
             history.append({
                 "i": i, "started": started, "ended": now(), "rc": res["rc"],
@@ -866,6 +916,7 @@ class Flow:
                             f"tạm dừng đến khoảng {resume_at} rồi chạy tiếp")
                 self.save_run(i)
                 time.sleep(wait)
+                self.tick = time.monotonic()  # thời gian chờ hạn mức không tính vào mốc thời gian của module
                 just_waited = True
                 continue
             if res["is_error"]:
@@ -1014,7 +1065,9 @@ def main() -> int:
     ap.add_argument("--max-iterations", type=int, default=40)
     ap.add_argument("--max-stall", type=int, default=3,
                     help="số iteration liên tiếp không tiến triển thì dừng")
-    ap.add_argument("--iteration-timeout", type=int, default=5400, help="giây cho mỗi iteration")
+    ap.add_argument("--iteration-timeout", type=int, default=2700, help="giây cho mỗi iteration")
+    ap.add_argument("--time-box-minutes", type=int, default=60,
+                    help="quá số phút này (không tính chờ hạn mức) thì báo một lần, flow chạy tiếp; 0 = tắt")
     ap.add_argument("--limit-wait", type=int, default=1800,
                     help="giây chờ khi chạm giới hạn sử dụng mà không biết giờ reset")
     ap.add_argument("--max-limit-waits", type=int, default=30)
