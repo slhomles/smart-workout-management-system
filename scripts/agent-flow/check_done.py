@@ -25,6 +25,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import standards
@@ -288,6 +289,23 @@ def run_pytest(root: Path, python: str, want_cov: bool, tmp: Path, tests: list[s
     return {"rc": proc.returncode, "output": proc.stdout + proc.stderr, "tc": tc, "cov": cov}
 
 
+def timed_pytest(root: Path, python: str, want_cov: bool, tests: list[str] | None) -> dict:
+    """Chạy pytest một lần cho các cổng pytest/tc/coverage và ghi số giây đã mất vào kết quả."""
+    began = time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="flowgate-") as tmp:
+        res = run_pytest(root, python, want_cov, Path(tmp), tests)
+    res["seconds"] = round(time.monotonic() - began, 1)
+    return res
+
+
+def timed(func, *args) -> dict:
+    """Gọi một hàm cổng và ghi số giây đã mất vào kết quả (để biết cổng nào chậm)."""
+    began = time.monotonic()
+    result = func(*args)
+    result["seconds"] = round(time.monotonic() - began, 1)
+    return result
+
+
 def gate_pytest(res: dict, is_subset: bool = False) -> dict:
     rc = res["rc"]
     labels = {0: "test đã chọn pass" if is_subset else "toàn bộ test pass", 1: "có test fail", 5: "không thu thập được test nào"}
@@ -371,24 +389,23 @@ def evaluate(root: Path, spec_path: Path, base: str | None, gates: list[str], py
             "details": spec["errors"],
         }
     if "protected" in gates:
-        results["protected"] = gate_protected(root, base, spec_rel, spec)
+        results["protected"] = timed(gate_protected, root, base, spec_rel, spec)
     if "clean" in gates:
         results["clean"] = gate_clean(root, spec_rel)
     if {"pytest", "tc", "coverage"} & set(gates):
-        with tempfile.TemporaryDirectory(prefix="flowgate-") as tmp:
-            res = run_pytest(root, python, "coverage" in gates, Path(tmp), tests)
+        res = timed_pytest(root, python, "coverage" in gates, tests)
         if "pytest" in gates:
-            results["pytest"] = gate_pytest(res, is_subset=bool(tests))
+            results["pytest"] = {**gate_pytest(res, is_subset=bool(tests)), "seconds": res["seconds"]}
         if "tc" in gates:
             results["tc"] = gate_tc(spec, res)
         if "coverage" in gates:
             results["coverage"] = gate_coverage(spec, res)
     if "ruff" in gates:
-        results["ruff"] = gate_tool(root, [python, "-m", "ruff", "check", ".", "--no-cache"], "ruff")
+        results["ruff"] = timed(gate_tool, root, [python, "-m", "ruff", "check", ".", "--no-cache"], "ruff")
     if "mypy" in gates:
-        results["mypy"] = gate_tool(root, [python, "-m", "mypy", "app/"], "mypy")
+        results["mypy"] = timed(gate_tool, root, [python, "-m", "mypy", "app/"], "mypy")
     if "standards" in gates:
-        results["standards"] = gate_standards(root, base)
+        results["standards"] = timed(gate_standards, root, base)
 
     head = git(root, "rev-parse", "HEAD").strip()
     return {
@@ -399,10 +416,15 @@ def evaluate(root: Path, spec_path: Path, base: str | None, gates: list[str], py
     }
 
 
+def took(result: dict) -> str:
+    seconds = result.get("seconds") or 0
+    return f" ({seconds:.0f}s)" if seconds >= 5 else ""
+
+
 def format_summary(report: dict) -> str:
     lines = [f"GATE {'PASS' if report['ok'] else 'FAIL'} @ {report['head'][:10]}"]
     for name, r in report["gates"].items():
-        lines.append(f"  [{'x' if r['ok'] else ' '}] {name}: {r['summary']}")
+        lines.append(f"  [{'x' if r['ok'] else ' '}] {name}: {r['summary']}{took(r)}")
     tc = report["gates"].get("tc", {}).get("per_tc", {})
     bad = [f"{k}={v['status']}" for k, v in tc.items() if v["status"] != "passed"]
     if bad:
