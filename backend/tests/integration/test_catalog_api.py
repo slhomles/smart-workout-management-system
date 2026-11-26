@@ -3,14 +3,18 @@
 ID danh mục là IDENTITY nên không cố định: test đọc ID qua `db` theo `code` (spec exercise-wiki §5).
 """
 
+import json
 import uuid
-from collections.abc import Iterator
+from collections.abc import AsyncGenerator, Iterator
 
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient, Response
+from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.redis_client import get_redis
 from app.schemas.base import encode_cursor
 from app.services import catalog_service, permission_service
 
@@ -788,3 +792,190 @@ async def test_list_exercises_for_ai_label_padded_uppercase_label_matches_same_r
 @pytest.mark.parametrize("ai_label", ["test_retired_machine", "khong_co_nhan"])
 async def test_list_exercises_for_ai_label_retired_or_unknown_label_returns_empty(db: AsyncSession, ai_label: str):
     assert await catalog_service.list_exercises_for_ai_label(db, ai_label) == []
+
+
+# --- GET /plan-templates ---
+PLAN_TEMPLATES_URL = "/api/v1/plan-templates"
+PLAN_TEMPLATE_KEYS = {
+    "id", "name", "description", "goal_type_id", "difficulty", "duration_weeks", "day_count", "created_at",
+}
+
+
+def _plan_id(nn: int) -> str:
+    return f"5eed1000-0000-4000-8000-{nn:012d}"
+
+
+ACTIVE_TEMPLATE_IDS = {_plan_id(nn) for nn in range(1, 7)}
+
+
+async def _plan_templates(client: AsyncClient, auth_headers, params: dict) -> dict:
+    return _page(await client.get(PLAN_TEMPLATES_URL, params=params, headers=await auth_headers("demo")))
+
+
+async def _goal_type_id(db: AsyncSession, code: str) -> int:
+    value = await db.scalar(text("SELECT id FROM body.fitness_goal_types WHERE code = :code"), {"code": code})
+    assert value is not None, f"không có fitness_goal_types.code='{code}' trong seed"
+    return value
+
+
+def _ids(body: dict) -> list[str]:
+    return [item["id"] for item in body["data"]]
+
+
+@pytest.mark.tc("EXW-15")
+async def test_list_plan_templates_no_params_returns_only_active_templates(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    body = await _plan_templates(client, auth_headers, {})
+    ids = _ids(body)
+    assert body["pagination"] == LAST_PAGE
+    assert len(ids) == len(set(ids)) and set(ids) == ACTIVE_TEMPLATE_IDS
+    personal_ids = {
+        str(plan_id)
+        for plan_id in await db.scalars(text("SELECT id FROM training.workout_plans WHERE owner_user_id IS NOT NULL"))
+    }
+    assert not personal_ids & set(ids)
+    assert not {_plan_id(7), _plan_id(8)} & set(ids)
+
+
+@pytest.mark.tc("EXW-15")
+async def test_list_plan_templates_items_have_exact_keys_and_utc_created_at(client: AsyncClient, auth_headers):
+    data = (await _plan_templates(client, auth_headers, {}))["data"]
+    assert _all_have_keys(data, PLAN_TEMPLATE_KEYS)
+    assert all(str(uuid.UUID(item["id"])) == item["id"] for item in data)
+    assert all(item["created_at"].endswith("Z") for item in data)
+    assert all(type(item["day_count"]) is int for item in data)
+
+
+@pytest.mark.tc("EXW-15")
+async def test_list_plan_templates_ppl_and_upper_lower_have_seed_values(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    templates = {item["id"]: item for item in (await _plan_templates(client, auth_headers, {}))["data"]}
+    ppl = templates[_plan_id(2)]
+    intermediate_id = await _catalog_id(db, "difficulty_levels", "intermediate")
+    assert (ppl["name"], ppl["goal_type_id"]) == ("Push / Pull / Legs", await _goal_type_id(db, "gain_muscle"))
+    assert ppl["difficulty"] == {"id": intermediate_id, "code": "intermediate", "name": "Trung cấp", "rank": 2}
+    assert (ppl["duration_weeks"], ppl["day_count"]) == (12, 3)
+    assert templates[_plan_id(3)]["day_count"] == 4
+
+
+@pytest.mark.tc("EXW-15")
+async def test_list_plan_templates_limit_4_pages_through_cursor(client: AsyncClient, auth_headers):
+    first = await _plan_templates(client, auth_headers, {"limit": 4})
+    assert len(first["data"]) == 4 and first["pagination"]["has_more"] is True
+    second = await _plan_templates(client, auth_headers, {"limit": 4, "cursor": first["pagination"]["next_cursor"]})
+    assert len(second["data"]) == 2 and second["pagination"] == LAST_PAGE
+    ids = _ids(first) + _ids(second)
+    assert len(ids) == len(set(ids)) and set(ids) == ACTIVE_TEMPLATE_IDS
+
+
+@pytest.mark.tc("EXW-15")
+async def test_list_plan_templates_filters_by_goal_and_difficulty(client: AsyncClient, db: AsyncSession, auth_headers):
+    by_goal = await _plan_templates(client, auth_headers, {"goal_type_id": await _goal_type_id(db, "gain_muscle")})
+    assert set(_ids(by_goal)) == {_plan_id(2), _plan_id(3)}
+    beginner_id = await _catalog_id(db, "difficulty_levels", "beginner")
+    by_difficulty = await _plan_templates(client, auth_headers, {"difficulty_level_id": beginner_id})
+    assert set(_ids(by_difficulty)) == {_plan_id(1), _plan_id(5), _plan_id(6)}
+    unknown_goal = await _plan_templates(client, auth_headers, {"goal_type_id": 9999})
+    assert unknown_goal == {"data": [], "pagination": LAST_PAGE}
+
+
+@pytest.mark.tc("EXW-16")
+@pytest.mark.parametrize(
+    ("params", "field"),
+    [
+        ({"limit": 0}, "limit"),
+        ({"limit": 101}, "limit"),
+        ({"cursor": "!!!khong-phai-cursor"}, "cursor"),
+        ({"goal_type_id": "abc"}, "goal_type_id"),
+        ({"difficulty_level_id": 40000}, "difficulty_level_id"),
+    ],
+)
+async def test_list_plan_templates_invalid_query_returns_422(
+    client: AsyncClient, auth_headers, params: dict, field: str
+):
+    res = await client.get(PLAN_TEMPLATES_URL, params=params, headers=await auth_headers("demo"))
+    err = _err(res, 422, "validation_error")
+    assert [detail["field"] for detail in err["details"]] == [field]
+
+
+@pytest.mark.parametrize("payload", [{"created_at": "khong-phai-ngay", "id": _plan_id(1)}, {"id": _plan_id(1)}])
+async def test_list_plan_templates_cursor_with_bad_position_returns_422(
+    client: AsyncClient, auth_headers, payload: dict
+):
+    res = await client.get(
+        PLAN_TEMPLATES_URL, params={"cursor": encode_cursor(payload)}, headers=await auth_headers("demo")
+    )
+    err = _err(res, 422, "validation_error")
+    assert [detail["field"] for detail in err["details"]] == ["cursor"]
+
+
+# --- Đăng nhập & permission của cả 6 endpoint (EXW-18, EXW-19) ---
+MODULE_URLS = [EXERCISES_URL, DUMBBELL_ROW_URL, ALTERNATIVES_URL, MUSCLE_GROUPS_URL, EQUIPMENT_URL, PLAN_TEMPLATES_URL]
+EXERCISE_READ_URLS = {EXERCISES_URL, DUMBBELL_ROW_URL, ALTERNATIVES_URL}
+NEWBIE_ID = uuid.UUID("5eed0000-0000-4000-8000-000000000008")
+
+
+@pytest.mark.tc("EXW-18")
+@pytest.mark.parametrize("url", MODULE_URLS)
+async def test_module_endpoint_without_token_returns_401(client: AsyncClient, url: str):
+    res = await client.get(url)
+    _err(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+
+
+@pytest_asyncio.fixture
+async def newbie_permission_cache() -> AsyncGenerator[tuple[Redis, str], None]:
+    """Key cache quyền `perm:…08`; luôn xoá ở teardown, nếu không newbie bị 403 ở test khác suốt TTL 5 phút."""
+    redis = get_redis()
+    key = permission_service.cache_key(NEWBIE_ID)
+    await redis.delete(key)
+    try:
+        yield redis, key
+    finally:
+        await redis.delete(key)
+
+
+async def _assert_cache_cleared(redis: Redis, key: str) -> None:
+    await redis.delete(key)
+    assert await redis.exists(key) == 0
+
+
+@pytest.mark.tc("EXW-19")
+async def test_module_endpoints_user_without_roles_returns_403(
+    client: AsyncClient, db: AsyncSession, auth_headers, newbie_permission_cache: tuple[Redis, str]
+):
+    redis, key = newbie_permission_cache
+    headers = await auth_headers("newbie")
+    # Mọi persona seed đều có quyền đọc: thu hồi role trong transaction của test (rollback ở teardown của `db`).
+    await db.execute(text("DELETE FROM auth.user_roles WHERE user_id = :user_id"), {"user_id": NEWBIE_ID})
+    for url in MODULE_URLS:
+        _err(await client.get(url, headers=headers), 403, "permission_denied")
+    assert json.loads(await redis.get(key)) == []
+    await _assert_cache_cleared(redis, key)
+
+
+@pytest.mark.tc("EXW-19")
+async def test_module_endpoints_cached_exercise_read_only_allows_exercises(
+    client: AsyncClient, auth_headers, newbie_permission_cache: tuple[Redis, str]
+):
+    redis, key = newbie_permission_cache
+    headers = await auth_headers("newbie")
+    await redis.set(key, json.dumps(["exercise:read"]), ex=300)
+    for url in MODULE_URLS:
+        res = await client.get(url, headers=headers)
+        if url in EXERCISE_READ_URLS:
+            assert res.status_code == 200, (url, res.text)
+        else:
+            _err(res, 403, "permission_denied")
+    await _assert_cache_cleared(redis, key)
+
+
+@pytest.mark.tc("EXW-19")
+@pytest.mark.parametrize("persona", ["editor", "admin"])
+async def test_module_endpoints_editor_and_admin_return_200(client: AsyncClient, auth_headers, persona: str):
+    headers = await auth_headers(persona)
+    for url in MODULE_URLS:
+        res = await client.get(url, headers=headers)
+        assert res.status_code == 200, (url, res.text)

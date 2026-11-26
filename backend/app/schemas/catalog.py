@@ -5,6 +5,7 @@ Ví dụ dùng dữ liệu seed `02_reference.sql`, `03_exercises.sql`, `91_test
 """
 
 import uuid
+from datetime import datetime
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -325,3 +326,38 @@ class EquipmentExerciseSchema(BaseModel):
     slug: str
     exercise_name: str
     difficulty_rank: int
+
+
+# --- Giáo án mẫu ---
+class PlanTemplateQuery(BaseModel):
+    """Query param của `GET /plan-templates`."""
+
+    goal_type_id: int | None = Field(None, ge=1, le=_SMALLINT_MAX, description="Lọc theo loại mục tiêu")
+    difficulty_level_id: int | None = Field(None, ge=1, le=_SMALLINT_MAX, description="Lọc theo độ khó")
+    limit: int = Field(20, ge=1, le=100, description="Số phần tử mỗi trang")
+    cursor: str | None = Field(None, description="Giá trị `pagination.next_cursor` của trang trước")
+
+
+class PlanTemplateSummaryResponse(BaseModel):
+    """Giáo án mẫu đang áp dụng; tên loại mục tiêu tra qua `GET /body/goal-types` (không JOIN schema body)."""
+
+    id: uuid.UUID
+    name: str
+    description: str | None
+    goal_type_id: int | None
+    difficulty: DifficultySchema | None
+    duration_weeks: int | None = Field(description="Số tuần của chu kỳ giáo án")
+    day_count: int = Field(description="Số buổi trong một chu kỳ (số ngày của giáo án)")
+    created_at: datetime
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": "5eed1000-0000-4000-8000-000000000002", "name": "Push / Pull / Legs",
+                "description": "Chia nhóm cơ theo kiểu đẩy – kéo – chân, 3 hoặc 6 buổi/tuần, tập trung tăng cơ.",
+                "goal_type_id": 2,
+                "difficulty": {"id": 2, "code": "intermediate", "name": "Trung cấp", "rank": 2},
+                "duration_weeks": 12, "day_count": 3, "created_at": "2026-11-20T08:00:00Z",
+            }
+        }
+    )

@@ -1,4 +1,4 @@
-"""Endpoint module Catalog/Wiki (chức năng 1): /exercises, /muscle-groups, /equipment.
+"""Endpoint module Catalog/Wiki (chức năng 1): /exercises, /muscle-groups, /equipment, /plan-templates.
 
 Một `router` gộp các router con theo tiền tố của doc 05 §6.3; mỗi router con mang tag Swagger riêng (doc 05 §4).
 """
@@ -20,13 +20,16 @@ from app.schemas.catalog import (
     ExerciseSearchQuery,
     ExerciseSummaryResponse,
     MuscleGroupResponse,
+    PlanTemplateQuery,
+    PlanTemplateSummaryResponse,
 )
-from app.services import catalog_service
+from app.services import catalog_service, plan_template_service
 
 router = APIRouter()
 exercises_router = APIRouter(prefix="/exercises", tags=["Exercises"])
 muscle_groups_router = APIRouter(prefix="/muscle-groups", tags=["Exercises"])
 equipment_router = APIRouter(prefix="/equipment", tags=["Equipment"])
+plan_templates_router = APIRouter(prefix="/plan-templates", tags=["Workouts"])
 
 
 # --- Bài tập ---
@@ -147,7 +150,32 @@ async def list_equipment(
     return await catalog_service.list_equipment(db, query)
 
 
+# --- Giáo án mẫu ---
+@plan_templates_router.get(
+    "",
+    response_model=Page[PlanTemplateSummaryResponse],
+    status_code=200,
+    responses=ERROR_RESPONSES,
+    summary="Danh sách giáo án mẫu đang áp dụng",
+    description=(
+        "Quyền: `plan_template:read`. Chỉ trả giáo án mẫu (không thuộc user nào) đang áp dụng, chưa xoá; "
+        "sắp theo `created_at` giảm dần rồi `id`, phân trang cursor (`limit` 1–100, mặc định 20). "
+        "Lọc tuỳ chọn `goal_type_id`, `difficulty_level_id`; giá trị không tồn tại trả `data=[]`. "
+        "Chỉ trả `goal_type_id`: tên loại mục tiêu tra qua `GET /api/v1/body/goal-types`. "
+        "`day_count` là số buổi trong một chu kỳ. Tham số hoặc cursor sai → 422 `validation_error`."
+    ),
+)
+async def list_plan_templates(
+    query: Annotated[PlanTemplateQuery, Query()],
+    _: CurrentUser = Depends(require_permission("plan_template", "read")),
+    db: AsyncSession = Depends(get_db),
+) -> Page[PlanTemplateSummaryResponse]:
+    """Giáo án mẫu để người dùng chọn trước khi nhân bản thành giáo án cá nhân."""
+    return await plan_template_service.list_plan_templates(db, query)
+
+
 # include_router chép route tại thời điểm gọi, nên phải đặt sau khi router con đã khai báo đủ route.
 router.include_router(muscle_groups_router)
 router.include_router(equipment_router)
 router.include_router(exercises_router)
+router.include_router(plan_templates_router)

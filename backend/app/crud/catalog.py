@@ -1,6 +1,8 @@
 """Truy vấn chỉ đọc schema `catalog` bằng `text()` (module Catalog/Wiki không có model ORM, không commit)."""
 
+import uuid
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import text
@@ -200,4 +202,44 @@ async def list_equipment(
         sql += " AND e.id > :after_id"
         params["after_id"] = after_id
     sql += " ORDER BY e.id LIMIT :limit"
+    return list((await db.execute(text(sql), params)).mappings().all())
+
+
+# --- Giáo án mẫu ---
+@dataclass(frozen=True)
+class PlanTemplateFilter:
+    """Lọc tuỳ chọn giáo án mẫu; `None` = không lọc theo điều kiện đó."""
+
+    goal_type_id: int | None
+    difficulty_level_id: int | None
+
+
+# Điều kiện giáo án mẫu khớp index một phần `ix_workout_plans_templates`. Chỉ trả `goal_type_id`, không JOIN
+# schema `body` (spec exercise-wiki §6 mục 6).
+_PLAN_TEMPLATE_SELECT = """
+SELECT p.id, p.name, p.description, p.goal_type_id, p.duration_weeks, p.created_at,
+       d.id AS difficulty_id, d.code AS difficulty_code, d.name AS difficulty_name, d.rank AS difficulty_rank,
+       (SELECT count(*) FROM training.workout_plan_days pd WHERE pd.plan_id = p.id) AS day_count
+FROM training.workout_plans p
+LEFT JOIN catalog.difficulty_levels d ON d.id = p.difficulty_level_id
+WHERE p.owner_user_id IS NULL AND p.status = 'active' AND p.deleted_at IS NULL
+"""
+
+
+async def list_plan_templates(
+    db: AsyncSession, template_filter: PlanTemplateFilter, *, after: tuple[datetime, uuid.UUID] | None, limit: int
+) -> list[Any]:
+    """Giáo án mẫu đang áp dụng, keyset `(created_at DESC, id DESC)` sau vị trí `after`."""
+    sql = _PLAN_TEMPLATE_SELECT
+    params: dict[str, Any] = {"limit": limit}
+    if template_filter.goal_type_id is not None:
+        sql += " AND p.goal_type_id = :goal_type_id"
+        params["goal_type_id"] = template_filter.goal_type_id
+    if template_filter.difficulty_level_id is not None:
+        sql += " AND p.difficulty_level_id = :difficulty_level_id"
+        params["difficulty_level_id"] = template_filter.difficulty_level_id
+    if after is not None:
+        sql += " AND (p.created_at, p.id) < (:after_created_at, :after_id)"
+        params["after_created_at"], params["after_id"] = after
+    sql += " ORDER BY p.created_at DESC, p.id DESC LIMIT :limit"
     return list((await db.execute(text(sql), params)).mappings().all())
