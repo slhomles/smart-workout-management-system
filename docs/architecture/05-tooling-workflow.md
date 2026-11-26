@@ -357,7 +357,7 @@ Model SQLAlchemy PHẢI: khai báo đúng schema (`__table_args__ = {"schema": "
 | Gallery & Media | `/media`, `/progress-photos`, `/photo-comparisons` | 4 | `media` | `@TODO` |
 | AI (API cầu nối) | `/ai/pose-analyses`, `/ai/video-jobs`, `/ai/equipment-scans` | 5, 6, 7 | `ai` | `@TODO` |
 | Reports | `/reports` | 3 (xuất báo cáo tuần), `analytics` | `analytics` | `@TODO` |
-| Health & hạ tầng | `/health` | — | — | Core owner |
+| Health & hạ tầng | `/health` (tức `/api/v1/health`) | — | — | Core owner |
 
 Quy tắc:
 - Hai module cần dữ liệu của nhau thì gọi qua **service** của module kia (import service), KHÔNG import crud/model chéo module để sửa dữ liệu.
@@ -447,7 +447,7 @@ Các handler đăng ký trong `main.py`:
 
 ### 7.6. Health check
 
-`GET /health` PHẢI kiểm tra thật (không trả hard-code): PostgreSQL (`SELECT 1`), Redis (`PING`), AI service (`GET {AI_SERVICE_URL}/health`, thất bại chỉ đánh dấu `degraded`). Trả `200` khi DB + Redis ổn; `503 SERVICE_UNAVAILABLE` khi DB/Redis hỏng. `docker-compose.yml` PHẢI thêm `healthcheck` cho `postgres`/`redis` và `depends_on: condition: service_healthy` cho `backend`.
+`GET /api/v1/health` (có tiền tố `/api/v1` theo `Claude_api_respone.md` §2; không có đường dẫn `/health` ở root) PHẢI kiểm tra thật (không trả hard-code): PostgreSQL (`SELECT 1`), Redis (`PING`), AI service (`GET {AI_SERVICE_URL}/health`, thất bại chỉ đánh dấu `degraded`). Trả `200` với `{database, redis, ai_service, checked_at}` khi DB + Redis ổn; `503` `service_unavailable` (`details` liệt kê thành phần hỏng) khi DB/Redis hỏng. `docker-compose.yml` PHẢI thêm `healthcheck` cho `postgres`/`redis` và `depends_on: condition: service_healthy` cho `backend`.
 
 ---
 
