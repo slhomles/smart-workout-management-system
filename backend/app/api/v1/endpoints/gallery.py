@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import CurrentUser, require_permission
-from app.schemas.base import ERROR_RESPONSES, ErrorResponse
-from app.schemas.gallery import ProgressPhotoResponse, UploadProgressPhotoForm
+from app.schemas.base import ERROR_RESPONSES, ErrorResponse, Page
+from app.schemas.gallery import ListProgressPhotosQuery, ProgressPhotoResponse, UploadProgressPhotoForm
 from app.services import gallery_service
 
 router = APIRouter()
@@ -45,6 +45,24 @@ async def upload_progress_photo(
     result = await gallery_service.upload_photo(db, current.id, file, form)
     response.headers["Location"] = f"/api/v1/progress-photos/{result.id}"
     return result
+
+
+@progress_router.get(
+    "",
+    response_model=Page[ProgressPhotoResponse],
+    responses=ERROR_RESPONSES,
+    summary="Lưới ảnh tiến độ của tôi, mới chụp trước",
+    description=(
+        PERM + " Chỉ ảnh chưa xoá, sắp `taken_at` giảm dần; phân trang cursor (`limit` 1–100, mặc định 20). "
+        "Lọc tuỳ chọn `angle` (front / side / back). Tham số sai → 422 `validation_error`."
+    ),
+)
+async def list_progress_photos(
+    query: ListProgressPhotosQuery = Depends(),
+    current: CurrentUser = Depends(OWN),
+    db: AsyncSession = Depends(get_db),
+) -> Page[ProgressPhotoResponse]:
+    return await gallery_service.list_photos(db, current.id, query)
 
 
 # Gộp sau khi khai báo route: include_router sao chép các route đang có tại thời điểm gọi.

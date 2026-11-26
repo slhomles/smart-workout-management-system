@@ -17,6 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.schemas.base import encode_cursor
 from app.services import gallery_service, storage_service
 from app.utils import photo_watermark
 
@@ -31,9 +32,15 @@ KEYS_PHOTO = {
 UUID_KEYS = ("id", "original_media_id", "watermarked_media_id", "thumbnail_media_id", "measurement_id")
 TIME_KEYS = ("taken_at", "measured_at", "created_at")
 MEDIA_KEYS = ("original_media_id", "watermarked_media_id", "thumbnail_media_id")
+POWER_ID = "5eed0000-0000-4000-8000-000000000004"
 SEED_KEYS = {
     "demo-w00": "users/demo/progress/w00-front.jpg",
+    "demo-w06": "users/demo/progress/w06-front.jpg",
+    "demo-side": "users/demo/progress/w06-side.jpg",
+    "demo-w03-deleted": "users/demo/progress/w03-front.jpg",
     "dung-queued": "users/dung/progress/w08-front.jpg",
+    "dung-failed": "users/dung/progress/w04-back.heic",
+    "dung-w00": "users/dung/progress/w00-front.jpg",
 }
 
 
@@ -395,3 +402,131 @@ async def test_process_photo_already_completed_changes_nothing(db):
     after = await _photo_row(db, photo_id)
     assert before["status"] == "completed"
     assert after == before
+
+
+# --- GAL-06..08: GET /progress-photos ---
+async def _list(client: AsyncClient, headers: dict, **params) -> dict:
+    res = await client.get(URL, headers=headers, params=params)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert set(body) == {"data", "pagination"} and set(body["pagination"]) == {"next_cursor", "has_more"}
+    for photo in body["data"]:
+        _assert_photo_shape(photo)
+    return body
+
+
+async def _seed_ids(db: AsyncSession, *aliases: str) -> list[str]:
+    return [str(await _seed_photo_id(db, alias)) for alias in aliases]
+
+
+async def _assert_taken_dates_match_view(db: AsyncSession, photos: list[dict]) -> None:
+    rows = (await db.execute(
+        text("SELECT photo_id::text AS id, taken_date FROM media.v_progress_photo_cards WHERE photo_id = ANY(:ids)"),
+        {"ids": [uuid.UUID(p["id"]) for p in photos]},
+    )).mappings().all()
+    expected = {r["id"]: r["taken_date"].isoformat() for r in rows}
+    assert {p["id"]: p["taken_date"] for p in photos} == expected
+
+
+def _pick(photo: dict, *keys: str) -> dict:
+    return {k: photo[k] for k in keys}
+
+
+@pytest.mark.tc("GAL-06")
+async def test_list_photos_demo_returns_live_photos_newest_first(client, db, auth_headers):
+    body = await _list(client, await auth_headers("demo"))
+    assert body["pagination"] == {"next_cursor": None, "has_more": False}
+    photos = body["data"]
+    side, w06, w00, deleted = await _seed_ids(db, "demo-side", "demo-w06", "demo-w00", "demo-w03-deleted")
+    assert [p["id"] for p in photos] == [side, w06, w00]
+    assert deleted not in [p["id"] for p in photos]
+    assert _pick(photos[0], "angle", "capture_source", "processing_status", "watermarked_media_id",
+                 "thumbnail_media_id", "weight_kg", "body_fat_pct", "note") == {
+        "angle": "side", "capture_source": "library", "processing_status": "processing",
+        "watermarked_media_id": None, "thumbnail_media_id": None, "weight_kg": 70.0, "body_fat_pct": 18.4,
+        "note": None,
+    }
+    assert _pick(photos[2], "processing_status", "weight_kg", "body_fat_pct") == {
+        "processing_status": "completed", "weight_kg": 72.4, "body_fat_pct": 20.0,
+    }
+    assert _is_uuid(photos[2]["watermarked_media_id"]) and _is_uuid(photos[2]["thumbnail_media_id"])
+    await _assert_taken_dates_match_view(db, photos)
+
+
+@pytest.mark.tc("GAL-06")
+async def test_list_photos_dung_returns_all_statuses_with_tokyo_dates(client, db, auth_headers):
+    body = await _list(client, await auth_headers("dung"))
+    photos = body["data"]
+    assert [p["id"] for p in photos] == await _seed_ids(db, "dung-queued", "dung-failed", "dung-w00")
+    assert [p["processing_status"] for p in photos] == ["queued", "failed", "completed"]
+    assert [p["weight_kg"] for p in photos] == [54.0, 53.0, 52.0]
+    assert all("processing_error" not in p for p in photos)
+    await _assert_taken_dates_match_view(db, photos)
+
+
+async def _collect_pages(client: AsyncClient, headers: dict, limit: int) -> list[dict]:
+    pages, cursor = [], None
+    while True:
+        params = {"limit": limit} | ({"cursor": cursor} if cursor else {})
+        body = await _list(client, headers, **params)
+        pages.append(body)
+        cursor = body["pagination"]["next_cursor"]
+        if not body["pagination"]["has_more"]:
+            return pages
+        assert cursor is not None and len(pages) < 10
+
+
+async def _power_live_photo_count(db: AsyncSession) -> int:
+    return await _scalar(
+        db, "SELECT count(*) FROM media.progress_photos WHERE user_id = :u AND deleted_at IS NULL",
+        u=uuid.UUID(POWER_ID),
+    )
+
+
+def _assert_newest_first(photos: list[dict]) -> None:
+    taken = [_iso(p["taken_at"]) for p in photos]
+    assert taken == sorted(taken, reverse=True)
+
+
+@pytest.mark.tc("GAL-07")
+async def test_list_photos_power_with_limit_follows_cursor_to_end(client, db, auth_headers):
+    pages = await _collect_pages(client, await auth_headers("power"), 4)
+    shape = [(len(p["data"]), p["pagination"]["has_more"]) for p in pages]
+    assert shape == [(4, True), (4, True), (3, False)]
+    assert pages[-1]["pagination"]["next_cursor"] is None
+    photos = [photo for page in pages for photo in page["data"]]
+    ids = {p["id"] for p in photos}
+    assert len(ids) == len(photos) == await _power_live_photo_count(db) == 11
+    _assert_newest_first(photos)
+
+
+@pytest.mark.tc("GAL-07")
+@pytest.mark.parametrize(("angle", "expected_count"), [("side", 4), ("front", 7)])
+async def test_list_photos_power_filtered_by_angle_returns_only_that_angle(client, auth_headers, angle, expected_count):
+    body = await _list(client, await auth_headers("power"), angle=angle, limit=100)
+    assert len(body["data"]) == expected_count
+    assert {p["angle"] for p in body["data"]} == {angle}
+
+
+INVALID_LIST_PARAMS = [
+    ("limit_zero", {"limit": 0}, "limit"),
+    ("limit_too_large", {"limit": 101}, "limit"),
+    ("garbage_cursor", {"cursor": "!!!khong-phai-cursor"}, "cursor"),
+    ("cursor_missing_keys", {"cursor": encode_cursor({"foo": 1})}, "cursor"),
+    ("unknown_angle", {"angle": "top"}, "angle"),
+]
+
+
+@pytest.mark.tc("GAL-08")
+@pytest.mark.parametrize("case", INVALID_LIST_PARAMS, ids=[c[0] for c in INVALID_LIST_PARAMS])
+async def test_list_photos_invalid_params_returns_422(client, auth_headers, case):
+    _, params, expected_field = case
+    res = await client.get(URL, headers=await auth_headers("demo"), params=params)
+    error = _err(res, 422, "validation_error")
+    assert [d["field"] for d in error["details"]] == [expected_field]
+
+
+@pytest.mark.tc("GAL-08")
+async def test_list_photos_user_without_photos_returns_empty_page(client, auth_headers):
+    body = await _list(client, await auth_headers("newbie"))
+    assert body == {"data": [], "pagination": {"next_cursor": None, "has_more": False}}

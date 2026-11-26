@@ -22,8 +22,8 @@ from app.crud import body as body_crud
 from app.crud import gallery as crud
 from app.models.enums import JobStatus, MediaStatus
 from app.models.media import MediaFile, ProgressPhoto
-from app.schemas.base import ErrorDetail
-from app.schemas.gallery import ProgressPhotoResponse, UploadProgressPhotoForm
+from app.schemas.base import ErrorDetail, Page, build_page, decode_keyset_cursor
+from app.schemas.gallery import ListProgressPhotosQuery, ProgressPhotoResponse, UploadProgressPhotoForm
 from app.services import storage_service
 from app.utils import photo_watermark
 
@@ -231,3 +231,18 @@ async def upload_photo(
     await db.commit()
     card = await crud.get_photo_card(db, user_id, photo_id)
     return ProgressPhotoResponse.model_validate(card)
+
+
+async def list_photos(
+    db: AsyncSession, user_id: uuid.UUID, query: ListProgressPhotosQuery
+) -> Page[ProgressPhotoResponse]:
+    """Lưới ảnh chưa xoá mềm của user, mới chụp trước (keyset `taken_at DESC, id DESC`)."""
+    # Lấy thêm 1 dòng để biết còn trang sau mà không COUNT(*) (Claude_api_respone §5).
+    window = crud.KeysetWindow(after=decode_keyset_cursor(query.cursor, "taken_at"), limit=query.limit + 1)
+    rows = await crud.list_photo_cards(db, user_id, query.angle, window)
+    return build_page(
+        rows,
+        query.limit,
+        to_item=ProgressPhotoResponse.model_validate,
+        cursor_of=lambda r: {"taken_at": r["taken_at"].isoformat(), "id": str(r["id"])},
+    )

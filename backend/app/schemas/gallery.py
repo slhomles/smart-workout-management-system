@@ -3,7 +3,7 @@
 import uuid
 from datetime import date, datetime, timezone
 
-from fastapi import Form
+from fastapi import Form, Query
 from pydantic import AwareDatetime, BaseModel, ConfigDict, field_validator
 
 from app.models.enums import CaptureSource, JobStatus, PhotoAngle
@@ -32,6 +32,23 @@ class UploadProgressPhotoForm:
         self.taken_at = taken_at
         # Chuỗi chỉ toàn khoảng trắng không mang thông tin → lưu null thay vì chuỗi rỗng.
         self.note = (note.strip() or None) if note is not None else None
+
+
+class ListProgressPhotosQuery:
+    """Query của `GET /progress-photos` (gom lại để service ≤ 4 tham số, coding-standards §1).
+
+    Dùng làm dependency (`Depends()`): lỗi validation báo đúng tên field (`angle`, `limit`, `cursor`).
+    """
+
+    def __init__(
+        self,
+        angle: PhotoAngle | None = Query(None, description="Lọc theo góc chụp: front / side / back"),
+        limit: int = Query(20, ge=1, le=100, description="Số ảnh mỗi trang"),
+        cursor: str | None = Query(None, description="`next_cursor` của trang trước"),
+    ) -> None:
+        self.angle = angle
+        self.limit = limit
+        self.cursor = cursor
 
 
 class ProgressPhotoResponse(BaseModel):
