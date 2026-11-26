@@ -7,6 +7,7 @@ Lệnh (gửi trong group cho bot chung, hoặc nhắn riêng bot của bạn):
   /help                     hướng dẫn
   /modules                  danh sách module, owner, trạng thái
   /run <module> [--respec]  soạn spec (nếu chưa có hoặc --respec) rồi chạy flow; mỗi lúc chạy một flow
+  /run <module> --force     chạy lại cả module đã đánh dấu xong (status: done trong modules.json)
   /status                   flow đang chạy, hàng đợi, kết quả gần nhất
   /stop <module>            dừng flow đang chạy hoặc bỏ khỏi hàng đợi
   /answer <module> <nội dung>  trả lời câu hỏi của agent (flow đang bị chặn sẽ chạy tiếp)
@@ -68,6 +69,11 @@ def unregistered_codes(tcs: list[dict]) -> list[str]:
 
 def load_modules() -> dict:
     return json.loads(MODULES_FILE.read_text(encoding="utf-8"))
+
+
+def is_done(entry: dict) -> bool:
+    """Module đã hoàn thành theo modules.json (kể cả làm tay ngoài flow)."""
+    return entry.get("status") == "done"
 
 
 def save_modules(data: dict) -> None:
@@ -143,6 +149,8 @@ class Bot:
             if any(j["module"] == key for j in self.state["queue"]):
                 return "⏳ đang xếp hàng"
             last = self.state["last"].get(key)
+        if is_done(load_modules()["modules"].get(key, {})):
+            return "✅ đã xong"
         return EXIT_TEXT.get(last["code"], f"exit {last['code']}") if last else "chưa chạy"
 
     # ------------------------------------------------------------------ nhận update
@@ -231,6 +239,11 @@ class Bot:
                        f"<code>/owner {key} &lt;thành viên&gt;</code> (có: {', '.join(self.cfg['members'])}).")
             return
         respec = len(args) > 1 and "--respec" in args[1]
+        if is_done(entry) and "--force" not in args[1:]:
+            self.reply(token, chat_id, f"✅ <code>{key}</code> đã xong: {esc(entry.get('done_note', ''))}\n"
+                       f"Không chạy lại để tránh làm trùng và tốn hạn mức. Muốn chạy lại thật: "
+                       f"<code>/run {key} --force</code>.")
+            return
         with self.lock:
             cur = self.state.get("current")
             if (cur and cur["module"] == key) or any(j["module"] == key for j in self.state["queue"]):
@@ -241,7 +254,8 @@ class Bot:
             self.save()
         warn = ""
         core_last = self.state["last"].get("core")
-        if key != "core" and not (core_last and core_last["code"] == 0):
+        core_done = is_done(load_modules()["modules"].get("core", {})) or (core_last and core_last["code"] == 0)
+        if key != "core" and not core_done:
             warn = "\n⚠️ Module <code>core</code> chưa xong; flow có thể bị chặn vì thiếu phần nền."
         self.announce(entry["owner"], f"📥 {esc(self.name(who))} yêu cầu chạy <b>[{key}]</b> "
                       f"({esc(entry['title'])}). Vị trí hàng đợi: {pos}.{warn}")

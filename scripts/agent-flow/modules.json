@@ -1,21 +1,30 @@
 {
-  "_doc": "Danh mục module cho bot Telegram (/run <key>). feature = số mục trong 'Mô tả dự án.docx'; routes/db_schemas theo doc 05 §6.3; owner = key thành viên trong team.json (sửa bằng /owner <key> <member>).",
+  "_doc": "Danh mục module cho bot Telegram (/run <key>). feature = số mục trong 'Mô tả dự án.docx'; routes/db_schemas theo doc 05 §6.3; owner = key thành viên trong team.json (sửa bằng /owner <key> <member>). \"status\": \"done\" = module đã hoàn thành (kể cả làm tay ngoài flow): /run từ chối chạy lại trừ khi thêm --force; \"done_note\" ghi làm ở đâu và việc còn lại.",
   "modules": {
     "core": {
       "title": "Core / Shared: nền tảng backend",
       "feature": null,
       "doc05": "§7 (toàn bộ), §12; Claude_api_respone.md §8",
-      "routes": ["/health"],
+      "routes": [
+        "/health"
+      ],
       "db_schemas": [],
-      "owner": null,
-      "notes": "Làm TRƯỚC mọi module. allow_core_changes: yes. Gồm config, database, redis_client, exceptions, middleware logging, schemas/base.py (Page, ErrorResponse, cursor), models/enums.py, security.py, dependencies.py, main.py + router, Alembic baseline, tests/conftest.py (client, db rollback, auth_headers)."
+      "owner": "phuc",
+      "notes": "Làm TRƯỚC mọi module. allow_core_changes: yes. Gồm config, database, redis_client, exceptions, middleware logging, schemas/base.py (Page, ErrorResponse, cursor), models/enums.py, security.py, dependencies.py, main.py + router, Alembic baseline, tests/conftest.py (client, db rollback, auth_headers).",
+      "status": "done",
+      "done_note": "Làm tay ngoài flow, đã merge vào main qua PR #2 và #3. Còn lại việc vận hành: Core owner chạy `alembic stamp head` trên DB dùng chung; healthcheck docker-compose."
     },
     "auth-users": {
       "title": "Auth & Users",
       "feature": null,
       "doc05": "§6.3 dòng Auth & Users",
-      "routes": ["/auth", "/users"],
-      "db_schemas": ["auth"],
+      "routes": [
+        "/auth",
+        "/users"
+      ],
+      "db_schemas": [
+        "auth"
+      ],
       "owner": null,
       "notes": "Luồng token/RBAC theo docs/architecture/04-auth-strategy.md."
     },
@@ -23,8 +32,16 @@
       "title": "Exercise Wiki (Thư viện bài tập)",
       "feature": 1,
       "doc05": "§6.3 dòng Catalog / Wiki",
-      "routes": ["/exercises", "/equipment", "/muscle-groups", "/plan-templates"],
-      "db_schemas": ["catalog", "training"],
+      "routes": [
+        "/exercises",
+        "/equipment",
+        "/muscle-groups",
+        "/plan-templates"
+      ],
+      "db_schemas": [
+        "catalog",
+        "training"
+      ],
       "owner": "member2",
       "notes": "Tra cứu, lọc đa điều kiện, chi tiết kỹ thuật, bài thay thế."
     },
@@ -32,8 +49,15 @@
       "title": "Workout Routine (Kiểm soát nhóm cơ để nghỉ)",
       "feature": 2,
       "doc05": "§6.3 dòng Training & Recovery",
-      "routes": ["/workout-plans", "/scheduled-workouts", "/workout-sessions", "/recovery"],
-      "db_schemas": ["training"],
+      "routes": [
+        "/workout-plans",
+        "/scheduled-workouts",
+        "/workout-sessions",
+        "/recovery"
+      ],
+      "db_schemas": [
+        "training"
+      ],
       "owner": null,
       "notes": "Lịch tập, ghi buổi tập, volume, trạng thái phục hồi cơ."
     },
@@ -41,8 +65,14 @@
       "title": "Dashboard thống kê kế hoạch tập, Body & Weight Tracking",
       "feature": 3,
       "doc05": "§6.3 dòng Body & Dashboard",
-      "routes": ["/body", "/dashboard"],
-      "db_schemas": ["body", "training"],
+      "routes": [
+        "/body",
+        "/dashboard"
+      ],
+      "db_schemas": [
+        "body",
+        "training"
+      ],
       "owner": "member3",
       "notes": "Cân nặng, % mỡ, số đo vòng, BMI/BMR/TDEE (dùng view SQL), tiến độ giáo án. KHÔNG có dinh dưỡng."
     },
@@ -50,8 +80,14 @@
       "title": "Progress Gallery: Nhật ký ảnh",
       "feature": 4,
       "doc05": "§6.3 dòng Gallery & Media",
-      "routes": ["/media", "/progress-photos", "/photo-comparisons"],
-      "db_schemas": ["media"],
+      "routes": [
+        "/media",
+        "/progress-photos",
+        "/photo-comparisons"
+      ],
+      "db_schemas": [
+        "media"
+      ],
       "owner": "phuc",
       "notes": "Lưu trữ file qua S3 (mock/adapter khi test)."
     },
@@ -59,8 +95,12 @@
       "title": "Chỉnh tư thế luyện tập (Posture Correction)",
       "feature": 5,
       "doc05": "§6.3 dòng AI (API cầu nối)",
-      "routes": ["/ai/pose-analyses"],
-      "db_schemas": ["ai"],
+      "routes": [
+        "/ai/pose-analyses"
+      ],
+      "db_schemas": [
+        "ai"
+      ],
       "owner": "phuc",
       "notes": "Chỉ phần backend API cầu nối + lưu kết quả; mô hình AI trong ai-services ngoài phạm vi (gọi qua httpx, mock khi test)."
     },
@@ -68,8 +108,13 @@
       "title": "Đếm Set/Rep và Đo Tempo",
       "feature": 6,
       "doc05": "§6.3 dòng AI (API cầu nối); ghi set/rep qua service của Training",
-      "routes": ["/ai/video-jobs"],
-      "db_schemas": ["ai", "training"],
+      "routes": [
+        "/ai/video-jobs"
+      ],
+      "db_schemas": [
+        "ai",
+        "training"
+      ],
       "owner": "member3",
       "notes": "Chỉ backend: tạo job phân tích video, nhận kết quả, ghi set/rep qua service của module Training (không import crud chéo)."
     },
@@ -77,8 +122,13 @@
       "title": "Nhận diện thiết bị phòng tập và gợi ý bài tập",
       "feature": 7,
       "doc05": "§6.3 dòng AI (API cầu nối) + Catalog",
-      "routes": ["/ai/equipment-scans"],
-      "db_schemas": ["ai", "catalog"],
+      "routes": [
+        "/ai/equipment-scans"
+      ],
+      "db_schemas": [
+        "ai",
+        "catalog"
+      ],
       "owner": "member2",
       "notes": "Chỉ backend: nhận ảnh, gọi AI service (mock khi test), gợi ý bài tập qua service của Catalog."
     },
@@ -86,8 +136,12 @@
       "title": "Reports: xuất báo cáo tuần",
       "feature": 3,
       "doc05": "§6.3 dòng Reports",
-      "routes": ["/reports"],
-      "db_schemas": ["analytics"],
+      "routes": [
+        "/reports"
+      ],
+      "db_schemas": [
+        "analytics"
+      ],
       "owner": null,
       "notes": "Báo cáo tổng hợp từ schema analytics (materialized view)."
     }
