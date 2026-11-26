@@ -666,7 +666,21 @@ class Flow:
             log("CẢNH BÁO: spec bị sửa, đã khôi phục")
 
     # ----------------------------------------------------------- gate + brief
+    def gate_cache_key(self) -> str | None:
+        """Khoá kết quả cổng; None (không dùng lại) khi worktree còn thay đổi chưa commit."""
+        if git(self.wt, "status", "--porcelain", "-uall", check=False).strip():
+            return None
+        parts = [git(self.wt, "rev-parse", "HEAD"), self.run_info.get("spec_sha", ""), self.base_sha,
+                 ",".join(self.gates), str(self.python), sha256(HERE / "check_done.py")]
+        return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
+
     def run_gate(self) -> dict:
+        # Bộ test chạy trên DB ở VM mất 10+ phút; HEAD không đổi thì kết quả cổng cũng không đổi.
+        key = self.gate_cache_key()
+        cached = read_json(self.gate_file, {})
+        if key and cached.get("cache_key") == key and "gates" in cached:
+            log(f"cổng: HEAD {str(cached.get('head', ''))[:10]} không đổi, dùng lại kết quả lần trước")
+            return cached
         try:
             report = check_done.evaluate(
                 self.wt, self.wt / self.spec_rel, self.base_sha, self.gates, str(self.python)
@@ -674,6 +688,8 @@ class Flow:
         except Exception as exc:  # noqa: BLE001 - gate lỗi không được làm sập runner
             report = {"ok": False, "head": git(self.wt, "rev-parse", "HEAD"),
                       "gates": {"runner": {"ok": False, "summary": f"gate lỗi: {exc}"}}}
+            key = None  # lỗi của chính cổng thì lần sau phải chạy lại
+        report["cache_key"] = key
         write_json(self.gate_file, report)
         return report
 
