@@ -17,6 +17,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 READ_USERS = require_permission("user", "read")
 ASSIGN_ROLES = require_permission("role", "assign")
+LOCK_USERS = require_permission("user", "lock")
 
 USER_READ_RESPONSES: dict[int | str, dict[str, Any]] = {
     **ERROR_RESPONSES,
@@ -69,6 +70,24 @@ REPLACE_ROLES_RESPONSES: dict[int | str, dict[str, Any]] = {
             "field lạ, `user_id` không phải UUID)"
         ),
     },
+}
+
+LOCK_USER_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **ERROR_RESPONSES,
+    401: USER_READ_RESPONSES[401],
+    403: {
+        "model": ErrorResponse,
+        "description": "permission_denied (thiếu quyền `user:lock`)",
+    },
+    404: GET_USER_RESPONSES[404],
+    409: {
+        "model": ErrorResponse,
+        "description": (
+            "conflict (admin tự khoá chính mình; user đang `disabled` "
+            "hoặc `pending_verification`)"
+        ),
+    },
+    422: GET_USER_RESPONSES[422],
 }
 
 
@@ -139,3 +158,46 @@ async def replace_user_roles(
     return await user_service.replace_roles(
         db, user_id, body.roles, actor_id=current.id
     )
+
+
+@router.post(
+    "/{user_id}/lock",
+    response_model=UserAdminOut,
+    status_code=200,
+    responses=LOCK_USER_RESPONSES,
+    summary="Khoá tài khoản người dùng (quản trị)",
+    description=(
+        "Quyền: permission **`user:lock`**. Đặt `status='locked'` (gọi lại trên user đã khoá vẫn `200`) "
+        "và thu hồi mọi refresh token chưa thu hồi của user (`revoke_reason='admin_revoked'`); "
+        "access token đã cấp bị từ chối ngay. Chỉ áp dụng cho user `active`/`locked`: "
+        "user `disabled`/`pending_verification` hoặc admin tự khoá chính mình → 409 `conflict`. "
+        "Trả user sau cập nhật."
+    ),
+)
+async def lock_user(
+    user_id: uuid.UUID,
+    current: CurrentUser = Depends(LOCK_USERS),
+    db: AsyncSession = Depends(get_db),
+) -> UserAdminOut:
+    return await user_service.lock_user(db, user_id, actor_id=current.id)
+
+
+@router.post(
+    "/{user_id}/unlock",
+    response_model=UserAdminOut,
+    status_code=200,
+    responses=LOCK_USER_RESPONSES,
+    summary="Mở khoá tài khoản người dùng (quản trị)",
+    description=(
+        "Quyền: permission **`user:lock`**. Đặt `status='active'` và `locked_until=NULL` "
+        "(gỡ cả khoá tạm do đăng nhập sai nhiều lần; gọi trên user đã `active` vẫn `200`). "
+        "User `disabled`/`pending_verification` → 409 `conflict`, không đổi gì. "
+        "Trả user sau cập nhật."
+    ),
+)
+async def unlock_user(
+    user_id: uuid.UUID,
+    current: CurrentUser = Depends(LOCK_USERS),
+    db: AsyncSession = Depends(get_db),
+) -> UserAdminOut:
+    return await user_service.unlock_user(db, user_id, actor_id=current.id)

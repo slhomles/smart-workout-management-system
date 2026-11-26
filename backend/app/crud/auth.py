@@ -128,6 +128,16 @@ async def revoke_user_tokens(db: AsyncSession, user_id: uuid.UUID, reason: Token
     return result.rowcount
 
 
+async def set_user_status(
+    db: AsyncSession, user: User, status: UserStatus, *, clear_locked_until: bool = False
+) -> None:
+    """Gán `status` (và `locked_until = NULL` nếu `clear_locked_until`) cho user đã nạp rồi flush."""
+    user.status = status
+    if clear_locked_until:
+        user.locked_until = None
+    await db.flush()
+
+
 def _user_with_profile_query():
     # LEFT JOIN: user thiếu `user_profiles` vẫn được trả về, phần hồ sơ là None.
     return (

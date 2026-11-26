@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ConflictError, NotFoundError
 from app.crud import auth as crud
 from app.models.auth import User, UserProfile
-from app.models.enums import RoleCode, UserStatus
+from app.models.enums import RoleCode, TokenRevokeReason, UserStatus
 from app.schemas.base import Page, build_page, decode_keyset_cursor
 from app.schemas.user import UserAdminOut
 from app.services import permission_service
@@ -17,6 +17,8 @@ from app.services import permission_service
 logger = logging.getLogger("app.users")
 
 _ADMIN = RoleCode.ADMIN.value
+# Trạng thái được phép khoá/mở khoá (spec auth-users quyết định 11).
+_LOCK_MANAGEABLE = frozenset({UserStatus.ACTIVE, UserStatus.LOCKED})
 
 
 def _to_admin_out(
@@ -166,5 +168,56 @@ async def replace_roles(
         actor_id,
         user_id,
         ",".join(sorted(wanted)),
+    )
+    return result
+
+
+def _ensure_lock_manageable(user: User) -> None:
+    # disabled/pending_verification không được khoá/mở khoá để tránh vô tình kích hoạt
+    # một tài khoản bị vô hiệu hoá hay chưa xác thực (spec auth-users quyết định 11).
+    if user.status not in _LOCK_MANAGEABLE:
+        raise ConflictError(
+            "conflict",
+            "Chỉ khoá hoặc mở khoá được tài khoản đang hoạt động hoặc đang bị khoá",
+        )
+
+
+async def lock_user(
+    db: AsyncSession, user_id: uuid.UUID, *, actor_id: uuid.UUID
+) -> UserAdminOut:
+    """
+    Khoá tài khoản (doc 04 §4.10; spec auth-users quyết định 11): `status='locked'` (idempotent)
+    và thu hồi mọi refresh token chưa thu hồi (`admin_revoked`). User không có/đã xoá → 404
+    `user_not_found`; tự khoá chính mình hoặc user `disabled`/`pending_verification` → 409 `conflict`.
+    """
+    user, profile = await _get_user_row(db, user_id)
+    if user_id == actor_id:
+        raise ConflictError("conflict", "Không thể tự khoá tài khoản của chính mình")
+    _ensure_lock_manageable(user)
+    await crud.set_user_status(db, user, UserStatus.LOCKED)
+    await crud.revoke_user_tokens(db, user_id, TokenRevokeReason.ADMIN_REVOKED)
+    result = await _admin_out(db, user, profile)
+    await db.commit()
+    logger.info(
+        "admin_action action=lock actor_id=%s target_id=%s", actor_id, user_id
+    )
+    return result
+
+
+async def unlock_user(
+    db: AsyncSession, user_id: uuid.UUID, *, actor_id: uuid.UUID
+) -> UserAdminOut:
+    """
+    Mở khoá tài khoản (doc 04 §4.10; spec auth-users quyết định 11): `status='active'`,
+    `locked_until=NULL` (idempotent với user đang `active`). User không có/đã xoá → 404
+    `user_not_found`; user `disabled`/`pending_verification` → 409 `conflict`.
+    """
+    user, profile = await _get_user_row(db, user_id)
+    _ensure_lock_manageable(user)
+    await crud.set_user_status(db, user, UserStatus.ACTIVE, clear_locked_until=True)
+    result = await _admin_out(db, user, profile)
+    await db.commit()
+    logger.info(
+        "admin_action action=unlock actor_id=%s target_id=%s", actor_id, user_id
     )
     return result

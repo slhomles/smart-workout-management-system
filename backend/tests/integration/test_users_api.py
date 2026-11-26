@@ -1,7 +1,8 @@
 """Integration test /users (quản trị người dùng) trên PostgreSQL thật (persona seed, docs/database/test-dataset.md)."""
 
+import hashlib
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Collection
 from datetime import datetime
 
 import pytest
@@ -12,10 +13,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis_client import get_redis
-from app.models.auth import Role, User, UserRole
-from app.models.enums import UserStatus
+from app.models.auth import RefreshToken, Role, User, UserDevice, UserRole
+from app.models.enums import TokenRevokeReason, UserStatus
 from app.services.permission_service import cache_key
-from tests.conftest import persona_id
+from tests.conftest import SEED_PASSWORD, persona_id
 
 USERS = "/api/v1/users"
 ADMIN_OUT_KEYS = {
@@ -455,3 +456,236 @@ async def test_replace_roles_without_token_returns_token_invalid(client: AsyncCl
     res = await client.put(_roles_url(persona_id(3)), json=EDITOR_AND_USER)
     _assert_error(res, 401, "token_invalid")
     assert res.headers["WWW-Authenticate"] == "Bearer"
+
+
+# --- POST /users/{user_id}/lock, /users/{user_id}/unlock ---
+LOGIN = "/api/v1/auth/login"
+REFRESH = "/api/v1/auth/refresh"
+ME = "/api/v1/auth/me"
+DEMO_REFRESH = "seed-refresh-demo-2"
+UserState = tuple[UserStatus, datetime | None]
+
+
+def _action_url(user_id: str, action: str) -> str:
+    return f"{USERS}/{user_id}/{action}"
+
+
+async def _login(client: AsyncClient, email: str):
+    return await client.post(
+        LOGIN,
+        json={"email": email, "password": SEED_PASSWORD, "device": {"platform": "web"}},
+    )
+
+
+async def _user_state(db: AsyncSession, user_id: str) -> UserState:
+    """(status, locked_until) đọc thẳng cột từ `auth.users`, không qua identity map."""
+    row = (
+        await db.execute(
+            select(User.status, User.locked_until).where(User.id == uuid.UUID(user_id))
+        )
+    ).one()
+    return row.status, row.locked_until
+
+
+async def _unrevoked_token_ids(db: AsyncSession, user_id: str) -> set[uuid.UUID]:
+    """Id refresh token chưa thu hồi trên mọi thiết bị của user."""
+    ids = await db.scalars(
+        select(RefreshToken.id)
+        .join(UserDevice, UserDevice.id == RefreshToken.device_id)
+        .where(
+            UserDevice.user_id == uuid.UUID(user_id), RefreshToken.revoked_at.is_(None)
+        )
+    )
+    return set(ids)
+
+
+async def _revocations(
+    db: AsyncSession, token_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, tuple[datetime | None, TokenRevokeReason | None]]:
+    """id → (revoked_at, revoke_reason) của các refresh token theo id."""
+    rows = await db.execute(
+        select(RefreshToken.id, RefreshToken.revoked_at, RefreshToken.revoke_reason).where(
+            RefreshToken.id.in_(list(token_ids))
+        )
+    )
+    return {row.id: (row.revoked_at, row.revoke_reason) for row in rows}
+
+
+async def _token_id_by_raw(db: AsyncSession, raw: str) -> uuid.UUID | None:
+    token_hash = hashlib.sha256(raw.encode()).hexdigest()
+    return await db.scalar(
+        select(RefreshToken.id).where(RefreshToken.token_hash == token_hash)
+    )
+
+
+@pytest.mark.tc("AUTH-21")
+async def test_lock_active_user_returns_locked_admin_out(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    demo = persona_id(3)
+    res = await client.post(
+        _action_url(demo, "lock"), headers=await auth_headers("admin")
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert set(body) == ADMIN_OUT_KEYS
+    assert body["id"] == demo
+    assert body["status"] == "locked"
+    assert (await _user_state(db, demo))[0] == UserStatus.LOCKED
+
+
+@pytest.mark.tc("AUTH-21")
+async def test_lock_active_user_revokes_every_refresh_token_as_admin_revoked(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    demo = persona_id(3)
+    await auth_headers("demo")  # thêm một refresh token chưa thu hồi (thiết bị web)
+    active_before = await _unrevoked_token_ids(db, demo)
+    assert len(active_before) >= 2
+    assert await _token_id_by_raw(db, DEMO_REFRESH) in active_before
+
+    res = await client.post(
+        _action_url(demo, "lock"), headers=await auth_headers("admin")
+    )
+    assert res.status_code == 200, res.text
+
+    after = await _revocations(db, active_before)
+    assert set(after) == active_before
+    assert all(
+        revoked_at is not None and reason == TokenRevokeReason.ADMIN_REVOKED
+        for revoked_at, reason in after.values()
+    )
+    assert await _unrevoked_token_ids(db, demo) == set()
+    refresh = await client.post(REFRESH, json={"refresh_token": DEMO_REFRESH})
+    _assert_error(refresh, 401, "token_invalid")
+
+
+@pytest.mark.tc("AUTH-21")
+async def test_lock_active_user_rejects_old_access_token_and_login(
+    client: AsyncClient, auth_headers
+):
+    demo_headers = await auth_headers("demo")
+    me_before = await client.get(ME, headers=demo_headers)
+    assert me_before.status_code == 200, me_before.text
+
+    res = await client.post(
+        _action_url(persona_id(3), "lock"), headers=await auth_headers("admin")
+    )
+    assert res.status_code == 200, res.text
+
+    _assert_error(await client.get(ME, headers=demo_headers), 401, "token_invalid")
+    login = await _login(client, "demo@smartworkout.local")
+    _assert_error(login, 423, "account_locked")
+
+
+@pytest.mark.tc("AUTH-22")
+async def test_unlock_locked_user_returns_active_and_allows_login(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    locked = persona_id(12)
+    assert (await _user_state(db, locked))[0] == UserStatus.LOCKED
+
+    res = await client.post(
+        _action_url(locked, "unlock"), headers=await auth_headers("admin")
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert set(body) == ADMIN_OUT_KEYS
+    assert body["id"] == locked
+    assert body["status"] == "active"
+    assert body["locked_until"] is None
+    assert await _user_state(db, locked) == (UserStatus.ACTIVE, None)
+
+    login = await _login(client, "locked@smartworkout.local")
+    assert login.status_code == 200, login.text
+
+
+@pytest.mark.tc("AUTH-23")
+@pytest.mark.parametrize("action", ["lock", "unlock"])
+@pytest.mark.parametrize(
+    "user_id", [str(uuid.uuid4()), persona_id(14)], ids=["random_uuid", "soft_deleted"]
+)
+async def test_lock_or_unlock_unknown_or_deleted_user_returns_not_found(
+    client: AsyncClient, auth_headers, action: str, user_id: str
+):
+    res = await client.post(
+        _action_url(user_id, action), headers=await auth_headers("admin")
+    )
+    _assert_error(res, 404, "user_not_found")
+
+
+@pytest.mark.tc("AUTH-23")
+async def test_lock_self_returns_conflict_and_keeps_admin_active(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    admin = persona_id(1)
+    headers = await auth_headers("admin")
+    state_before = await _user_state(db, admin)
+    tokens_before = await _unrevoked_token_ids(db, admin)
+    assert state_before[0] == UserStatus.ACTIVE
+
+    res = await client.post(_action_url(admin, "lock"), headers=headers)
+    _assert_error(res, 409, "conflict")
+    assert await _user_state(db, admin) == state_before
+    assert await _unrevoked_token_ids(db, admin) == tokens_before
+
+
+@pytest.mark.tc("AUTH-23")
+async def test_unlock_disabled_user_returns_conflict_and_keeps_disabled(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    disabled = persona_id(13)
+    state_before = await _user_state(db, disabled)
+    assert state_before[0] == UserStatus.DISABLED
+
+    res = await client.post(
+        _action_url(disabled, "unlock"), headers=await auth_headers("admin")
+    )
+    _assert_error(res, 409, "conflict")
+    assert await _user_state(db, disabled) == state_before
+
+
+@pytest.mark.parametrize(
+    "case",
+    [("lock", 13), ("lock", 11), ("unlock", 11)],
+    ids=["lock_disabled", "lock_pending", "unlock_pending"],
+)
+async def test_lock_or_unlock_disabled_or_pending_user_returns_conflict_unchanged(
+    client: AsyncClient, db: AsyncSession, auth_headers, case: tuple[str, int]
+):
+    action, nn = case
+    user_id = persona_id(nn)
+    state_before = await _user_state(db, user_id)
+    tokens_before = await _unrevoked_token_ids(db, user_id)
+    res = await client.post(
+        _action_url(user_id, action), headers=await auth_headers("admin")
+    )
+    _assert_error(res, 409, "conflict")
+    assert await _user_state(db, user_id) == state_before
+    assert await _unrevoked_token_ids(db, user_id) == tokens_before
+
+
+async def test_lock_already_locked_user_returns_locked(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    locked = persona_id(12)
+    res = await client.post(
+        _action_url(locked, "lock"), headers=await auth_headers("admin")
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "locked"
+    assert (await _user_state(db, locked))[0] == UserStatus.LOCKED
+    assert await _unrevoked_token_ids(db, locked) == set()
+
+
+async def test_unlock_active_user_returns_active_unchanged(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    demo = persona_id(3)
+    res = await client.post(
+        _action_url(demo, "unlock"), headers=await auth_headers("admin")
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "active"
+    assert res.json()["locked_until"] is None
+    assert await _user_state(db, demo) == (UserStatus.ACTIVE, None)
