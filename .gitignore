@@ -104,3 +104,6 @@ team-stack/
 
 # Agent flow: thông tin thành viên + token Telegram (mẫu: scripts/agent-flow/team.example.json)
 scripts/agent-flow/team.json
+
+# Object storage local (dev)
+backend/.storage/
