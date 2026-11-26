@@ -1,4 +1,4 @@
-"""Nghiệp vụ module Catalog/Wiki (chức năng 1): tìm và xem chi tiết bài tập, cây nhóm cơ, danh sách thiết bị.
+"""Nghiệp vụ module Catalog/Wiki (chức năng 1): tìm, xem chi tiết, gợi ý bài thay thế, cây nhóm cơ, thiết bị.
 
 Module chỉ đọc DB nên không có ranh giới transaction/commit.
 """
@@ -16,8 +16,11 @@ from app.schemas.catalog import (
     BodyRegionSchema,
     DifficultySchema,
     EquipmentCategorySchema,
+    EquipmentExerciseSchema,
     EquipmentQuery,
     EquipmentResponse,
+    ExerciseAlternativeResponse,
+    ExerciseAlternativesQuery,
     ExerciseDetailResponse,
     ExerciseEquipmentSchema,
     ExerciseInstructionSchema,
@@ -135,6 +138,25 @@ async def get_exercise_detail(db: AsyncSession, id_or_slug: str) -> ExerciseDeta
     )
 
 
+async def list_exercise_alternatives(
+    db: AsyncSession, id_or_slug: str, query: ExerciseAlternativesQuery
+) -> Page[ExerciseAlternativeResponse]:
+    """Bài thay thế cho bài đã xuất bản, bỏ bài cần thiết bị đang bận; cursor `{"offset": n}`.
+
+    Bài gốc được kiểm tra trước vì `catalog.fn_suggest_alternatives` trả rỗng thay vì báo lỗi (spec §6 mục 8).
+    """
+    offset = _int_from_cursor(query.cursor, "offset") if query.cursor is not None else 0
+    exercise = await _get_published_exercise(db, id_or_slug)
+    # Hàm SQL chỉ có LIMIT: lấy từ đầu tới hết trang này (+1 để biết has_more) rồi bỏ phần trước offset.
+    # Chặn ở 2^31-1 vì `p_limit` là `integer`, offset lớn cộng thêm sẽ tràn kiểu thành lỗi 500.
+    fetch_limit = min(offset + query.limit + 1, _INT4_MAX)
+    rows = await crud.list_exercise_alternatives(
+        db, exercise["id"], query.unavailable_equipment_id, limit=fetch_limit
+    )
+    alternatives = _models(ExerciseAlternativeResponse, rows[offset:])
+    return build_page(alternatives, query.limit, lambda item: item, lambda _item: {"offset": offset + query.limit})
+
+
 # --- Nhóm cơ ---
 def _muscle_group_node(row: Any, children: list[MuscleGroupResponse]) -> MuscleGroupResponse:
     body_region = None
@@ -192,3 +214,12 @@ async def list_equipment(db: AsyncSession, query: EquipmentQuery) -> Page[Equipm
     after_id = _int_from_cursor(query.cursor, "id") if query.cursor is not None else None
     rows = await crud.list_equipment(db, category_id=query.category_id, after_id=after_id, limit=query.limit + 1)
     return build_page(rows, query.limit, _equipment_item, lambda row: {"id": row["id"]})
+
+
+async def list_exercises_for_ai_label(db: AsyncSession, ai_label: str, limit: int = 20) -> list[EquipmentExerciseSchema]:
+    """Bài tập dùng thiết bị mà model nhận diện trả về nhãn `ai_label`, sắp theo độ khó rồi tên.
+
+    Dành cho module Nhận diện thiết bị (chức năng 7) gọi qua service, không có route riêng. Hàm SQL tự
+    chuẩn hoá nhãn (`lower(btrim(...))`); thiết bị đã xoá mềm hoặc nhãn không có → danh sách rỗng.
+    """
+    return _models(EquipmentExerciseSchema, await crud.list_exercises_for_ai_label(db, ai_label, limit=limit))

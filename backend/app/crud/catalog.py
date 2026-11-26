@@ -65,6 +65,32 @@ async def get_published_exercise_by_slug(db: AsyncSession, slug: str) -> Any | N
     return (await db.execute(text(sql), {"slug": slug})).mappings().first()
 
 
+async def list_exercise_alternatives(
+    db: AsyncSession, exercise_id: int, unavailable_equipment_ids: list[int], *, limit: int
+) -> list[Any]:
+    """`limit` bài thay thế đầu tiên theo thứ tự của `catalog.fn_suggest_alternatives` (score giảm, tên)."""
+    # WITH ORDINALITY + ORDER BY: giữ đúng thứ tự hàm trả về thay vì dựa vào thứ tự quét ngầm định.
+    sql = """
+    SELECT a.exercise_id AS id, a.slug, a.name, a.difficulty_rank, a.is_curated, a.muscle_overlap, a.score
+    FROM catalog.fn_suggest_alternatives(
+             CAST(:exercise_id AS integer), CAST(:unavailable_equipment_ids AS integer[]), CAST(:limit AS integer)
+         ) WITH ORDINALITY AS a
+    ORDER BY a.ordinality
+    """
+    params = {"exercise_id": exercise_id, "unavailable_equipment_ids": unavailable_equipment_ids, "limit": limit}
+    return list((await db.execute(text(sql), params)).mappings().all())
+
+
+async def list_exercises_for_ai_label(db: AsyncSession, ai_label: str, *, limit: int) -> list[Any]:
+    """Bài đã xuất bản dùng thiết bị (chưa xoá mềm) có nhãn AI `ai_label`, theo thứ tự hàm (độ khó, tên)."""
+    sql = """
+    SELECT f.equipment_id, f.equipment_name, f.exercise_id, f.slug, f.exercise_name, f.difficulty_rank
+    FROM catalog.fn_exercises_for_ai_label(CAST(:ai_label AS text), CAST(:limit AS integer)) WITH ORDINALITY AS f
+    ORDER BY f.ordinality
+    """
+    return list((await db.execute(text(sql), {"ai_label": ai_label, "limit": limit})).mappings().all())
+
+
 async def _rows_of_exercise(db: AsyncSession, sql: str, exercise_id: int) -> list[Any]:
     return list((await db.execute(text(sql), {"exercise_id": exercise_id})).mappings().all())
 

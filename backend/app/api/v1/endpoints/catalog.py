@@ -14,6 +14,8 @@ from app.schemas.base import ERROR_RESPONSES, Page
 from app.schemas.catalog import (
     EquipmentQuery,
     EquipmentResponse,
+    ExerciseAlternativeResponse,
+    ExerciseAlternativesQuery,
     ExerciseDetailResponse,
     ExerciseSearchQuery,
     ExerciseSummaryResponse,
@@ -73,6 +75,33 @@ async def get_exercise_detail(
 ) -> ExerciseDetailResponse:
     """Chi tiết kỹ thuật cho bước 3 của Wiki."""
     return await catalog_service.get_exercise_detail(db, id_or_slug)
+
+
+@exercises_router.get(
+    "/{id_or_slug}/alternatives",
+    response_model=Page[ExerciseAlternativeResponse],
+    status_code=200,
+    responses=ERROR_RESPONSES,
+    summary="Gợi ý bài thay thế cùng nhóm cơ, bỏ bài cần thiết bị đang bận",
+    description=(
+        "Quyền: `exercise:read`. Gợi ý bài đã xuất bản cùng tác động lên nhóm cơ chính của bài gốc, qua "
+        "`catalog.fn_suggest_alternatives`. Sắp theo `score` giảm dần rồi theo tên: `score` = `muscle_overlap` "
+        "(độ trùng nhóm cơ, 0–1) + 0,5 nếu là bài thay thế do biên tập viên chọn (`is_curated`) + 0,1 nếu cùng kiểu "
+        "compound/isolation − 0,05 × chênh lệch độ khó, nên bài biên tập viên chọn được ưu tiên. "
+        "`unavailable_equipment_id` (lặp param) là thiết bị đang bận: loại bài cần thiết bị **bắt buộc** nằm trong "
+        "danh sách (thiết bị tuỳ chọn không tính). Phân trang cursor (`limit` 1–100, mặc định 20). "
+        "Bài gốc không tồn tại, chưa xuất bản, đã lưu trữ hoặc đã xoá → 404 `exercise_not_found`; "
+        "tham số hoặc cursor sai → 422 `validation_error`."
+    ),
+)
+async def list_exercise_alternatives(
+    id_or_slug: Annotated[str, Path(description="`id` (số nguyên) hoặc `slug` của bài gốc, vd `dumbbell-row`")],
+    query: Annotated[ExerciseAlternativesQuery, Query()],
+    _: CurrentUser = Depends(require_permission("exercise", "read")),
+    db: AsyncSession = Depends(get_db),
+) -> Page[ExerciseAlternativeResponse]:
+    """Bài thay thế khi máy đang bận, cho bước 4 của Wiki."""
+    return await catalog_service.list_exercise_alternatives(db, id_or_slug, query)
 
 
 # --- Nhóm cơ ---

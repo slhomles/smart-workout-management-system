@@ -185,6 +185,35 @@ class ExerciseDetailResponse(BaseModel):
     )
 
 
+class ExerciseAlternativesQuery(BaseModel):
+    """Query param của `GET /exercises/{id_or_slug}/alternatives`."""
+
+    unavailable_equipment_id: list[Annotated[int, Field(ge=1, le=_INTEGER_MAX)]] = Field(
+        default_factory=list, description="Thiết bị đang bận, lặp param; loại bài cần thiết bị bắt buộc trong danh sách"
+    )
+    limit: int = Field(20, ge=1, le=100, description="Số phần tử mỗi trang")
+    cursor: str | None = Field(None, description="Giá trị `pagination.next_cursor` của trang trước")
+
+
+class ExerciseAlternativeResponse(BaseModel):
+    """Bài thay thế, giữ thứ tự của `catalog.fn_suggest_alternatives` (`score` giảm dần, rồi tên)."""
+
+    id: int
+    slug: str
+    name: str
+    difficulty_rank: int = Field(description="Hạng độ khó, 1 là dễ nhất")
+    is_curated: bool = Field(description="Bài thay thế do biên tập viên chọn")
+    muscle_overlap: float = Field(description="Độ trùng nhóm cơ chính với bài gốc, 0–1")
+    score: float = Field(description="Điểm gợi ý, càng cao càng phù hợp")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {"id": 23, "slug": "barbell-row", "name": "Chèo tạ đòn", "difficulty_rank": 2,
+                        "is_curated": True, "muscle_overlap": 1.0, "score": 1.55}
+        }
+    )
+
+
 # --- Nhóm cơ ---
 class BodyRegionSchema(BaseModel):
     """Vùng cơ thể (`catalog.body_regions`), chỉ gắn ở nút gốc của cây nhóm cơ."""
@@ -285,3 +314,14 @@ class EquipmentQuery(BaseModel):
     category_id: int | None = Field(None, ge=1, le=32767, description="Lọc theo nhóm thiết bị")
     limit: int = Field(20, ge=1, le=100, description="Số phần tử mỗi trang")
     cursor: str | None = Field(None, description="Giá trị `pagination.next_cursor` của trang trước")
+
+
+class EquipmentExerciseSchema(BaseModel):
+    """Bài tập dùng thiết bị khớp nhãn AI (`catalog.fn_exercises_for_ai_label`), cho chức năng 7."""
+
+    equipment_id: int
+    equipment_name: str
+    exercise_id: int
+    slug: str
+    exercise_name: str
+    difficulty_rank: int

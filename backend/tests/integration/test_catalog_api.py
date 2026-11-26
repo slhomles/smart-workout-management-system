@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.base import encode_cursor
-from app.services import permission_service
+from app.services import catalog_service, permission_service
 
 MUSCLE_GROUPS_URL = "/api/v1/muscle-groups"
 EQUIPMENT_URL = "/api/v1/equipment"
@@ -622,3 +622,169 @@ async def test_get_exercise_without_exercise_read_returns_403(
     headers = await auth_headers("demo")
     monkeypatch.setattr(permission_service, "get_permissions", _without_exercise_read)
     _err(await client.get(DUMBBELL_ROW_URL, headers=headers), 403, "permission_denied")
+
+
+# --- GET /exercises/{id_or_slug}/alternatives ---
+ALTERNATIVES_URL = f"{DUMBBELL_ROW_URL}/alternatives"
+ALTERNATIVE_KEYS = {"id", "slug", "name", "difficulty_rank", "is_curated", "muscle_overlap", "score"}
+DUMBBELL_ROW_ALTERNATIVE_SLUGS = [
+    "barbell-row", "seated-cable-row", "lat-pulldown", "chin-up", "pull-up", "inverted-row",
+    "medicine-ball-slam", "rowing-machine", "childs-pose", "ab-wheel-rollout",
+]
+
+
+async def _alternatives(client: AsyncClient, auth_headers, params: dict) -> dict:
+    return _page(await client.get(ALTERNATIVES_URL, params=params, headers=await auth_headers("demo")))
+
+
+async def _alternative_pages(client: AsyncClient, auth_headers, params: dict) -> list[dict]:
+    """Lần theo `next_cursor` tới trang cuối."""
+    pages = [await _alternatives(client, auth_headers, params)]
+    for _ in range(10):  # chặn vòng lặp vô hạn nếu cursor không tiến
+        if not pages[-1]["pagination"]["has_more"]:
+            break
+        next_params = {**params, "cursor": pages[-1]["pagination"]["next_cursor"]}
+        pages.append(await _alternatives(client, auth_headers, next_params))
+    return pages
+
+
+@pytest.mark.tc("EXW-09")
+async def test_list_alternatives_dumbbell_row_returns_single_page_by_score(client: AsyncClient, auth_headers):
+    body = await _alternatives(client, auth_headers, {})
+    assert len(body["data"]) == 10 and body["pagination"] == LAST_PAGE
+    assert _slugs(body)[:5] == ["barbell-row", "seated-cable-row", "lat-pulldown", "chin-up", "pull-up"]
+    assert "dumbbell-row" not in _slugs(body)
+    scores = _values(body["data"], "score")
+    assert all(left >= right for left, right in zip(scores, scores[1:]))
+
+
+@pytest.mark.tc("EXW-09")
+async def test_list_alternatives_items_have_exact_keys_and_json_types(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    data = (await _alternatives(client, auth_headers, {}))["data"]
+    assert _all_have_keys(data, ALTERNATIVE_KEYS)
+    typed_keys = ("id", "difficulty_rank", "is_curated", "muscle_overlap", "score")
+    json_types = {tuple(type(item[key]) for key in typed_keys) for item in data}
+    assert json_types == {(int, int, bool, float, float)}
+    assert data[0]["id"] == await _exercise_id(db, "barbell-row")
+
+
+@pytest.mark.tc("EXW-09")
+async def test_list_alternatives_curated_alternatives_come_first(client: AsyncClient, auth_headers):
+    data = (await _alternatives(client, auth_headers, {}))["data"]
+    first = data[0]
+    assert (first["is_curated"], first["muscle_overlap"], first["score"]) == (True, 1.0, 1.55)
+    assert [item["is_curated"] for item in data[:3]] == [True, True, False]
+
+
+@pytest.mark.tc("EXW-10")
+async def test_list_alternatives_busy_barbell_drops_barbell_row(client: AsyncClient, db: AsyncSession, auth_headers):
+    barbell_id = await _catalog_id(db, "equipment", "barbell")
+    data = (await _alternatives(client, auth_headers, {"unavailable_equipment_id": barbell_id}))["data"]
+    assert len(data) == 9 and "barbell-row" not in _values(data, "slug")
+    assert (data[0]["slug"], data[0]["is_curated"]) == ("seated-cable-row", True)
+
+
+@pytest.mark.tc("EXW-10")
+async def test_list_alternatives_many_busy_machines_keep_remaining_order(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    busy_codes = ["barbell", "seated_row_machine", "lat_pulldown_machine", "pull_up_bar"]
+    busy_ids = [await _catalog_id(db, "equipment", code) for code in busy_codes]
+    body = await _alternatives(client, auth_headers, {"unavailable_equipment_id": busy_ids})
+    assert _slugs(body) == ["inverted-row", "medicine-ball-slam", "rowing-machine", "childs-pose", "ab-wheel-rollout"]
+
+
+@pytest.mark.tc("EXW-10")
+async def test_list_alternatives_limit_3_pages_through_cursor(client: AsyncClient, auth_headers):
+    pages = await _alternative_pages(client, auth_headers, {"limit": 3})
+    assert _slugs(pages[0]) == ["barbell-row", "seated-cable-row", "lat-pulldown"]
+    assert pages[0]["pagination"]["has_more"] is True
+    assert _slugs(pages[1]) == ["chin-up", "pull-up", "inverted-row"]
+    slugs = [slug for page in pages for slug in _slugs(page)]
+    assert slugs == DUMBBELL_ROW_ALTERNATIVE_SLUGS and len(set(slugs)) == 10
+    assert pages[-1]["pagination"] == LAST_PAGE
+
+
+@pytest.mark.tc("EXW-11")
+@pytest.mark.parametrize("id_or_slug", ["test-draft-exercise", "khong-ton-tai"])
+async def test_list_alternatives_hidden_or_unknown_exercise_returns_404(
+    client: AsyncClient, auth_headers, id_or_slug: str
+):
+    res = await client.get(f"{EXERCISES_URL}/{id_or_slug}/alternatives", headers=await auth_headers("demo"))
+    assert _err(res, 404, "exercise_not_found")["details"] == []
+
+
+@pytest.mark.tc("EXW-11")
+@pytest.mark.parametrize(
+    ("params", "field"),
+    [
+        ({"limit": 0}, "limit"),
+        ({"unavailable_equipment_id": "abc"}, "unavailable_equipment_id.0"),
+        ({"cursor": "!!!khong-phai-cursor"}, "cursor"),
+    ],
+)
+async def test_list_alternatives_invalid_query_returns_422(
+    client: AsyncClient, auth_headers, params: dict, field: str
+):
+    res = await client.get(ALTERNATIVES_URL, params=params, headers=await auth_headers("demo"))
+    err = _err(res, 422, "validation_error")
+    assert [detail["field"] for detail in err["details"]] == [field]
+
+
+# `p_limit` của hàm SQL là `integer`: offset tối đa cộng thêm `limit + 1` không được tràn kiểu thành 500.
+async def test_list_alternatives_max_offset_cursor_returns_empty_last_page(client: AsyncClient, auth_headers):
+    body = await _alternatives(client, auth_headers, {"cursor": encode_cursor({"offset": 2147483647})})
+    assert body == {"data": [], "pagination": LAST_PAGE}
+
+
+async def test_list_alternatives_without_token_returns_401(client: AsyncClient):
+    res = await client.get(ALTERNATIVES_URL)
+    _err(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+
+
+async def test_list_alternatives_without_exercise_read_returns_403(
+    client: AsyncClient, auth_headers, monkeypatch: pytest.MonkeyPatch
+):
+    # Mọi persona seed đều có quyền đọc; giả lập user có các quyền đọc catalog khác trừ `exercise:read`.
+    async def _without_exercise_read(_db: AsyncSession, _user_id: uuid.UUID) -> set[str]:
+        return {"muscle_group:read", "equipment:read", "plan_template:read"}
+
+    headers = await auth_headers("demo")
+    monkeypatch.setattr(permission_service, "get_permissions", _without_exercise_read)
+    _err(await client.get(ALTERNATIVES_URL, headers=headers), 403, "permission_denied")
+
+
+# --- catalog_service.list_exercises_for_ai_label (chức năng 7 gọi qua service, không có route) ---
+AI_LABEL_EXERCISE_FIELDS = {"equipment_id", "equipment_name", "exercise_id", "slug", "exercise_name", "difficulty_rank"}
+CABLE_CROSSOVER_SLUGS = {"cable-chest-fly", "face-pull", "cable-triceps-pushdown", "cable-lateral-raise", "cable-crunch"}
+
+
+async def _exercises_for_ai_label(db: AsyncSession, ai_label: str) -> list[dict]:
+    return [item.model_dump() for item in await catalog_service.list_exercises_for_ai_label(db, ai_label)]
+
+
+@pytest.mark.tc("EXW-17")
+async def test_list_exercises_for_ai_label_cable_machine_returns_cable_exercises(db: AsyncSession):
+    items = await _exercises_for_ai_label(db, "cable_crossover_machine")
+    assert {item["slug"] for item in items} == CABLE_CROSSOVER_SLUGS
+    assert _all_have_keys(items, AI_LABEL_EXERCISE_FIELDS)
+    cable_crossover_id = await _catalog_id(db, "equipment", "cable_crossover")
+    assert all(item["equipment_id"] == cable_crossover_id for item in items)
+    assert all(type(item["exercise_id"]) is int for item in items)
+    assert _is_non_decreasing(_values(items, "difficulty_rank"))
+
+
+@pytest.mark.tc("EXW-17")
+async def test_list_exercises_for_ai_label_padded_uppercase_label_matches_same_result(db: AsyncSession):
+    normalized = await _exercises_for_ai_label(db, "cable_crossover_machine")
+    padded = await _exercises_for_ai_label(db, "  CABLE_CROSSOVER_MACHINE ")
+    assert padded and padded == normalized
+
+
+@pytest.mark.tc("EXW-17")
+@pytest.mark.parametrize("ai_label", ["test_retired_machine", "khong_co_nhan"])
+async def test_list_exercises_for_ai_label_retired_or_unknown_label_returns_empty(db: AsyncSession, ai_label: str):
+    assert await catalog_service.list_exercises_for_ai_label(db, ai_label) == []
