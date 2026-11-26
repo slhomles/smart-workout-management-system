@@ -266,6 +266,7 @@ Quy tắc code:
 | `validation_error` | 422 | Dữ liệu không hợp lệ (có `details`) |
 | `rate_limit_exceeded` | 429 | Vượt rate limit |
 | `internal_error` | 500 | Lỗi hệ thống |
+| `service_unavailable` | 503 | Phụ thuộc bắt buộc (PostgreSQL, Redis) không kết nối được; `details` liệt kê thành phần hỏng |
 | `http_<status>` | khác | Lỗi mặc định của framework (route không tồn tại, 405...) |
 
 ### 10.1. Auth (theo `04-auth-strategy.md` §5)
