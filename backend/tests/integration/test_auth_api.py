@@ -5,7 +5,7 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import cast, func, select, text
+from sqlalchemy import cast, delete, func, select, text
 from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -909,3 +909,210 @@ async def test_logout_all_and_change_password_without_token_return_401_token_inv
     assert res.headers["WWW-Authenticate"] == "Bearer"
     assert await _password_state(db, DEMO_ID) == password_before
     assert await _user_tokens(db, DEMO_ID, revoked=False) == active_before
+
+
+# ---------------------------------------------------------------------------
+# AUTH-12, AUTH-13: PATCH /auth/me (spec docs/features/auth-users.md §5)
+# ---------------------------------------------------------------------------
+
+NEWBIE_PROFILE_SEED = ("Mai", "Đỗ Ngọc Mai", "vi-VN", "Asia/Ho_Chi_Minh", "metric")
+_LONG_DISPLAY_NAME = "M" * 51
+
+
+async def _profile_row(db: AsyncSession, user_id: str) -> tuple:
+    """
+    (display_name, full_name, locale, timezone, unit_system, updated_at) đọc thẳng từ `auth.user_profiles`.
+    Truy vấn cột nên không dính identity map.
+    """
+    row = (
+        await db.execute(
+            select(
+                UserProfile.display_name,
+                UserProfile.full_name,
+                UserProfile.locale,
+                UserProfile.timezone,
+                UserProfile.unit_system,
+                UserProfile.updated_at,
+            ).where(UserProfile.user_id == uuid.UUID(user_id))
+        )
+    ).one()
+    return tuple(row)
+
+
+@pytest.mark.tc("AUTH-12")
+async def test_patch_me_partial_body_updates_only_sent_fields_and_null_clears_full_name(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    headers = await auth_headers("newbie")
+    me_before = await client.get(ME, headers=headers)
+    assert me_before.status_code == 200, me_before.text
+    before = me_before.json()
+    assert before["id"] == NEWBIE_ID
+    assert before["full_name"] == "Đỗ Ngọc Mai"
+    assert before["locale"] == "vi-VN"
+    row_before = await _profile_row(db, NEWBIE_ID)
+    assert row_before[:5] == NEWBIE_PROFILE_SEED
+
+    # Lần 1: chỉ đổi display_name, unit_system, timezone
+    first = await client.patch(
+        ME, json={"display_name": "Mai Đỗ", "unit_system": "imperial", "timezone": "Asia/Tokyo"}, headers=headers
+    )
+
+    assert first.status_code == 200, first.text
+    first_body = first.json()
+    assert set(first_body) == set(before) == set(MeResponse.model_fields)
+    assert first_body["id"] == NEWBIE_ID
+    assert first_body["display_name"] == "Mai Đỗ"
+    assert first_body["unit_system"] == "imperial"
+    assert first_body["timezone"] == "Asia/Tokyo"
+    assert first_body["full_name"] == "Đỗ Ngọc Mai"
+    assert first_body["locale"] == "vi-VN"
+    # Các field còn lại (email, status, roles, permissions…) giữ nguyên
+    assert first_body == {**before, "display_name": "Mai Đỗ", "unit_system": "imperial", "timezone": "Asia/Tokyo"}
+
+    row_first = await _profile_row(db, NEWBIE_ID)
+    assert row_first[:5] == ("Mai Đỗ", "Đỗ Ngọc Mai", "vi-VN", "Asia/Tokyo", "imperial")
+    # updated_at do trigger trg_set_updated_at của DB gán
+    assert row_first[5] != row_before[5]
+
+    # Lần 2: gửi null cho full_name → xoá giá trị, field khác giữ nguyên
+    second = await client.patch(ME, json={"full_name": None}, headers=headers)
+
+    assert second.status_code == 200, second.text
+    second_body = second.json()
+    assert "full_name" in second_body
+    assert second_body["full_name"] is None
+    assert second_body["display_name"] == "Mai Đỗ"
+    assert second_body == {**first_body, "full_name": None}
+    row_second = await _profile_row(db, NEWBIE_ID)
+    assert row_second[:5] == ("Mai Đỗ", None, "vi-VN", "Asia/Tokyo", "imperial")
+
+    # GET /auth/me sau đó trả đúng các giá trị đã lưu
+    me_after = await client.get(ME, headers=headers)
+    assert me_after.status_code == 200, me_after.text
+    assert me_after.json() == second_body
+
+
+@pytest.mark.tc("AUTH-13")
+@pytest.mark.parametrize(
+    ("payload", "expected_field"),
+    [
+        ({"display_name": "   "}, "display_name"),
+        ({"display_name": _LONG_DISPLAY_NAME}, "display_name"),
+        ({"display_name": None}, "display_name"),
+        ({"locale": "vietnamese"}, "locale"),
+        ({"timezone": "Mars/Olympus"}, "timezone"),
+        ({"unit_system": "stone"}, "unit_system"),
+        ({"email": "x@y.z"}, "email"),
+    ],
+    ids=[
+        "display_name_blank",
+        "display_name_51_chars",
+        "display_name_null",
+        "locale_bad_format",
+        "timezone_unknown",
+        "unit_system_unknown",
+        "extra_field_email",
+    ],
+)
+async def test_patch_me_invalid_body_returns_422_validation_error_and_keeps_profile(
+    client: AsyncClient, db: AsyncSession, auth_headers, payload: dict, expected_field: str
+):
+    if payload.get("display_name") == _LONG_DISPLAY_NAME:
+        assert len(_LONG_DISPLAY_NAME) == 51
+    headers = await auth_headers("newbie")
+    row_before = await _profile_row(db, NEWBIE_ID)
+    assert row_before[:5] == NEWBIE_PROFILE_SEED
+
+    res = await client.patch(ME, json=payload, headers=headers)
+
+    error = _assert_error(res, 422, "validation_error")
+    assert isinstance(error["message"], str) and error["message"]
+    assert expected_field in [d["field"] for d in error["details"]], error["details"]
+    if expected_field == "timezone":
+        # Định dạng hợp lệ nên Pydantic không chặn: lỗi đến từ kiểm tra pg_catalog.pg_timezone_names ở service
+        unknown = await db.scalar(
+            text("SELECT count(*) FROM pg_catalog.pg_timezone_names WHERE name = :name"), {"name": "Mars/Olympus"}
+        )
+        assert unknown == 0
+        assert [(d["field"], d["code"]) for d in error["details"]] == [("timezone", "value_error")]
+    assert await _profile_row(db, NEWBIE_ID) == row_before
+
+
+@pytest.mark.parametrize("field", ["locale", "timezone", "unit_system", "display_name"])
+async def test_patch_me_null_for_required_profile_field_returns_422_with_that_field(
+    client: AsyncClient, db: AsyncSession, auth_headers, field: str
+):
+    """Cột NOT NULL trong `auth.user_profiles`: gửi null bị chặn ở validation, không để lỗi ràng buộc DB."""
+    headers = await auth_headers("newbie")
+    row_before = await _profile_row(db, NEWBIE_ID)
+
+    res = await client.patch(ME, json={field: None}, headers=headers)
+
+    error = _assert_error(res, 422, "validation_error")
+    assert [d["field"] for d in error["details"]] == [field]
+    assert await _profile_row(db, NEWBIE_ID) == row_before
+
+
+async def test_patch_me_empty_body_returns_200_current_profile_without_update(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    headers = await auth_headers("newbie")
+    me = await client.get(ME, headers=headers)
+    assert me.status_code == 200, me.text
+    row_before = await _profile_row(db, NEWBIE_ID)
+
+    res = await client.patch(ME, json={}, headers=headers)
+
+    assert res.status_code == 200, res.text
+    assert res.json() == me.json()
+    # Không có UPDATE nào: kể cả updated_at cũng không đổi
+    assert await _profile_row(db, NEWBIE_ID) == row_before
+
+
+async def test_patch_me_padded_display_name_and_valid_locale_stores_stripped_values(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    headers = await auth_headers("newbie")
+    display_name = "Đ" * 50
+
+    res = await client.patch(
+        ME, json={"display_name": f"  {display_name}  ", "locale": "en-US", "full_name": "Mai"}, headers=headers
+    )
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["display_name"] == display_name
+    assert body["locale"] == "en-US"
+    assert body["full_name"] == "Mai"
+    row = await _profile_row(db, NEWBIE_ID)
+    assert row[:5] == (display_name, "Mai", "en-US", "Asia/Ho_Chi_Minh", "metric")
+
+
+async def test_patch_me_without_token_returns_401_token_invalid(client: AsyncClient, db: AsyncSession):
+    row_before = await _profile_row(db, NEWBIE_ID)
+
+    res = await client.patch(ME, json={"display_name": "Mai Đỗ"})
+
+    _assert_error(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+    assert await _profile_row(db, NEWBIE_ID) == row_before
+
+
+async def test_patch_me_profile_missing_returns_404_user_not_found(
+    client: AsyncClient, db: AsyncSession, auth_headers
+):
+    """Dữ liệu hỏng (user không có `user_profiles`): báo `user_not_found`, không tạo hồ sơ mới."""
+    headers = await auth_headers("newbie")
+    # Xoá trong transaction ngoài của test (bị rollback cuối test); ORM delete cũng gỡ đối tượng khỏi identity map.
+    # commit ở đây chỉ release savepoint (conftest), để lần rollback savepoint khi request lỗi không hoàn tác lệnh xoá.
+    await db.execute(delete(UserProfile).where(UserProfile.user_id == uuid.UUID(NEWBIE_ID)))
+    await db.commit()
+
+    res = await client.patch(ME, json={"display_name": "Mai Đỗ"}, headers=headers)
+
+    _assert_error(res, 404, "user_not_found")
+    count = await db.scalar(
+        select(func.count()).select_from(UserProfile).where(UserProfile.user_id == uuid.UUID(NEWBIE_ID))
+    )
+    assert count == 0

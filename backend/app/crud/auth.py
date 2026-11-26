@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import cast, func, select, update
+from sqlalchemy import cast, func, select, text, update
 from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,14 @@ async def get_user(db: AsyncSession, user_id: uuid.UUID) -> User | None:
 
 async def get_profile(db: AsyncSession, user_id: uuid.UUID) -> UserProfile | None:
     return await db.get(UserProfile, user_id)
+
+
+async def timezone_exists(db: AsyncSession, name: str) -> bool:
+    """TRUE nếu `name` là tên múi giờ có trong view hệ thống `pg_catalog.pg_timezone_names` (so khớp chính xác)."""
+    found = await db.scalar(
+        text("SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_timezone_names WHERE name = :name)"), {"name": name}
+    )
+    return bool(found)
 
 
 async def get_role_id(db: AsyncSession, code: RoleCode) -> int | None:

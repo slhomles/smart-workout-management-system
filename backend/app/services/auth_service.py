@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.exceptions import AppException, ConflictError, UnauthorizedError
+from app.core.exceptions import AppException, ConflictError, DataValidationError, NotFoundError, UnauthorizedError
 from app.core.security import (
     create_access_token,
     generate_refresh_token,
@@ -33,6 +33,7 @@ from app.schemas.auth import (
     RegisterRequest,
     RegisterResponse,
     TokenPairResponse,
+    UpdateMeRequest,
 )
 from app.schemas.base import ErrorDetail
 from app.services import permission_service
@@ -316,3 +317,25 @@ async def get_me(db: AsyncSession, user: User) -> MeResponse:
         roles=roles,
         permissions=sorted(perms),
     )
+
+
+async def update_me(db: AsyncSession, user: User, req: UpdateMeRequest) -> MeResponse:
+    """
+    Sửa một phần hồ sơ hiển thị của user hiện tại (`PATCH /auth/me`, spec auth-users quyết định 5).
+    Chỉ ghi field có trong request; `timezone` phải có trong `pg_catalog.pg_timezone_names`, kiểm tra trước khi ghi.
+    `updated_at` do trigger DB gán. Trả hồ sơ sau cập nhật, cùng dạng `GET /auth/me`.
+    """
+    changes = req.model_dump(exclude_unset=True)
+    profile = await crud.get_profile(db, user.id)
+    if profile is None:
+        raise NotFoundError("user_not_found", "Người dùng không tồn tại")
+    if "timezone" in changes and not await crud.timezone_exists(db, changes["timezone"]):
+        raise DataValidationError([ErrorDetail(field="timezone", message="Múi giờ không hợp lệ", code="value_error")])
+
+    for field, value in changes.items():
+        setattr(profile, field, value)
+    await db.flush()
+    # get_me đọc lại profile cùng session (identity map) nên thấy giá trị vừa ghi.
+    result = await get_me(db, user)
+    await db.commit()
+    return result

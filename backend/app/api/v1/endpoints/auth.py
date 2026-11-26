@@ -19,6 +19,7 @@ from app.schemas.auth import (
     RegisterResponse,
     RevokedTokensResponse,
     TokenPairResponse,
+    UpdateMeRequest,
 )
 from app.schemas.base import ERROR_RESPONSES, ErrorResponse
 from app.services import auth_service
@@ -49,6 +50,17 @@ CHANGE_PASSWORD_RESPONSES: dict[int | str, dict[str, Any]] = {
     422: {
         "model": ErrorResponse,
         "description": "validation_error (mật khẩu mới không đạt chính sách, thiếu field)",
+    },
+}
+
+
+UPDATE_ME_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **ERROR_RESPONSES,
+    401: {"model": ErrorResponse, "description": "token_invalid (chưa đăng nhập/token không hợp lệ)"},
+    404: {"model": ErrorResponse, "description": "user_not_found (tài khoản không có hồ sơ)"},
+    422: {
+        "model": ErrorResponse,
+        "description": "validation_error (giá trị sai định dạng, null cho field bắt buộc, múi giờ không tồn tại, field lạ)",
     },
 }
 
@@ -152,6 +164,27 @@ async def logout_all(
 )
 async def me(current: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> MeResponse:
     return await auth_service.get_me(db, current.user)
+
+
+@router.patch(
+    "/me",
+    response_model=MeResponse,
+    status_code=200,
+    responses=UPDATE_ME_RESPONSES,
+    summary="Sửa hồ sơ hiển thị của tài khoản đang đăng nhập",
+    description=(
+        "Quyền: **đăng nhập**. Sửa một phần `display_name`, `full_name`, `locale`, `timezone`, `unit_system`: "
+        "chỉ field có trong body được cập nhật, body rỗng không đổi gì. `full_name: null` xoá họ tên; "
+        "các field còn lại không nhận `null`. `timezone` phải là tên IANA có trong `pg_timezone_names`. "
+        "Trả thông tin tài khoản sau cập nhật như `GET /auth/me`."
+    ),
+)
+async def update_me(
+    body: UpdateMeRequest,
+    current: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MeResponse:
+    return await auth_service.update_me(db, current.user, body)
 
 
 @router.patch(
