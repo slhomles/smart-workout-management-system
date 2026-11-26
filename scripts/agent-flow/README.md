@@ -186,7 +186,7 @@ Bot chặn Windows tự sleep trong lúc chạy. Muốn bot tự bật khi đăn
 - Gõ lệnh trong group cho bot chung, hoặc nhắn riêng bot của mình. Trong group nên gõ dạng `/run@ten_bot_chung …`, hoặc tắt privacy mode của bot chung (@BotFather → `/setprivacy` → Disable) để bot nhận được `/run …`.
 - Chỉ 3 tài khoản Telegram trong `team.json` ra lệnh và bấm nút được; người khác nhận "⛔".
 - Mỗi lúc chỉ chạy **một** flow (DB dùng chung, doc 05 §8.2); các lệnh `/run` khác xếp hàng.
-- **Xin quyền**: thao tác thuộc danh sách `ask` trong `flow-settings.json` (hiện là `pip install/uninstall`), hoặc thao tác auto mode không chắc chắn, sẽ được gửi lên owner + group kèm nút ✅/⛔. Ai trong nhóm bấm trước thì quyết định. Quá 30 phút không ai bấm thì tự từ chối, agent làm cách khác. Thao tác trong danh sách `deny` (push, reset --hard, git config, …) luôn bị chặn, không hỏi.
+- **Xin quyền**: mặc định **không hỏi**. Thao tác thuộc danh sách `ask` trong `flow-settings.json` (hiện để trống) hoặc thao tác auto mode không chắc chắn bị từ chối ngay, agent tự làm cách khác hoặc ghi câu hỏi (trả lời bằng `/answer`). Muốn duyệt bằng nút ✅/⛔ trên Telegram thì bật bot với `bot.py --ask-permissions`: khi đó yêu cầu được gửi lên owner + group, ai bấm trước thì quyết định, quá 30 phút không ai bấm thì tự từ chối. Thao tác trong danh sách `deny` (push, reset --hard, git config, …) luôn bị chặn, không hỏi.
 - Bot tắt giữa chừng thì flow vẫn chạy; bật lại bot sẽ nhận lại flow đó. Riêng nút xin quyền chỉ hoạt động khi bot đang bật.
 - Lệnh `notify.py chat-id` dùng `getUpdates`, nên chỉ chạy được khi bot đang tắt.
 
@@ -195,7 +195,7 @@ Bot chặn Windows tự sleep trong lúc chạy. Muốn bot tự bật khi đăn
 - **Model không tự tuyên bố xong được.** Runner dùng bản `check_done.py` của repo chính, không dùng bản trong worktree, và tự chạy trên HEAD.
   Các cổng: spec hợp lệ · không đụng file bảo vệ (docs, schema DB baseline, tooling, core nếu không cho phép) · không xoá test · worktree sạch · toàn bộ pytest pass · **mọi TC có test gắn marker và đều pass** (skip/xfail không tính) · coverage · ruff · mypy.
 - Spec và file agent trong worktree bị sửa thì runner khôi phục và ghi cảnh báo.
-- `flow-settings.json` chặn: `git commit` và `git -c` trực tiếp (agent phải commit qua `flow_commit.py`), push/pull/merge/rebase/switch/checkout/reset --hard/stash, git config, `docker compose down`, xoá volume, web, hỏi người dùng. `pip install/uninstall` thuộc danh sách hỏi: có bot thì hỏi qua Telegram, không có bot thì tự từ chối.
+- `flow-settings.json` chặn: `git commit` và `git -c` trực tiếp (agent phải commit qua `flow_commit.py`), push/pull/merge/rebase/switch/checkout/reset --hard/stash, git config, `docker compose down`, xoá volume, web, hỏi người dùng. `pip install/uninstall` được phép chạy không cần hỏi; việc thêm thư viện vào `requirements.txt` vẫn bị cổng `protected` chặn khi spec để `allow_new_dependencies: no`.
 - `flow_commit.py` từ chối message sai `Claude_git.md` §2 (type, chữ thường, tối đa 72 ký tự, dấu chấm cuối, có `Co-Authored-By`/chữ ký AI), từ chối commit khi đang ở `main`/`develop` hoặc chưa stage gì.
 - Chế độ quyền mặc định là `auto`, kèm `--permission-prompts none`: thao tác nào cần hỏi thì bị từ chối ngay, nên flow không treo chờ người bấm.
 

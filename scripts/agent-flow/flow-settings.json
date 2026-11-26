@@ -21,9 +21,7 @@
       "PowerShell(git add *)",
       "PowerShell(git restore *)",
       "PowerShell(git rev-parse*)",
-      "PowerShell(git ls-files*)"
-    ],
-    "ask": [
+      "PowerShell(git ls-files*)",
       "Bash(pip install*)",
       "Bash(pip uninstall*)",
       "Bash(python -m pip install*)",

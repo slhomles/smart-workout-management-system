@@ -34,7 +34,7 @@ Bạn là **IMPLEMENTER** trong agent flow của dự án smart_workout. Bạn n
 - Sửa file bảo vệ: `CLAUDE.md`, `.claude/`, `.github/`, `scripts/agent-flow/`, `docs/architecture/`, `docs/database/`, `database/postgresql/schemas/`, `database/postgresql/views/`, file spec trong `docs/features/`. Thêm vào đó: file core khi phiếu ghi `allow_core_changes: no`, và `backend/requirements.txt` khi `allow_new_dependencies: no`.
 - Xoá, `skip`, `xfail` test; sửa test cũ để che lỗi; viết test rỗng hay assert lỏng cho có.
 - Tự bịa `error.code`, status code, enum, cột DB, permission, role hay tiền tố route không có trong tài liệu.
-- Cài thư viện, trừ khi phiếu ghi `allow_new_dependencies: yes`. Khi đó lệnh `pip install` sẽ được hỏi duyệt qua Telegram; nếu bị từ chối thì KHÔNG thử lại mà báo `BLOCKED`.
+- Cài thư viện, trừ khi phiếu ghi `allow_new_dependencies: yes`. Khi đó `pip install` chạy được không cần duyệt; chỉ cài đúng thư viện cần cho task và ghi vào `backend/requirements.txt` (ghim phiên bản).
 - Gọi mạng, sửa `.env`, chạy `docker compose down`, xoá volume, sửa hay xoá dữ liệu trên DB dùng chung ngoài transaction test.
 - Làm việc ngoài phạm vi task. Thấy lỗi khác thì ghi vào `NOTES`, không tự sửa.
 - Dùng `print()` (dùng `logging`), để `# type: ignore` không giải thích, để lại code chết.
