@@ -11,6 +11,7 @@ Trước khi viết hoặc sửa **bất kỳ** code, SQL, migration, test, nhá
 
 1. Xác định công việc chạm vào khu vực nào (bảng ở mục 2). Một việc có thể chạm nhiều khu vực, khi đó đọc **tất cả** file tương ứng.
 2. **Đọc toàn bộ** các file bắt buộc của khu vực đó bằng công cụ đọc file. KHÔNG dựa vào trí nhớ, phiên làm việc trước hay "quy ước phổ biến".
+   Ngoại lệ **chỉ cho agent flow** (`scripts/agent-flow/`): orchestrator đọc toàn bộ tài liệu bắt buộc **một lần** để lập bản tóm tắt quy tắc (`rules-digest.md`, mỗi ý kèm con trỏ `file §mục`) và lập lại khi tài liệu nguồn đổi. Implementer và các lần sau đọc bản tóm tắt cộng **đúng các mục** phiếu giao việc chỉ định, rồi mở mục gốc khi bản tóm tắt chưa đủ. Người và AI làm việc ngoài agent flow vẫn đọc toàn bộ.
 3. Trước khi code, nêu ngắn cho người dùng: đã đọc file nào, áp dụng quy tắc nào (ví dụ: "Theo `Claude_api_respone.md` §4: POST trả 201 + Location").
 4. Code **đúng theo** tài liệu: tên field, mã lỗi, status code, kiểu ID, đơn vị, enum, cấu trúc thư mục, tên nhánh, commit message.
 5. Trước khi báo xong, chạy lại **checklist** của các file đã đọc và nêu kết quả.
@@ -27,6 +28,7 @@ Khi tài liệu **không quy định** tình huống đang gặp, hoặc yêu c�
 
 | Công việc chạm vào | PHẢI đọc trước |
 |---|---|
+| **Viết hoặc sửa bất kỳ code Python nào** (kích thước hàm/file, thiết kế, đặt tên, lỗi, quy trình) | [docs/guides/coding-standards.md](docs/guides/coding-standards.md) (toàn bộ) |
 | **Bất kỳ endpoint/API nào** (route, schema Pydantic, response, lỗi, phân trang, header) | [docs/architecture/Claude_api_respone.md](docs/architecture/Claude_api_respone.md) · [docs/architecture/05-tooling-workflow.md](docs/architecture/05-tooling-workflow.md) §1, §2, §4, §5, §6 |
 | Đăng nhập, token, refresh, mật khẩu, role, permission, `get_current_user`, `require_permission`, thiết bị | [docs/architecture/04-auth-strategy.md](docs/architecture/04-auth-strategy.md) (toàn bộ) · [Claude_api_respone.md](docs/architecture/Claude_api_respone.md) |
 | File core: `backend/app/core/*`, `middleware/`, `schemas/base.py`, `models/enums.py`, `main.py`, `api/v1/router.py` | [05-tooling-workflow.md](docs/architecture/05-tooling-workflow.md) §7, §9.4 · [Claude_api_respone.md](docs/architecture/Claude_api_respone.md) §8 · nếu là `security.py`/`dependencies.py`: [04-auth-strategy.md](docs/architecture/04-auth-strategy.md) §8 |
