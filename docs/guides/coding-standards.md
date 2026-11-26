@@ -41,10 +41,10 @@ Vượt ngưỡng thì tách theo trách nhiệm, KHÔNG tách cơ học chỉ �
 
 ## 6. Kiểm tra bằng máy (agent flow)
 
-Cổng `standards` của `scripts/agent-flow/check_done.py` đo các ngưỡng ở mục 1 bằng thư viện chuẩn (`ast`), theo các quy ước sau:
+Cổng `standards` (`scripts/agent-flow/standards.py`, gọi từ `check_done.py`) đo các ngưỡng ở mục 1 bằng thư viện chuẩn (`ast`), theo các quy ước sau:
 
 - Chỉ xét file `.py` được **thêm hoặc sửa** từ `BASE_SHA` của module. Code cũ vượt ngưỡng (ví dụ `body_service.py` hơn 300 dòng) không bị tính cho tới khi có người sửa nó.
-- Bỏ qua `backend/alembic/versions/` và file sinh tự động.
+- Bỏ qua `backend/alembic/versions/`. Giới hạn 300 dòng mỗi file chỉ áp dụng cho code ứng dụng, không áp dụng cho file test (một file test API gom nhiều test case nên dài tự nhiên); các ngưỡng theo hàm vẫn áp dụng cho test.
 - Số tham số không tính `self`, `cls` và tham số FastAPI tiêm vào route handler (mặc định là `Depends(...)` hoặc `Security(...)`), vì endpoint luôn có `db` và `current_user`. Nhiều query parameter thì gom vào một model Pydantic.
 - Complexity là xấp xỉ McCabe: 1 + số `if`, `for`, `while`, `except`, `with`, `assert`, biểu thức điều kiện, điều kiện trong comprehension và toán tử `and`/`or`.
 - Đây là **cảnh báo**, không làm cổng trượt. Mỗi cảnh báo PHẢI được sửa, hoặc orchestrator ghi lý do chấp nhận vào `REPORT.md` trước khi duyệt.
