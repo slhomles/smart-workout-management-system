@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     def REDIS_URL(self) -> str:
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
+    # Cache permission `perm:{user_id}` (doc 04 §2.4); Redis không phải nguồn dữ liệu chính.
+    PERMISSION_CACHE_TTL_SECONDS: int = 300
+    REDIS_SOCKET_TIMEOUT_SECONDS: float = 2.0
     # --- JWT (doc 04 §3) ---
     JWT_SECRET_KEY: str = DEFAULT_JWT_SECRET
     JWT_ALGORITHM: str = "HS256"
@@ -80,6 +83,7 @@ class Settings(BaseSettings):
 
     # --- AI Services ---
     AI_SERVICE_URL: str = "http://localhost:8001"
+    AI_HEALTH_TIMEOUT_SECONDS: float = 2.0
 
     @model_validator(mode="after")
     def _check_production_safety(self) -> "Settings":
