@@ -1,14 +1,27 @@
 """
 Application configuration using pydantic-settings.
 Loads values from environment variables / .env file.
+
+Chỉ lấy cấu hình qua get_settings() (doc 05 §7.3).
 """
 
-from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_JWT_SECRET = "change-this-secret-key"
 
 
 class Settings(BaseSettings):
     """Application settings."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",
+    )
 
     # --- App ---
     APP_NAME: str = "SmartWorkoutAI"
@@ -16,6 +29,8 @@ class Settings(BaseSettings):
     APP_DEBUG: bool = True
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
+    # JSON list, vd: ["http://localhost:8081"]. "*" chỉ được phép khi APP_ENV=development.
+    CORS_ORIGINS: list[str] = ["*"]
 
     # --- PostgreSQL ---
     POSTGRES_HOST: str = "localhost"
@@ -23,6 +38,7 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = "smart_workout"
     POSTGRES_PASSWORD: str = "password"
     POSTGRES_DB: str = "smart_workout_db"
+    DB_ECHO: bool = False
 
     @property
     def DATABASE_URL(self) -> str:
@@ -31,7 +47,7 @@ class Settings(BaseSettings):
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
-    # --- MongoDB ---
+    # --- MongoDB (chưa dùng, doc 05 §7.2) ---
     MONGODB_URL: str = "mongodb://localhost:27017"
     MONGODB_DB: str = "smart_workout_docs"
 
@@ -44,11 +60,17 @@ class Settings(BaseSettings):
     def REDIS_URL(self) -> str:
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
-    # --- JWT ---
-    JWT_SECRET_KEY: str = "change-this-secret-key"
+    # --- JWT (doc 04 §3) ---
+    JWT_SECRET_KEY: str = DEFAULT_JWT_SECRET
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # --- Auth policy (doc 04 §4.2, §6.2) ---
+    REQUIRE_EMAIL_VERIFICATION: bool = False
+    LOGIN_MAX_FAILED_ATTEMPTS: int = 5
+    LOGIN_FAILURE_WINDOW_MINUTES: int = 15
+    LOGIN_LOCK_MINUTES: int = 15
 
     # --- AWS S3 ---
     AWS_ACCESS_KEY_ID: str = ""
@@ -59,10 +81,15 @@ class Settings(BaseSettings):
     # --- AI Services ---
     AI_SERVICE_URL: str = "http://localhost:8001"
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
+    @model_validator(mode="after")
+    def _check_production_safety(self) -> "Settings":
+        """Ngoài development: chặn secret mặc định/yếu và CORS '*' (doc 04 §6.4, doc 05 §7.3)."""
+        if self.APP_ENV != "development":
+            if self.JWT_SECRET_KEY == DEFAULT_JWT_SECRET or len(self.JWT_SECRET_KEY) < 32:
+                raise ValueError("JWT_SECRET_KEY phải là chuỗi ngẫu nhiên ≥ 32 ký tự ngoài môi trường development")
+            if "*" in self.CORS_ORIGINS:
+                raise ValueError("CORS_ORIGINS không được chứa '*' ngoài môi trường development")
+        return self
 
 
 @lru_cache()

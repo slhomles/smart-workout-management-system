@@ -32,7 +32,8 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
     async def get(self, db: AsyncSession, *, id: Any) -> Optional[ModelType]:
         """Lấy 1 record theo ID."""
-        result = await db.execute(select(self.model).where(self.model.id == id))
+        # Mọi model của dự án đều có cột `id`; ModelType chỉ bound tới Base nên mypy không biết.
+        result = await db.execute(select(self.model).where(self.model.id == id))  # type: ignore[attr-defined]
         return result.scalar_one_or_none()
 
     async def get_multi(
