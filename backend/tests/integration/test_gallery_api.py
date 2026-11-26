@@ -758,3 +758,78 @@ async def test_list_comparisons_invalid_params_returns_422(client, auth_headers,
     res = await client.get(COMPARISON_URL, headers=await auth_headers("demo"), params=params)
     error = _err(res, 422, "validation_error")
     assert [d["field"] for d in error["details"]] == [expected_field]
+
+
+# --- GAL-15..16: xác thực & phân quyền trên cả 4 endpoint ---
+# Mỗi lời gọi dùng body/tham số hợp lệ để lỗi chỉ có thể đến từ token/permission.
+async def _call_upload_photo(client: AsyncClient, db: AsyncSession, headers: dict) -> Response:
+    return await _upload(client, headers, {"angle": "front"}, VALID_FILE)
+
+
+async def _call_list_photos(client: AsyncClient, db: AsyncSession, headers: dict) -> Response:
+    return await client.get(URL, headers=headers)
+
+
+async def _call_create_comparison(client: AsyncClient, db: AsyncSession, headers: dict) -> Response:
+    return await _compare(client, headers, await _comparison_payload(db, "demo-w00", "demo-side", None))
+
+
+async def _call_list_comparisons(client: AsyncClient, db: AsyncSession, headers: dict) -> Response:
+    return await client.get(COMPARISON_URL, headers=headers)
+
+
+GUARDED_CALLS = [
+    ("upload_photo", _call_upload_photo),
+    ("list_photos", _call_list_photos),
+    ("create_comparison", _call_create_comparison),
+    ("list_comparisons", _call_list_comparisons),
+]
+
+
+async def _gallery_row_counts(db: AsyncSession) -> tuple[int, int, int]:
+    """Đếm toàn bảng: lời gọi bị chặn không được tạo dòng nào, của bất kỳ user nào."""
+    photos = await _scalar(db, "SELECT count(*) FROM media.progress_photos")
+    media = await _scalar(db, "SELECT count(*) FROM media.media_files")
+    return photos, media, await _comparison_count(db)
+
+
+async def _assert_guarded_call_rejected(client: AsyncClient, db: AsyncSession, case: tuple, headers: dict) -> Response:
+    """Gọi endpoint, rồi xác nhận không có dòng DB hay file nào được tạo."""
+    _, call = case
+    before = await _gallery_row_counts(db)
+    res = await call(client, db, headers)
+    assert await _gallery_row_counts(db) == before
+    assert not any(Path(get_settings().LOCAL_STORAGE_DIR).iterdir())
+    return res
+
+
+@pytest.mark.tc("GAL-15")
+@pytest.mark.usefixtures("local_storage")
+@pytest.mark.parametrize("case", GUARDED_CALLS, ids=[c[0] for c in GUARDED_CALLS])
+async def test_gallery_endpoint_without_token_returns_401_without_side_effects(client, db, case):
+    res = await _assert_guarded_call_rejected(client, db, case, {})
+    _err(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+
+
+@pytest.mark.tc("GAL-16")
+@pytest.mark.usefixtures("local_storage")
+@pytest.mark.parametrize("case", GUARDED_CALLS, ids=[c[0] for c in GUARDED_CALLS])
+async def test_gallery_endpoint_editor_without_permission_returns_403_without_side_effects(
+    client, db, auth_headers, case
+):
+    # content_editor có media:upload nhưng không có progress_photo:manage_own (seeds/01_rbac.sql).
+    res = await _assert_guarded_call_rejected(client, db, case, await auth_headers("editor"))
+    _err(res, 403, "permission_denied")
+
+
+ADMIN_LISTS = [("list_photos", _list), ("list_comparisons", _list_comparisons)]
+
+
+@pytest.mark.tc("GAL-16")
+@pytest.mark.parametrize("case", ADMIN_LISTS, ids=[c[0] for c in ADMIN_LISTS])
+async def test_gallery_list_admin_with_permission_returns_only_own_empty_data(client, auth_headers, case):
+    # Đối chứng: admin có progress_photo:manage_own nhưng không có ảnh, và không thấy ảnh của user khác.
+    _, list_endpoint = case
+    body = await list_endpoint(client, await auth_headers("admin"))
+    assert body["data"] == []
