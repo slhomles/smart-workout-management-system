@@ -80,7 +80,13 @@ Runner tự làm các việc sau:
 - khi chạm giới hạn sử dụng của tài khoản: chờ đến giờ reset (hoặc 30 phút) rồi chạy tiếp, không tính là một iteration;
 - dừng khi: xong (0), bị chặn cần bạn trả lời (2), 3 iteration liền không tiến triển (3), hết 40 iteration (4).
 
-Tuỳ chọn hay dùng: `--max-iterations 60`, `--model sonnet` (tiết kiệm hạn mức), `--iteration-timeout 7200`, `--skip-services`.
+Tuỳ chọn hay dùng: `--max-iterations 60`, `--model sonnet` (tiết kiệm hạn mức), `--iteration-timeout 3600` (mặc định 2700 giây), `--time-box-minutes 90` (mặc định 60, `0` = tắt), `--skip-services`.
+
+Mục tiêu một module xong trong khoảng 1 giờ, nhờ:
+- **Bản tóm tắt quy tắc dùng chung** (`<flow-root>/_shared/rules-digest.md`): orchestrator đọc toàn bộ tài liệu một lần rồi tóm tắt; implementer và các lần sau chỉ đọc bản tóm tắt cộng đúng các mục được chỉ định (ngoại lệ ở CLAUDE.md §1). Runner băm các tài liệu nguồn (`DIGEST_SOURCES` trong `run_flow.py`); tài liệu đổi thì brief báo "CẦN TẠO LẠI". Muốn ép lập lại thì xoá `_shared/rules-digest.sha`.
+- **Cổng nhanh chỉ chạy test của task**: `check_done.py ... --gates spec,protected,pytest,tc,ruff,standards --tests <file test>`. Toàn bộ suite chỉ chạy ở cổng của runner và cổng cuối.
+- **Task gộp lớn hơn**: 4–6 task mỗi module.
+- **Mốc thời gian**: quá `--time-box-minutes` phút chạy thật (không tính chờ hạn mức) thì runner báo Telegram một lần, flow vẫn chạy tiếp.
 
 ## 4. Theo dõi và nhận kết quả
 
@@ -195,7 +201,7 @@ Bot chặn Windows tự sleep trong lúc chạy. Muốn bot tự bật khi đăn
 ## 9. Hàng rào an toàn
 
 - **Model không tự tuyên bố xong được.** Runner dùng bản `check_done.py` của repo chính, không dùng bản trong worktree, và tự chạy trên HEAD.
-  Các cổng: spec hợp lệ · không đụng file bảo vệ (docs, schema DB baseline, tooling, core nếu không cho phép) · không xoá test · worktree sạch · toàn bộ pytest pass · **mọi TC có test gắn marker và đều pass** (skip/xfail không tính) · coverage · ruff · mypy.
+  Các cổng: spec hợp lệ · không đụng file bảo vệ (docs, schema DB baseline, tooling, core nếu không cho phép) · không xoá test · worktree sạch · toàn bộ pytest pass · **mọi TC có test gắn marker và đều pass** (skip/xfail không tính) · coverage · ruff · mypy · **standards** (cảnh báo, không làm trượt: hàm > 40 dòng, file > 300 dòng, > 4 tham số, lồng > 3, complexity > 10 ở code thêm/sửa từ BASE_SHA; xem `docs/guides/coding-standards.md` §6, mã ở `standards.py`).
   Kết quả cổng chỉ được dùng lại (`gate-runner.json`, trường `cache_key`) khi khớp **cả** HEAD, spec, base, danh sách cổng, python và nội dung `check_done.py`, **và** worktree sạch. Khác bất kỳ điểm nào, hoặc lần trước chính cổng bị lỗi, thì runner chạy lại đầy đủ. Mục đích: không tốn 10+ phút chạy lại toàn bộ pytest trên cùng một commit. Nếu lần chạy trước trượt vì môi trường (DB/Redis sập giữa chừng) thì xoá `state/gate-runner.json` để ép chạy lại.
 - Spec và file agent trong worktree bị sửa thì runner khôi phục và ghi cảnh báo.
 - `flow-settings.json` chặn: `git commit` và `git -c` trực tiếp (agent phải commit qua `flow_commit.py`), push/pull/merge/rebase/switch/checkout/reset --hard/stash, git config, `docker compose down`, xoá volume, web, hỏi người dùng. `pip install/uninstall` được phép chạy không cần hỏi; việc thêm thư viện vào `requirements.txt` vẫn bị cổng `protected` chặn khi spec để `allow_new_dependencies: no`.
