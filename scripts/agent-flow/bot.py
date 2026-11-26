@@ -6,12 +6,13 @@
 Lệnh (gửi trong group cho bot chung, hoặc nhắn riêng bot của bạn):
   /help                     hướng dẫn
   /modules                  danh sách module, owner, trạng thái
-  /run <module> [--respec]  soạn spec (nếu chưa có hoặc --respec) rồi chạy flow; mỗi lúc chạy một flow
+  /run <module> [--respec]  đưa module lên ĐẦU hàng đợi (không dừng flow đang chạy); mỗi lúc chạy một flow
   /run <module> --force     chạy lại cả module đã đánh dấu xong (status: done trong modules.json)
   /status                   flow đang chạy, hàng đợi, kết quả gần nhất
   /stop <module>            dừng flow đang chạy hoặc bỏ khỏi hàng đợi
   /answer <module> <nội dung>  trả lời câu hỏi của agent (flow đang bị chặn sẽ chạy tiếp)
   /owner <module> <thành viên> đổi người phụ trách module (key trong team.json)
+  /auto [on|off]            bật/tắt tự xếp hàng các module chưa chạy (mặc định bật)
 
 Chỉ nhận lệnh/nút bấm từ tài khoản Telegram của thành viên trong team.json.
 Nút ✅/⛔ xin quyền do perm_mcp.py gửi; bot ghi câu trả lời để agent chạy tiếp.
@@ -118,6 +119,9 @@ class Bot:
         self.updates: queue.Queue = queue.Queue()
         self.lock = threading.RLock()
         self.state = rf.read_json(self.state_file, {"queue": [], "current": None, "last": {}})
+        self.state.setdefault("auto", True)          # tự xếp hàng module chưa chạy
+        self.state.setdefault("auto_skip", [])       # module bị /stop khỏi hàng: không tự thêm lại
+        self.state.setdefault("auto_no_owner", [])   # đã báo thiếu owner cho các module này
         self.proc: subprocess.Popen | None = None
         self.spec_proc: subprocess.Popen | None = None
         self.started = time.time()
@@ -198,7 +202,7 @@ class Bot:
         handler = {
             "/start": self.cmd_help, "/help": self.cmd_help, "/modules": self.cmd_modules,
             "/run": self.cmd_run, "/status": self.cmd_status, "/stop": self.cmd_stop,
-            "/answer": self.cmd_answer, "/owner": self.cmd_owner,
+            "/answer": self.cmd_answer, "/owner": self.cmd_owner, "/auto": self.cmd_auto,
         }.get(cmd)
         if not handler:
             self.reply(token, chat_id, "Lệnh không rõ. Gõ /help để xem danh sách lệnh.")
@@ -246,19 +250,26 @@ class Bot:
             return
         with self.lock:
             cur = self.state.get("current")
-            if (cur and cur["module"] == key) or any(j["module"] == key for j in self.state["queue"]):
-                self.reply(token, chat_id, f"<code>{key}</code> đang chạy hoặc đã trong hàng đợi.")
+            if cur and cur["module"] == key:
+                self.reply(token, chat_id, f"<code>{key}</code> đang chạy rồi.")
                 return
-            self.state["queue"].append({"module": key, "by": who, "respec": respec, "resume": False})
-            pos = len(self.state["queue"]) + (1 if cur else 0)
+            # Ưu tiên lệnh của người: đưa lên ĐẦU hàng đợi, KHÔNG dừng flow đang chạy.
+            old = next((j for j in self.state["queue"] if j["module"] == key), None)
+            self.state["queue"] = [j for j in self.state["queue"] if j["module"] != key]
+            resume = bool(old and old.get("resume"))
+            self.state["queue"].insert(0, {"module": key, "by": who, "respec": respec, "resume": resume})
+            if key in self.state["auto_skip"]:
+                self.state["auto_skip"].remove(key)
+            pos = 1 + (1 if cur else 0)
             self.save()
         warn = ""
         core_last = self.state["last"].get("core")
         core_done = is_done(load_modules()["modules"].get("core", {})) or (core_last and core_last["code"] == 0)
         if key != "core" and not core_done:
             warn = "\n⚠️ Module <code>core</code> chưa xong; flow có thể bị chặn vì thiếu phần nền."
+        after = f" (chạy ngay sau <b>[{esc(cur['module'])}]</b> đang chạy)" if cur else ""
         self.announce(entry["owner"], f"📥 {esc(self.name(who))} yêu cầu chạy <b>[{key}]</b> "
-                      f"({esc(entry['title'])}). Vị trí hàng đợi: {pos}.{warn}")
+                      f"({esc(entry['title'])}). Đã đưa lên đầu hàng đợi, vị trí {pos}{after}.{warn}")
 
     def cmd_status(self, token, chat_id, who, args) -> None:
         with self.lock:
@@ -282,7 +293,9 @@ class Bot:
                     lines.append(f"   🔐 đang chờ duyệt {len(pending)} yêu cầu quyền")
         else:
             lines.append("Không có flow nào đang chạy.")
-        lines.append("Hàng đợi: " + (", ".join(j["module"] for j in q) if q else "trống"))
+        lines.append("Hàng đợi: " + (", ".join(j["module"] + (" (tự động)" if j.get("by") == "auto" else "")
+                                              for j in q) if q else "trống"))
+        lines.append(f"Tự xếp hàng: {'bật' if self.state.get('auto') else 'tắt'}")
         if last:
             lines.append("Gần nhất:")
             lines += [f"• {k}: {EXIT_TEXT.get(v['code'], v['code'])} ({v['at']})" for k, v in last.items()]
@@ -297,6 +310,8 @@ class Bot:
             before = len(self.state["queue"])
             self.state["queue"] = [j for j in self.state["queue"] if j["module"] != key]
             if len(self.state["queue"]) != before:
+                if key not in self.state["auto_skip"]:
+                    self.state["auto_skip"].append(key)
                 self.save()
                 self.announce(owner, f"🗑 {esc(self.name(who))} đã bỏ <b>[{key}]</b> khỏi hàng đợi.")
                 return
@@ -333,11 +348,60 @@ class Bot:
             cur = self.state.get("current")
             busy = (cur and cur["module"] == key) or any(j["module"] == key for j in self.state["queue"])
             if last and last["code"] == 2 and not busy:
-                self.state["queue"].append({"module": key, "by": who, "respec": False, "resume": True})
+                self.state["queue"].insert(0, {"module": key, "by": who, "respec": False, "resume": True})
                 self.save()
-                resumed = "\n▶️ Flow đang bị chặn nên đã được xếp hàng chạy tiếp."
+                resumed = "\n▶️ Flow đang bị chặn nên đã được đưa lên đầu hàng đợi để chạy tiếp."
         self.announce(owner, f"💬 {esc(self.name(who))} trả lời <b>[{key}]</b>:\n{esc(args[1].strip()[:1500])}"
                       f"{resumed}")
+
+    def cmd_auto(self, token, chat_id, who, args) -> None:
+        arg = (args[0].strip().lower() if args else "")
+        if arg in ("on", "off"):
+            with self.lock:
+                self.state["auto"] = arg == "on"
+                self.save()
+            self.announce(None, f"🤖 {esc(self.name(who))} đã {'BẬT' if arg == 'on' else 'TẮT'} tự xếp hàng module.")
+            return
+        with self.lock:
+            on, skip = self.state["auto"], list(self.state["auto_skip"])
+        self.reply(token, chat_id, f"Tự xếp hàng: <b>{'bật' if on else 'tắt'}</b>. "
+                   f"Đổi bằng <code>/auto on</code> / <code>/auto off</code>."
+                   + (f"\nKhông tự thêm (đã /stop): {', '.join(skip)}" if skip else ""))
+
+    def auto_fill(self) -> None:
+        """Thêm vào CUỐI hàng đợi các module chưa xong, có owner, chưa từng chạy (theo thứ tự modules.json).
+
+        Module đã chạy mà lỗi/kẹt/bị chặn không tự chạy lại (tránh vòng lặp tốn hạn mức): cần /run hoặc /answer.
+        """
+        modules = load_modules()["modules"]
+        members = self.cfg.get("members") or {}
+        added, no_owner = [], []
+        with self.lock:
+            if not self.state["auto"]:
+                return
+            cur = self.state.get("current")
+            busy = {j["module"] for j in self.state["queue"]} | ({cur["module"]} if cur else set())
+            for key, entry in modules.items():
+                if (is_done(entry) or key in busy or key in self.state["last"]
+                        or key in self.state["auto_skip"]):
+                    continue
+                if not entry.get("owner") or entry["owner"] not in members:
+                    no_owner.append(key)
+                    continue
+                self.state["queue"].append({"module": key, "by": "auto", "respec": False, "resume": False})
+                added.append(key)
+            new_no_owner = sorted(no_owner) != sorted(self.state["auto_no_owner"])
+            self.state["auto_no_owner"] = no_owner
+            if added or new_no_owner:
+                self.save()
+        if added:
+            self.announce(None, "🤖 Tự xếp hàng: " + ", ".join(f"<b>[{k}]</b>" for k in added)
+                          + ". Gõ <code>/run &lt;module&gt;</code> để đưa module lên đầu, "
+                          "<code>/stop &lt;module&gt;</code> để bỏ, <code>/auto off</code> để tắt.")
+        if new_no_owner and no_owner:
+            self.announce(None, "⚠️ Chưa có owner nên chưa tự xếp hàng: "
+                          + ", ".join(f"<code>{k}</code>" for k in no_owner)
+                          + ". Gán bằng <code>/owner &lt;module&gt; &lt;thành viên&gt;</code>.")
 
     def cmd_owner(self, token, chat_id, who, args) -> None:
         key = self.module_arg(token, chat_id, args)
@@ -384,6 +448,7 @@ class Bot:
 
     # ------------------------------------------------------------------ chạy job
     def scheduler_tick(self) -> None:
+        self.auto_fill()
         with self.lock:
             if self.state.get("current") or not self.state["queue"]:
                 return

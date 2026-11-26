@@ -175,8 +175,9 @@ Bot chặn Windows tự sleep trong lúc chạy. Muốn bot tự bật khi đăn
 
 | Lệnh | Việc |
 |---|---|
-| `/run <module>` | Nếu chưa có spec: agent `spec-writer` soạn `docs/features/<module>.md` từ Mô tả dự án + doc 05 + tài liệu DB. Bot kiểm tra spec (cấu trúc, owner, `error.code` phải có trong §10), gửi bảng test case lên Telegram, rồi **chạy luôn** flow (nhóm đã chọn không cần duyệt spec) |
+| `/run <module>` | Đưa module lên **đầu** hàng đợi (đã có trong hàng thì chuyển lên đầu); **không** dừng flow đang chạy. Nếu chưa có spec: agent `spec-writer` soạn `docs/features/<module>.md` từ Mô tả dự án + doc 05 + tài liệu DB. Bot kiểm tra spec (cấu trúc, owner, `error.code` phải có trong §10), gửi bảng test case lên Telegram, rồi **chạy luôn** flow (nhóm đã chọn không cần duyệt spec) |
 | `/run <module> --respec` | Soạn lại spec rồi chạy |
+| `/auto [on\|off]` | Bật/tắt **tự xếp hàng** (mặc định bật): khi rảnh, bot tự thêm vào cuối hàng đợi các module chưa xong, có owner, chưa từng chạy, theo thứ tự `modules.json`. Module đã chạy mà lỗi/kẹt/bị chặn không tự chạy lại. `/stop` một module đang xếp hàng thì bot không tự thêm lại nó |
 | `/run <module> --force` | Chạy lại module đã đánh dấu `"status": "done"` trong `modules.json`. Không có `--force` thì bot từ chối để tránh làm trùng việc đã xong (vd `core` đã làm tay qua PR #2, #3) |
 | `/status` | Flow đang chạy (iteration, TC pass, task, yêu cầu quyền đang chờ), hàng đợi, kết quả gần nhất |
 | `/stop <module>` | Dừng flow đang chạy hoặc bỏ khỏi hàng đợi. `/run` lại sẽ tiếp tục từ chỗ dừng |
