@@ -49,11 +49,30 @@ LIMIT_RE = re.compile(
 )
 RESET_EPOCH_RE = re.compile(r"limit reached\|(\d{10})")
 
+# Kiểm tra PostgreSQL và Redis RIÊNG từng cái, in JSON {"postgres": {...}, "redis": {...}} với
+# "kind" phân loại lỗi, để preflight báo đúng thành phần hỏng và cách sửa (không đoán chung chung).
 DB_PROBE = r"""
-import asyncio, os
+import asyncio, json, os, socket
 import asyncpg, redis
 
-async def main():
+def classify(exc):
+    text = str(exc).lower()
+    if isinstance(exc, asyncpg.InvalidPasswordError) or "password authentication failed" in text:
+        return "auth"
+    if isinstance(exc, asyncpg.InvalidCatalogNameError) or ("database" in text and "does not exist" in text):
+        return "db_missing"
+    if isinstance(exc, socket.gaierror) or "getaddrinfo" in text or "name or service not known" in text:
+        return "dns"
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)) or "timeout" in text or "timed out" in text:
+        return "timeout"
+    if isinstance(exc, ConnectionRefusedError) or "refused" in text or "10061" in text:
+        return "refused"
+    return "other"
+
+def failed(exc):
+    return {"ok": False, "kind": classify(exc), "detail": f"{type(exc).__name__}: {exc}"[:200]}
+
+async def pg():
     conn = await asyncpg.connect(
         host=os.environ["FLOW_PGH"], port=int(os.environ["FLOW_PGP"]),
         user=os.environ["FLOW_PGU"], password=os.environ["FLOW_PGW"],
@@ -61,10 +80,68 @@ async def main():
     await conn.execute("SELECT 1")
     await conn.close()
 
-asyncio.run(main())
-redis.Redis(host=os.environ["FLOW_RH"], port=int(os.environ["FLOW_RP"]), socket_timeout=5).ping()
-print("ok")
+out = {}
+try:
+    asyncio.run(pg())
+    out["postgres"] = {"ok": True}
+except Exception as exc:
+    out["postgres"] = failed(exc)
+try:
+    redis.Redis(host=os.environ["FLOW_RH"], port=int(os.environ["FLOW_RP"]),
+                socket_timeout=5, socket_connect_timeout=5).ping()
+    out["redis"] = {"ok": True}
+except Exception as exc:
+    out["redis"] = failed(exc)
+print(json.dumps(out))
 """
+
+LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def explain_service_failure(name: str, status: dict, env: dict, env_vals: dict) -> str:
+    """Một dòng cho người đọc trên Telegram: thành phần nào hỏng, vì sao, và người cần làm gì."""
+    if name == "postgres":
+        label, host_var, host, port = "PostgreSQL", "POSTGRES_HOST", env["FLOW_PGH"], env["FLOW_PGP"]
+        other_host = env["FLOW_RH"]
+    else:
+        label, host_var, host, port = "Redis", "REDIS_HOST", env["FLOW_RH"], env["FLOW_RP"]
+        other_host = env["FLOW_PGH"]
+    kind, detail = status.get("kind", "other"), status.get("detail", "")
+    vm_host = other_host if other_host not in LOCAL_HOSTS else "<IP Tailscale của VM team-stack>"
+    where = f"{label} {host}:{port}"
+
+    if kind == "refused" and host in LOCAL_HOSTS:
+        if host_var not in env_vals:
+            cause = (f"backend/.env không có dòng {host_var} nên dùng mặc định localhost, "
+                     f"nhưng máy chạy bot không có {label} local")
+        else:
+            cause = f"backend/.env đặt {host_var}={host} nhưng máy chạy bot không có {label} local"
+        fix = (f"thêm/sửa dòng `{host_var}={vm_host}` trong backend/.env của máy chạy bot "
+               "(dịch vụ chạy trên VM team-stack, doc 05 §8.2) rồi /run lại")
+    elif kind == "refused":
+        cause = (f"tới được máy {host} nhưng cổng {port} từ chối kết nối, tức dịch vụ {label} trên VM "
+                 "đang tắt hoặc không mở cổng này")
+        fix = (f"người quản lý VM (repo team-stack) kiểm tra container {label} bằng `docker ps` trên VM; "
+               f"nếu {label} đã chuyển cổng thì sửa cổng trong backend/.env")
+    elif kind == "timeout":
+        cause = f"không có phản hồi từ {host}:{port} sau 5 giây"
+        fix = ("trên máy chạy bot: mở Tailscale, kiểm tra trạng thái Connected và `tailscale status` thấy "
+               "máy team-stack; nếu Tailscale ổn thì báo người quản lý VM kiểm tra VM có đang bật không")
+    elif kind == "dns":
+        cause = f"không phân giải được tên máy '{host}' ({host_var} trong backend/.env)"
+        fix = f"sửa {host_var} trong backend/.env thành địa chỉ IP Tailscale của VM ({vm_host})"
+    elif kind == "auth":
+        cause = (f"{label} từ chối đăng nhập user '{env['FLOW_PGU']}': sai POSTGRES_USER hoặc "
+                 "POSTGRES_PASSWORD trong backend/.env (hoặc mật khẩu trên server đã bị đổi)")
+        fix = ("lấy mật khẩu đúng từ người tạo DB rồi sửa backend/.env trên máy chạy bot; "
+               "KHÔNG gửi mật khẩu qua Telegram")
+    elif kind == "db_missing":
+        cause = f"database '{env['FLOW_PGD']}' không tồn tại trên {host}"
+        fix = "sửa POSTGRES_DB trong backend/.env (DB của dự án là smart_workout_db)"
+    else:
+        cause = "lỗi không xác định"
+        fix = "gửi nguyên thông báo này cho người phụ trách hạ tầng"
+    return f"{where}: {cause}. Cần làm: {fix}. (chi tiết kỹ thuật: {detail})"
 
 SMOKE_PROMPT = """ĐÂY LÀ SMOKE TEST cho agent flow. KHÔNG làm quy trình iteration, KHÔNG sửa file nào.
 1. Cho biết tên agent của bạn và danh sách tool bạn đang có.
@@ -460,30 +537,45 @@ class Flow:
             "FLOW_RP": env_vals.get("REDIS_PORT", "6379"),
         })
 
-        def probe():
-            return run([str(self.python), "-c", DB_PROBE], cwd=REPO, env=env, timeout=60)
+        def probe() -> tuple[dict | None, str]:
+            result = run([str(self.python), "-c", DB_PROBE], cwd=REPO, env=env, timeout=60)
+            try:
+                return json.loads(result.stdout.strip().splitlines()[-1]), ""
+            except (ValueError, IndexError):
+                return None, (result.stderr or result.stdout).strip()[-400:]
 
-        result = probe()
-        if result.returncode == 0:
+        def problems(status: dict) -> list[str]:
+            return [explain_service_failure(name, status[name], env, env_vals)
+                    for name in ("postgres", "redis") if not status[name]["ok"]]
+
+        status, crash = probe()
+        if status is None:
+            return [f"script kiểm tra kết nối không chạy được trong {self.python}: {crash}. "
+                    "Cách sửa: cài lại thư viện của venv (`backend\\.venv\\Scripts\\python -m pip install "
+                    "-r backend\\requirements.txt`) rồi /run lại."]
+        errors = problems(status)
+        if not errors:
             return []
         local_hosts = {"localhost", "127.0.0.1", "::1"}
         if env["FLOW_PGH"] not in local_hosts or env["FLOW_RH"] not in local_hosts:
             # Doc 05 §8.2: DB/Redis chạy trên VM team-stack; KHÔNG tự bật Docker local thay thế
-            return [f"không kết nối được PostgreSQL {env['FLOW_PGH']}:{env['FLOW_PGP']} / Redis "
-                    f"{env['FLOW_RH']}:{env['FLOW_RP']} (Tailscale đã bật chưa? mật khẩu trong backend/.env?): "
-                    f"{result.stderr.strip()[-400:]}"]
+            return errors
         if shutil.which("docker"):
             log("PostgreSQL/Redis chưa sẵn sàng -> docker compose up -d postgres redis")
             up = run(["docker", "compose", "up", "-d", "postgres", "redis"], cwd=REPO, timeout=600)
             if up.returncode != 0:
-                return [f"docker compose up lỗi (Docker Desktop đã chạy chưa?): {up.stderr.strip()[-400:]}"]
+                return [f"`docker compose up -d postgres redis` lỗi: {up.stderr.strip()[-300:]}. "
+                        "Cách sửa: mở Docker Desktop, đợi trạng thái 'Engine running' rồi /run lại; hoặc sửa "
+                        "POSTGRES_HOST/REDIS_HOST trong backend/.env trỏ tới VM team-stack (doc 05 §8.2)."]
             deadline = time.time() + 300
             while time.time() < deadline:
                 time.sleep(5)
-                result = probe()
-                if result.returncode == 0:
+                status, crash = probe()
+                if status is not None and not problems(status):
                     return []
-        return [f"không kết nối được PostgreSQL/Redis theo backend/.env: {result.stderr.strip()[-400:]}"]
+            if status is not None:
+                return problems(status)
+        return errors
 
     # ----------------------------------------------------------- worktree
     def setup_worktree(self) -> None:
@@ -915,8 +1007,9 @@ def main() -> int:
             for e in errors:
                 log(f"PREFLIGHT: {e}")
             if not args.preflight_only:
+                # Giữ đủ dài để phần "Cần làm" không bị cắt (Telegram cho tối đa 4096 ký tự/tin).
                 flow.notify(f"❌ {flow.tag()} không khởi động được, môi trường chưa sẵn sàng:\n"
-                            + "\n".join(f"• {esc(e[:300])}" for e in errors))
+                            + "\n".join(f"• {esc(e[:900])}" for e in errors))
             return EXIT_PREFLIGHT
         log("preflight OK")
         if args.preflight_only:
