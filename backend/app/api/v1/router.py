@@ -5,13 +5,14 @@ Mỗi module chỉ thêm đúng 1 dòng include_router, theo thứ tự bảng c
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, body, dashboard, health, reports, workout_sessions
+from app.api.v1.endpoints import auth, body, dashboard, gallery, health, reports, workout_sessions
 
 api_v1_router = APIRouter()
 
 api_v1_router.include_router(auth.router)
 api_v1_router.include_router(body.router)
 api_v1_router.include_router(dashboard.router)
+api_v1_router.include_router(gallery.router)
 api_v1_router.include_router(health.router)
 api_v1_router.include_router(reports.router)
 api_v1_router.include_router(workout_sessions.router)
