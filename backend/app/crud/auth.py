@@ -3,12 +3,12 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import cast, func, select, text, update
+from sqlalchemy import cast, func, literal, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import LoginAttempt, RefreshToken, Role, User, UserDevice, UserProfile
-from app.models.enums import LoginFailureReason, RoleCode, TokenRevokeReason
+from app.models.enums import LoginFailureReason, RoleCode, TokenRevokeReason, UserStatus
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
@@ -124,3 +124,36 @@ async def revoke_user_tokens(db: AsyncSession, user_id: uuid.UUID, reason: Token
         .values(revoked_at=func.now(), revoke_reason=reason)
     )
     return result.rowcount
+
+
+def _user_with_profile_query():
+    # LEFT JOIN: user thiếu `user_profiles` vẫn được trả về, phần hồ sơ là None.
+    return (
+        select(User, UserProfile)
+        .outerjoin(UserProfile, UserProfile.user_id == User.id)
+        .where(User.deleted_at.is_(None))
+    )
+
+
+async def list_users_with_profiles(
+    db: AsyncSession,
+    *,
+    status: UserStatus | None,
+    after: tuple[datetime, uuid.UUID] | None,
+    limit: int,
+) -> list[tuple[User, UserProfile | None]]:
+    """User chưa xoá kèm hồ sơ, sắp xếp `(created_at DESC, id DESC)`, bắt đầu sau vị trí keyset `after`."""
+    stmt = _user_with_profile_query()
+    if status is not None:
+        stmt = stmt.where(User.status == status)
+    if after is not None:
+        # So sánh cả cặp (created_at, id) vì nhiều user có thể trùng created_at.
+        stmt = stmt.where(tuple_(User.created_at, User.id) < tuple_(literal(after[0]), literal(after[1])))
+    stmt = stmt.order_by(User.created_at.desc(), User.id.desc()).limit(limit)
+    return [(user, profile) for user, profile in (await db.execute(stmt)).tuples()]
+
+
+async def get_user_with_profile(db: AsyncSession, user_id: uuid.UUID) -> tuple[User, UserProfile | None] | None:
+    """User chưa xoá kèm hồ sơ (hồ sơ None nếu chưa có); None nếu không có user hoặc user đã xoá mềm."""
+    row = (await db.execute(_user_with_profile_query().where(User.id == user_id))).tuples().first()
+    return None if row is None else (row[0], row[1])
