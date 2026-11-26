@@ -35,6 +35,7 @@ sys.path.insert(0, str(HERE))
 import check_done  # noqa: E402
 import notify  # noqa: E402
 import team  # noqa: E402
+import usage  # noqa: E402
 from notify import esc  # noqa: E402
 
 AGENT_FILES = [".claude/agents/orchestrator.md", ".claude/agents/implementer.md",
@@ -306,7 +307,7 @@ def call_claude(args, prompt: str, cwd: Path, add_dirs: list[Path], log_prefix: 
         "--agent", "orchestrator",
         "--permission-mode", args.permission_mode,
         "--settings", str(SETTINGS),
-        "--output-format", "json",
+        "--output-format", "stream-json", "--verbose",  # stream-json mới có rate_limit_event (hạn mức)
     ]
     env = dict(os.environ)
     if perm_config:  # hỏi quyền qua Telegram; quá hạn thì perm_mcp tự từ chối
@@ -333,27 +334,21 @@ def call_claude(args, prompt: str, cwd: Path, add_dirs: list[Path], log_prefix: 
     if log_prefix:
         log_prefix.with_suffix(".out.json").write_text(out or "", encoding="utf-8")
         log_prefix.with_suffix(".err.txt").write_text(err or "", encoding="utf-8")
-    data = None
-    for line in reversed((out or "").strip().splitlines()):
-        try:
-            data = json.loads(line)
-            break
-        except ValueError:
-            continue
-    if data is None:
-        try:
-            data = json.loads(out)
-        except (ValueError, TypeError):
-            data = None
-    is_error = timed_out or proc.returncode != 0 or data is None or bool(data.get("is_error"))
+    data, rate_limit = usage.parse_stream(out or "")
+    is_error = timed_out or proc.returncode != 0 or not data or bool(data.get("is_error"))
     text = (out or "") + "\n" + (err or "")
+    # Chỉ xét lỗi + câu trả lời cuối: stream-json luôn có dòng rate_limit_event, khớp nhầm LIMIT_RE.
+    limit_text = (err or "") + "\n" + str(data.get("result", ""))
+    rejected = any(w.get("status") == "rejected" for w in usage.windows(rate_limit).values())
     return {
         "rc": proc.returncode,
         "timed_out": timed_out,
-        "data": data or {},
+        "data": data,
         "is_error": is_error,
-        "is_limit": is_error and not timed_out and bool(LIMIT_RE.search(text)),
+        "is_limit": is_error and not timed_out and (rejected or bool(LIMIT_RE.search(limit_text))),
         "text": text,
+        "rate_limit": rate_limit,
+        "tokens": usage.tokens_of(data),
     }
 
 
@@ -378,6 +373,7 @@ class Flow:
         self.spec = check_done.parse_spec(self.spec_src)
         self.module = self.spec.get("module") or "unknown"
         root = Path(args.flow_root) if args.flow_root else REPO.parent / f"{REPO.name}-flow"
+        self.quota_file = root / "quota-alerts.json"  # mốc hạn mức đã báo, dùng chung mọi module
         self.mod_dir = root / self.module
         self.wt = self.mod_dir / "repo"
         self.state_dir = self.mod_dir / "state"
@@ -474,6 +470,9 @@ class Flow:
             lines += [f"• <code>{esc(c)}</code>" for c in commits.splitlines()[:10]]
         if state.get("questions"):
             lines.append(f"Câu hỏi đang chờ bạn: {len(state['questions'])}")
+        lines.append(f"Token: iteration này {usage.format_tokens(p.get('tokens'))} · "
+                     f"cả flow {usage.format_tokens(self.run_info.get('usage_total'))}")
+        lines.append(usage.format_quota(self.run_info.get("rate_limit")))
         if p["error"]:
             lines.append("Iteration lỗi" + (" (quá thời gian)" if p["timed_out"] else "")
                          + f", xem <code>{esc(self.logs)}</code>")
@@ -830,8 +829,10 @@ class Flow:
                 "i": i, "started": started, "ended": now(), "rc": res["rc"],
                 "timed_out": res["timed_out"], "is_error": res["is_error"],
                 "cost_usd": data.get("total_cost_usd"), "turns": data.get("num_turns"),
+                "tokens": res["tokens"], "rate_limit": res["rate_limit"],
                 "result": str(data.get("result", ""))[:500],
             })
+            self.track_usage(res)
 
             if res["is_limit"]:
                 i -= 1
@@ -839,6 +840,10 @@ class Flow:
                 if limit_waits > args.max_limit_waits:
                     return self.finish(EXIT_ERROR, "Chạm giới hạn sử dụng quá nhiều lần", gate)
                 wait = limit_wait_seconds(res["text"], args.limit_wait)
+                resets = [int(w["resetsAt"]) for w in usage.windows(res["rate_limit"]).values()
+                          if w.get("status") == "rejected" and w.get("resetsAt")]
+                if resets:  # chờ đúng tới giờ reset của cửa sổ đang chặn
+                    wait = max(60, max(resets) - int(time.time()) + 60)
                 log(f"chạm giới hạn sử dụng, chờ {wait // 60} phút rồi chạy lại")
                 resume_at = (dt.datetime.now() + dt.timedelta(seconds=wait)).strftime("%H:%M")
                 self.notify(f"⏸ {self.tag()} chạm giới hạn sử dụng của tài khoản, "
@@ -862,7 +867,8 @@ class Flow:
             minutes = round((dt.datetime.now()
                              - dt.datetime.strptime(started, "%Y-%m-%d %H:%M:%S")).total_seconds() / 60)
             pending = {"i": i, "minutes": minutes, "error": res["is_error"],
-                       "timed_out": res["timed_out"], "result": str(data.get("result", "")).strip()}
+                       "timed_out": res["timed_out"], "result": str(data.get("result", "")).strip(),
+                       "tokens": res["tokens"]}
 
             current = git(self.wt, "rev-parse", "--abbrev-ref", "HEAD")
             if current != self.spec["branch"]:
@@ -888,6 +894,21 @@ class Flow:
                    "chỉ được commit qua flow_commit.py")
             self.warnings.append(msg)
             log(f"CẢNH BÁO: {msg}")
+
+    def track_usage(self, res: dict) -> None:
+        """Cộng token vào run.json, lưu hạn mức mới nhất, cảnh báo khi hạn mức vượt 80/90/95%."""
+        self.run_info["usage_total"] = usage.add(self.run_info.get("usage_total"), res["tokens"])
+        info = res.get("rate_limit")
+        if not info:
+            return
+        self.run_info["rate_limit"] = info
+        self.run_info["rate_limit_at"] = now()
+        alerted = read_json(self.quota_file, {"tags": []})
+        for key, level, tag in usage.new_alerts(info, alerted["tags"]):
+            alerted["tags"].append(tag)
+            self.notify(f"{self.tag()} {usage.format_alert(info, key, level)}")
+        alerted["tags"] = alerted["tags"][-50:]
+        write_json(self.quota_file, alerted)
 
     def save_run(self, i: int) -> None:
         self.run_info["iterations_done"] = i
@@ -941,7 +962,9 @@ class Flow:
                f"Nhánh <code>{esc(self.spec['branch'])}</code> · "
                f"{len(commits.splitlines()) if commits else 0} commit · "
                f"{self.run_info.get('iterations_done', 0)} iteration",
-               f"Test case: {esc(tc_line)}"]
+               f"Test case: {esc(tc_line)}",
+               f"Token cả flow: {usage.format_tokens(self.run_info.get('usage_total'))}",
+               usage.format_quota(self.run_info.get("rate_limit"))]
         if gate_line:
             msg.append(f"Cổng: {esc(gate_line[0])}")
         if questions:

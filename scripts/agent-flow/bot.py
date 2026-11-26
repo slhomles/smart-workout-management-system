@@ -41,6 +41,7 @@ import check_done  # noqa: E402
 import notify  # noqa: E402
 import run_flow as rf  # noqa: E402
 import team  # noqa: E402
+import usage  # noqa: E402
 from notify import _call, esc  # noqa: E402
 
 MODULES_FILE = HERE / "modules.json"
@@ -293,6 +294,7 @@ class Bot:
                     lines.append(f"   🔐 đang chờ duyệt {len(pending)} yêu cầu quyền")
         else:
             lines.append("Không có flow nào đang chạy.")
+        lines += self.usage_lines(cur)
         lines.append("Hàng đợi: " + (", ".join(j["module"] + (" (tự động)" if j.get("by") == "auto" else "")
                                               for j in q) if q else "trống"))
         lines.append(f"Tự xếp hàng: {'bật' if self.state.get('auto') else 'tắt'}")
@@ -300,6 +302,20 @@ class Bot:
             lines.append("Gần nhất:")
             lines += [f"• {k}: {EXIT_TEXT.get(v['code'], v['code'])} ({v['at']})" for k, v in last.items()]
         self.reply(token, chat_id, "\n".join(lines))
+
+    def usage_lines(self, cur: dict | None) -> list[str]:
+        """Token flow đang chạy đã dùng (spec + iteration) và hạn mức Claude còn lại."""
+        lines, info = [], None
+        if cur:
+            mdir = self.root / cur["module"]
+            spent = usage.summarize_logs(sorted(mdir.glob("spec-writer-*.log"))
+                                         + sorted((mdir / "logs").glob("iter-*.out.json")))
+            lines.append(f"   token đã dùng: {usage.format_tokens(spent)}")
+            info = rf.read_json(mdir / "state" / "run.json", {}).get("rate_limit")
+        if info is None:  # không có flow chạy hoặc chưa có số liệu: hỏi trực tiếp (cache 10 phút)
+            info = usage.probe_quota(rf.find_claude())
+        lines.append(usage.format_quota(info))
+        return lines
 
     def cmd_stop(self, token, chat_id, who, args) -> None:
         key = self.module_arg(token, chat_id, args)
