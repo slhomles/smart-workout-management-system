@@ -1,6 +1,8 @@
 """Endpoint /auth (doc 04 §4). Chỉ nhận request, gọi service, trả kết quả."""
 
-from fastapi import APIRouter, Depends, Request
+from typing import Any
+
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -12,6 +14,8 @@ from app.schemas.auth import (
     LogoutResponse,
     MeResponse,
     RefreshRequest,
+    RegisterRequest,
+    RegisterResponse,
     TokenPairResponse,
 )
 from app.schemas.base import ERROR_RESPONSES, ErrorResponse
@@ -26,11 +30,36 @@ LOGIN_RESPONSES = {
     423: {"model": ErrorResponse, "description": "account_locked (details: retry_after_seconds)"},
 }
 
+REGISTER_RESPONSES: dict[int | str, dict[str, Any]] = {
+    409: {"model": ErrorResponse, "description": "email_already_exists"},
+    422: {
+        "model": ErrorResponse,
+        "description": "validation_error (mật khẩu không đạt chính sách, email sai định dạng, field lạ)",
+    },
+}
+
 
 def _client(request: Request) -> tuple[str | None, str | None]:
     ip = request.client.host if request.client else None
     user_agent = (request.headers.get("user-agent") or "")[:500] or None
     return ip, user_agent
+
+
+@router.post(
+    "/register",
+    response_model=RegisterResponse,
+    status_code=201,
+    responses=REGISTER_RESPONSES,
+    summary="Đăng ký tài khoản bằng email và mật khẩu",
+    description=(
+        "Quyền: **công khai**. Tạo tài khoản, hồ sơ và role `user` trong một transaction; không trả token. "
+        "Mật khẩu 8–72 byte UTF-8, có chữ cái và chữ số. Email trùng tài khoản chưa xoá → 409 `email_already_exists`."
+    ),
+)
+async def register(body: RegisterRequest, response: Response, db: AsyncSession = Depends(get_db)) -> RegisterResponse:
+    result = await auth_service.register(db, body)
+    response.headers["Location"] = f"/api/v1/users/{result.id}"
+    return result
 
 
 @router.post(

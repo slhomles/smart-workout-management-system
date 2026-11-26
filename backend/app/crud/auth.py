@@ -7,8 +7,8 @@ from sqlalchemy import cast, func, select, update
 from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.auth import LoginAttempt, RefreshToken, User, UserDevice, UserProfile
-from app.models.enums import LoginFailureReason, TokenRevokeReason
+from app.models.auth import LoginAttempt, RefreshToken, Role, User, UserDevice, UserProfile
+from app.models.enums import LoginFailureReason, RoleCode, TokenRevokeReason
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
@@ -24,6 +24,11 @@ async def get_user(db: AsyncSession, user_id: uuid.UUID) -> User | None:
 
 async def get_profile(db: AsyncSession, user_id: uuid.UUID) -> UserProfile | None:
     return await db.get(UserProfile, user_id)
+
+
+async def get_role_id(db: AsyncSession, code: RoleCode) -> int | None:
+    """Id của role theo `auth.roles.code` (seed 01_rbac.sql); None nếu chưa seed."""
+    return await db.scalar(select(Role.id).where(Role.code == code.value))
 
 
 async def add_login_attempt(

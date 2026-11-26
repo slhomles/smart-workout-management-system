@@ -5,10 +5,13 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import func, select, text
+from sqlalchemy import cast, func, select, text
+from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.auth import LoginAttempt, RefreshToken, User, UserDevice
+from app.core.security import verify_password
+from app.crud import auth as auth_crud
+from app.models.auth import LoginAttempt, RefreshToken, Role, User, UserDevice, UserProfile, UserRole
 from app.models.enums import TokenRevokeReason
 from tests.conftest import SEED_PASSWORD, persona_id
 
@@ -461,3 +464,235 @@ async def test_me_demo_trainer_editor_returns_profile_roles_and_permissions(clie
     assert editor_body["roles"] == ["content_editor"]
     assert "exercise:create" in editor_body["permissions"]
     assert "workout:manage_own" not in editor_body["permissions"]
+
+
+# ---------------------------------------------------------------------------
+# AUTH-01, AUTH-02, AUTH-03: POST /auth/register (spec docs/features/auth-users.md §5)
+# ---------------------------------------------------------------------------
+
+REGISTER = "/api/v1/auth/register"
+DELETED_ID = persona_id(14)
+REGISTER_KEYS = {"id", "email", "display_name", "full_name", "roles", "status"}
+
+
+def _register_body(**overrides) -> dict:
+    body = {
+        "email": "moi.user@example.com",
+        "password": "Moi@12345",
+        "display_name": "Mới",
+        "full_name": "Người Mới",
+    }
+    body.update(overrides)
+    return body
+
+
+async def _count_users(db: AsyncSession, email: str | None = None) -> int:
+    """Đếm `auth.users` (kể cả đã xoá mềm); có `email` thì lọc theo email (citext, không phân biệt hoa thường)."""
+    query = select(func.count()).select_from(User)
+    if email is not None:
+        query = query.where(User.email == cast(email, CITEXT))
+    return await db.scalar(query) or 0
+
+
+@pytest.mark.tc("AUTH-01")
+@pytest.mark.parametrize(
+    "email",
+    ["moi.user@example.com", "deleted@smartworkout.local"],
+    ids=["a_new_email", "b_soft_deleted_email"],
+)
+async def test_register_valid_body_returns_201_and_creates_user_profile_role(
+    client: AsyncClient, db: AsyncSession, email: str
+):
+    payload = _register_body(email=email)
+
+    res = await client.post(REGISTER, json=payload)
+
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert set(body) == REGISTER_KEYS
+    user_id = uuid.UUID(body["id"])
+    assert res.headers["Location"] == f"/api/v1/users/{body['id']}"
+    assert body["email"] == email
+    assert body["display_name"] == "Mới"
+    assert body["full_name"] == "Người Mới"
+    assert body["roles"] == ["user"]
+    assert body["status"] == "active"
+    assert "password" not in res.text and "password_hash" not in res.text
+
+    # auth.users: đúng 1 dòng, mật khẩu đã băm bcrypt, email đã xác thực (REQUIRE_EMAIL_VERIFICATION=false)
+    users = (
+        await db.execute(
+            select(User.email, User.password_hash, User.status, User.email_verified_at, User.deleted_at).where(
+                User.id == user_id
+            )
+        )
+    ).all()
+    assert len(users) == 1
+    user = users[0]
+    assert user.email == email
+    assert user.password_hash is not None
+    assert user.password_hash != payload["password"]
+    assert verify_password(payload["password"], user.password_hash)
+    assert user.status == "active"
+    assert user.email_verified_at is not None
+    assert user.deleted_at is None
+
+    # auth.user_profiles: đúng 1 dòng; locale/timezone/unit_system lấy DEFAULT của DB
+    profiles = (
+        await db.execute(
+            select(
+                UserProfile.display_name,
+                UserProfile.full_name,
+                UserProfile.locale,
+                UserProfile.timezone,
+                UserProfile.unit_system,
+            ).where(UserProfile.user_id == user_id)
+        )
+    ).all()
+    assert [tuple(p) for p in profiles] == [("Mới", "Người Mới", "vi-VN", "Asia/Ho_Chi_Minh", "metric")]
+
+    # auth.user_roles: đúng 1 dòng role `user`, không người cấp, vô thời hạn
+    roles = (
+        await db.execute(
+            select(Role.code, UserRole.granted_by, UserRole.expires_at)
+            .join(Role, Role.id == UserRole.role_id)
+            .where(UserRole.user_id == user_id)
+        )
+    ).all()
+    assert [tuple(r) for r in roles] == [("user", None, None)]
+
+    # Đăng nhập được bằng thông tin vừa đăng ký
+    login = await client.post(
+        LOGIN, json={"email": email, "password": payload["password"], "device": {"platform": "android"}}
+    )
+    assert login.status_code == 200, login.text
+    assert login.json()["user"]["id"] == body["id"]
+    assert login.json()["user"]["roles"] == ["user"]
+
+    if email.startswith("deleted@"):
+        # Tài khoản mới, không "hồi sinh" …14; …14 vẫn ở trạng thái xoá mềm
+        assert body["id"] != DELETED_ID
+        old_deleted_at = (
+            await db.execute(select(User.deleted_at).where(User.id == uuid.UUID(DELETED_ID)))
+        ).scalar_one()
+        assert old_deleted_at is not None
+        assert await _count_users(db, email) == 2
+
+
+@pytest.mark.tc("AUTH-01")
+async def test_register_padded_display_name_without_full_name_stores_stripped_and_null(
+    client: AsyncClient, db: AsyncSession
+):
+    payload = _register_body(display_name="  Mới  ")
+    del payload["full_name"]
+
+    res = await client.post(REGISTER, json=payload)
+
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert body["display_name"] == "Mới"
+    assert body["full_name"] is None
+    profile = (
+        await db.execute(
+            select(UserProfile.display_name, UserProfile.full_name).where(
+                UserProfile.user_id == uuid.UUID(body["id"])
+            )
+        )
+    ).one()
+    assert tuple(profile) == ("Mới", None)
+
+
+@pytest.mark.tc("AUTH-02")
+@pytest.mark.parametrize(
+    "email", ["demo@smartworkout.local", "DEMO@SmartWorkout.Local"], ids=["same_case", "different_case"]
+)
+async def test_register_email_of_alive_account_returns_409_email_already_exists(
+    client: AsyncClient, db: AsyncSession, email: str
+):
+    by_email_before = await _count_users(db, email)
+    total_before = await _count_users(db)
+    assert by_email_before >= 1
+
+    res = await client.post(REGISTER, json=_register_body(email=email, display_name="Trùng"))
+
+    _assert_error(res, 409, "email_already_exists")
+    assert await _count_users(db, email) == by_email_before
+    assert await _count_users(db) == total_before
+
+
+@pytest.mark.tc("AUTH-02")
+async def test_register_concurrent_duplicate_email_returns_409_email_already_exists(
+    client: AsyncClient, db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+):
+    """Mô phỏng hai request đăng ký đồng thời: bước kiểm tra trước không thấy email, INSERT vướng uq_users_email_alive."""
+    real_get_user_by_email = auth_crud.get_user_by_email
+    calls = {"n": 0}
+
+    async def first_call_misses(session: AsyncSession, email: str) -> User | None:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return None
+        return await real_get_user_by_email(session, email)
+
+    monkeypatch.setattr(auth_crud, "get_user_by_email", first_call_misses)
+    email = "demo@smartworkout.local"
+    by_email_before = await _count_users(db, email)
+    total_before = await _count_users(db)
+
+    res = await client.post(REGISTER, json=_register_body(email=email))
+
+    _assert_error(res, 409, "email_already_exists")
+    assert calls["n"] == 2
+    assert await _count_users(db, email) == by_email_before
+    assert await _count_users(db) == total_before
+
+
+_ACCENTED_PASSWORD = "Aa1" + "é" * 35
+
+
+@pytest.mark.tc("AUTH-03")
+@pytest.mark.parametrize(
+    ("overrides", "drop", "expected_field"),
+    [
+        ({"password": "abcdefgh"}, None, "password"),
+        ({"password": "12345678"}, None, "password"),
+        ({"password": "Ab1"}, None, "password"),
+        ({"password": _ACCENTED_PASSWORD}, None, "password"),
+        ({"email": "khong-phai-email"}, None, "email"),
+        ({}, "display_name", "display_name"),
+        ({"display_name": "   "}, None, "display_name"),
+        ({"status": "active"}, None, "status"),
+    ],
+    ids=[
+        "password_no_digit",
+        "password_no_letter",
+        "password_too_short",
+        "password_73_utf8_bytes",
+        "email_bad_format",
+        "display_name_missing",
+        "display_name_blank",
+        "extra_field_status",
+    ],
+)
+async def test_register_invalid_body_returns_422_validation_error_without_creating_user(
+    client: AsyncClient, db: AsyncSession, overrides: dict, drop: str | None, expected_field: str
+):
+    if overrides.get("password") == _ACCENTED_PASSWORD:
+        # 38 ký tự (trong khoảng 8–72) nhưng 73 byte UTF-8 → validator phải đếm byte, không đếm ký tự
+        assert len(_ACCENTED_PASSWORD) == 38
+        assert len(_ACCENTED_PASSWORD.encode("utf-8")) == 73
+    payload = _register_body(**overrides)
+    if drop is not None:
+        del payload[drop]
+    total_before = await _count_users(db)
+    by_email_before = await _count_users(db, payload["email"])
+
+    res = await client.post(REGISTER, json=payload)
+
+    error = _assert_error(res, 422, "validation_error")
+    assert expected_field in [d["field"] for d in error["details"]], error["details"]
+    if "password" in overrides:
+        # Không phản hồi lại mật khẩu trong thông báo lỗi
+        assert all(overrides["password"] not in d["message"] for d in error["details"])
+    assert await _count_users(db) == total_before
+    assert await _count_users(db, payload["email"]) == by_email_before

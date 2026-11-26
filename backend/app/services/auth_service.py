@@ -8,20 +8,29 @@ import uuid
 from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.exceptions import AppException, UnauthorizedError
-from app.core.security import create_access_token, generate_refresh_token, hash_token, verify_password
+from app.core.exceptions import AppException, ConflictError, UnauthorizedError
+from app.core.security import (
+    create_access_token,
+    generate_refresh_token,
+    hash_password,
+    hash_token,
+    verify_password,
+)
 from app.crud import auth as crud
-from app.models.auth import RefreshToken, User, UserDevice
-from app.models.enums import LoginFailureReason, TokenRevokeReason, UserStatus
+from app.models.auth import RefreshToken, User, UserDevice, UserProfile, UserRole
+from app.models.enums import LoginFailureReason, RoleCode, TokenRevokeReason, UserStatus
 from app.schemas.auth import (
     AuthUserSchema,
     DeviceInfoSchema,
     LoginRequest,
     LoginResponse,
     MeResponse,
+    RegisterRequest,
+    RegisterResponse,
     TokenPairResponse,
 )
 from app.schemas.base import ErrorDetail
@@ -86,6 +95,56 @@ async def _issue_refresh_token(
     )
     await db.flush()
     return raw
+
+
+def _email_taken() -> ConflictError:
+    return ConflictError("email_already_exists", "Email đã được sử dụng")
+
+
+async def register(db: AsyncSession, req: RegisterRequest) -> RegisterResponse:
+    """
+    Đăng ký (doc 04 §4.2): auth.users + auth.user_profiles + auth.user_roles(user) trong một transaction.
+    Email trùng tài khoản chưa xoá → 409 email_already_exists; email của tài khoản đã xoá mềm đăng ký lại được.
+    """
+    if await crud.get_user_by_email(db, req.email) is not None:
+        raise _email_taken()
+    role_id = await crud.get_role_id(db, RoleCode.USER)
+    if role_id is None:
+        raise RuntimeError("auth.roles thiếu role 'user' (database/postgresql/seeds/01_rbac.sql)")
+
+    # Chỉ cài nhánh REQUIRE_EMAIL_VERIFICATION=false (doc 04 §4.2). Nhánh true (pending_verification,
+    # verification_tokens, gửi email) nằm ngoài phạm vi: chờ hạ tầng email (spec auth-users Q1).
+    user = User(
+        email=req.email,
+        password_hash=hash_password(req.password),
+        status=UserStatus.ACTIVE,
+        email_verified_at=await _db_now(db),
+    )
+    try:
+        # Hai request cùng email có thể cùng qua bước kiểm tra trên; request sau vướng uq_users_email_alive.
+        # Savepoint giữ session dùng được để vẫn trả email_already_exists thay cho 409 conflict chung.
+        async with db.begin_nested():
+            db.add(user)
+            await db.flush()
+    except IntegrityError:
+        if await crud.get_user_by_email(db, req.email) is not None:
+            raise _email_taken() from None
+        raise
+
+    profile = UserProfile(user_id=user.id, display_name=req.display_name, full_name=req.full_name)
+    db.add(profile)
+    db.add(UserRole(user_id=user.id, role_id=role_id, granted_by=None, expires_at=None))
+    await db.flush()
+    result = RegisterResponse(
+        id=user.id,
+        email=user.email,
+        display_name=profile.display_name,
+        full_name=profile.full_name,
+        roles=await permission_service.get_role_codes(db, user.id),
+        status=user.status,
+    )
+    await db.commit()
+    return result
 
 
 async def login(db: AsyncSession, req: LoginRequest, ip: str | None, user_agent: str | None) -> LoginResponse:

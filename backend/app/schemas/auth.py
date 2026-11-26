@@ -2,10 +2,41 @@
 
 import uuid
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
 
 from app.models.enums import DevicePlatform, UnitSystem, UserStatus
+
+# Trùng CHECK ck_users_email_format của auth.users (database/postgresql/schemas/02_auth.sql).
+EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+PASSWORD_MIN_BYTES = 8
+PASSWORD_MAX_BYTES = 72  # bcrypt bỏ qua phần sau byte thứ 72 (doc 04 §6.1)
+
+
+def validate_password_policy(value: str) -> str:
+    """
+    Chính sách mật khẩu (doc 04 §6.1): 8–72 byte UTF-8, có ít nhất 1 chữ cái và 1 chữ số.
+    Dùng chung cho mọi field mật khẩu mới (register, change-password); lỗi → 422 validation_error.
+    """
+    size = len(value.encode("utf-8"))
+    if size < PASSWORD_MIN_BYTES or size > PASSWORD_MAX_BYTES:
+        raise ValueError(f"Mật khẩu phải dài từ {PASSWORD_MIN_BYTES} đến {PASSWORD_MAX_BYTES} byte (UTF-8)")
+    if not any(ch.isalpha() for ch in value):
+        raise ValueError("Mật khẩu phải có ít nhất 1 chữ cái")
+    if not any(ch.isdigit() for ch in value):
+        raise ValueError("Mật khẩu phải có ít nhất 1 chữ số")
+    return value
+
+
+NewPassword = Annotated[
+    str,
+    AfterValidator(validate_password_policy),
+    Field(description="8–72 byte UTF-8, có ít nhất 1 chữ cái và 1 chữ số"),
+]
+EmailAddress = Annotated[str, StringConstraints(max_length=254, pattern=EMAIL_PATTERN)]
+# varchar(50) + ck_user_profiles_display_name: không rỗng sau khi bỏ khoảng trắng hai đầu; lưu giá trị đã strip.
+DisplayName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)]
 
 
 class DeviceInfoSchema(BaseModel):
@@ -71,6 +102,38 @@ class LogoutRequest(BaseModel):
 
 class LogoutResponse(BaseModel):
     is_revoked: bool = Field(..., description="TRUE nếu token được thu hồi ở lần gọi này")
+
+
+class RegisterRequest(BaseModel):
+    """Body `POST /auth/register` (doc 04 §4.2). Không nhận field lạ: client không tự đặt `status`/`roles`."""
+
+    email: EmailAddress
+    password: NewPassword
+    display_name: DisplayName
+    full_name: str | None = Field(None, max_length=100)
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "example": {
+                "email": "an@example.com",
+                "password": "Demo@1234",
+                "display_name": "An",
+                "full_name": "Nguyễn Văn An",
+            }
+        },
+    )
+
+
+class RegisterResponse(BaseModel):
+    """Tài khoản vừa đăng ký (doc 04 §4.2). Không chứa token, mật khẩu hay `password_hash`."""
+
+    id: uuid.UUID
+    email: str
+    display_name: str
+    full_name: str | None
+    roles: list[str]
+    status: UserStatus
 
 
 class MeResponse(BaseModel):
