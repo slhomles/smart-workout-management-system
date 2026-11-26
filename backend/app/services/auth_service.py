@@ -103,6 +103,29 @@ def _email_taken() -> ConflictError:
     return ConflictError("email_already_exists", "Email đã được sử dụng")
 
 
+async def _insert_user(db: AsyncSession, req: RegisterRequest) -> User:
+    """Tạo dòng auth.users; INSERT vướng trùng email do request đồng thời → email_already_exists."""
+    # Chỉ cài nhánh REQUIRE_EMAIL_VERIFICATION=false (doc 04 §4.2). Nhánh true (pending_verification,
+    # verification_tokens, gửi email) nằm ngoài phạm vi: chờ hạ tầng email (spec auth-users Q1).
+    user = User(
+        email=req.email,
+        password_hash=hash_password(req.password),
+        status=UserStatus.ACTIVE,
+        email_verified_at=await _db_now(db),
+    )
+    try:
+        # Hai request cùng email có thể cùng qua bước kiểm tra email trong register; request sau vướng uq_users_email_alive.
+        # Savepoint giữ session dùng được để vẫn trả email_already_exists thay cho 409 conflict chung.
+        async with db.begin_nested():
+            db.add(user)
+            await db.flush()
+    except IntegrityError:
+        if await crud.get_user_by_email(db, req.email) is not None:
+            raise _email_taken() from None
+        raise
+    return user
+
+
 async def register(db: AsyncSession, req: RegisterRequest) -> RegisterResponse:
     """
     Đăng ký (doc 04 §4.2): auth.users + auth.user_profiles + auth.user_roles(user) trong một transaction.
@@ -114,25 +137,7 @@ async def register(db: AsyncSession, req: RegisterRequest) -> RegisterResponse:
     if role_id is None:
         raise RuntimeError("auth.roles thiếu role 'user' (database/postgresql/seeds/01_rbac.sql)")
 
-    # Chỉ cài nhánh REQUIRE_EMAIL_VERIFICATION=false (doc 04 §4.2). Nhánh true (pending_verification,
-    # verification_tokens, gửi email) nằm ngoài phạm vi: chờ hạ tầng email (spec auth-users Q1).
-    user = User(
-        email=req.email,
-        password_hash=hash_password(req.password),
-        status=UserStatus.ACTIVE,
-        email_verified_at=await _db_now(db),
-    )
-    try:
-        # Hai request cùng email có thể cùng qua bước kiểm tra trên; request sau vướng uq_users_email_alive.
-        # Savepoint giữ session dùng được để vẫn trả email_already_exists thay cho 409 conflict chung.
-        async with db.begin_nested():
-            db.add(user)
-            await db.flush()
-    except IntegrityError:
-        if await crud.get_user_by_email(db, req.email) is not None:
-            raise _email_taken() from None
-        raise
-
+    user = await _insert_user(db, req)
     profile = UserProfile(user_id=user.id, display_name=req.display_name, full_name=req.full_name)
     db.add(profile)
     db.add(UserRole(user_id=user.id, role_id=role_id, granted_by=None, expires_at=None))
