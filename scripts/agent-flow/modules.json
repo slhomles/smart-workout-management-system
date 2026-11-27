@@ -1,5 +1,5 @@
 {
-  "_doc": "Danh mục module cho bot Telegram (/run <key>). feature = số mục trong 'Mô tả dự án.docx'; routes/db_schemas theo doc 05 §6.3; owner = key thành viên trong team.json (sửa bằng /owner <key> <member>). \"status\": \"done\" = module đã hoàn thành (kể cả làm tay ngoài flow): /run từ chối chạy lại trừ khi thêm --force; \"done_note\" ghi làm ở đâu và việc còn lại.",
+  "_doc": "Danh mục module cho bot Telegram (/run <key>). feature = số mục trong 'Mô tả dự án.docx'; routes/db_schemas theo doc 05 §6.3; owner = key thành viên trong team.json (sửa bằng /owner <key> <member>). \"status\": \"done\" = module đã hoàn thành (kể cả làm tay ngoài flow): /run từ chối chạy lại trừ khi thêm --force; \"done_note\" ghi làm ở đâu và việc còn lại. \"target\" = backend | ai-services | frontend; \"depends_on\" = các module phải vào main trước khi tự xếp hàng (bot.py missing_deps).",
   "modules": {
     "core": {
       "title": "Core / Shared: nền tảng backend",
@@ -12,7 +12,9 @@
       "owner": "phuc",
       "notes": "Làm TRƯỚC mọi module. allow_core_changes: yes. Gồm config, database, redis_client, exceptions, middleware logging, schemas/base.py (Page, ErrorResponse, cursor), models/enums.py, security.py, dependencies.py, main.py + router, Alembic baseline, tests/conftest.py (client, db rollback, auth_headers).",
       "status": "done",
-      "done_note": "Làm tay ngoài flow, đã merge vào main qua PR #2 và #3. Còn lại việc vận hành: Core owner chạy `alembic stamp head` trên DB dùng chung; healthcheck docker-compose."
+      "done_note": "Làm tay ngoài flow, đã merge vào main qua PR #2 và #3. Còn lại việc vận hành: Core owner chạy `alembic stamp head` trên DB dùng chung; healthcheck docker-compose.",
+      "target": "backend",
+      "depends_on": []
     },
     "auth-users": {
       "title": "Auth & Users",
@@ -25,8 +27,12 @@
       "db_schemas": [
         "auth"
       ],
-      "owner": null,
-      "notes": "Luồng token/RBAC theo docs/architecture/04-auth-strategy.md."
+      "owner": "member3",
+      "notes": "Luồng token/RBAC theo docs/architecture/04-auth-strategy.md.",
+      "status": "done",
+      "done_note": "Agent flow làm, đã merge vào main qua PR #17.",
+      "target": "backend",
+      "depends_on": []
     },
     "exercise-wiki": {
       "title": "Exercise Wiki (Thư viện bài tập)",
@@ -43,7 +49,11 @@
         "training"
       ],
       "owner": "member2",
-      "notes": "Tra cứu, lọc đa điều kiện, chi tiết kỹ thuật, bài thay thế."
+      "notes": "Tra cứu, lọc đa điều kiện, chi tiết kỹ thuật, bài thay thế.",
+      "status": "done",
+      "done_note": "Agent flow làm, đã merge vào main qua PR #18.",
+      "target": "backend",
+      "depends_on": []
     },
     "workout-routine": {
       "title": "Workout Routine (Kiểm soát nhóm cơ để nghỉ)",
@@ -58,8 +68,12 @@
       "db_schemas": [
         "training"
       ],
-      "owner": null,
-      "notes": "Lịch tập, ghi buổi tập, volume, trạng thái phục hồi cơ. Đã có sẵn /workout-sessions (buổi tập, bài, hiệp, rep events, tempo) từ PR #6; còn lại /workout-plans, /scheduled-workouts, /recovery."
+      "owner": "member3",
+      "notes": "Lịch tập, ghi buổi tập, volume, trạng thái phục hồi cơ. Đã có sẵn /workout-sessions (buổi tập, bài, hiệp, rep events, tempo) từ PR #6; còn lại /workout-plans, /scheduled-workouts, /recovery.",
+      "status": "done",
+      "done_note": "Agent flow làm, đã merge vào main qua PR #19.",
+      "target": "backend",
+      "depends_on": []
     },
     "body-dashboard": {
       "title": "Dashboard thống kê kế hoạch tập, Body & Weight Tracking",
@@ -76,7 +90,9 @@
       "owner": "member3",
       "notes": "Cân nặng, % mỡ, số đo vòng, BMI/BMR/TDEE (dùng view SQL), tiến độ giáo án. KHÔNG có dinh dưỡng.",
       "status": "done",
-      "done_note": "Làm tay ngoài flow, đã merge vào main qua PR #4: /body (hồ sơ, lần đo, mục tiêu) và /dashboard. Không có dinh dưỡng (ngoài phạm vi)."
+      "done_note": "Làm tay ngoài flow, đã merge vào main qua PR #4: /body (hồ sơ, lần đo, mục tiêu) và /dashboard. Không có dinh dưỡng (ngoài phạm vi).",
+      "target": "backend",
+      "depends_on": []
     },
     "progress-gallery": {
       "title": "Progress Gallery: Nhật ký ảnh",
@@ -91,7 +107,11 @@
         "media"
       ],
       "owner": "phuc",
-      "notes": "Lưu trữ file qua S3 (mock/adapter khi test)."
+      "notes": "Lưu trữ file qua S3 (mock/adapter khi test).",
+      "status": "done",
+      "done_note": "Agent flow làm, đã merge vào main qua PR #20.",
+      "target": "backend",
+      "depends_on": []
     },
     "posture-correction": {
       "title": "Chỉnh tư thế luyện tập (Posture Correction)",
@@ -104,7 +124,11 @@
         "ai"
       ],
       "owner": "phuc",
-      "notes": "Chỉ phần backend API cầu nối + lưu kết quả; mô hình AI trong ai-services ngoài phạm vi (gọi qua httpx, mock khi test)."
+      "notes": "Chỉ phần backend API cầu nối + lưu kết quả; mô hình AI trong ai-services ngoài phạm vi (gọi qua httpx, mock khi test).",
+      "status": "done",
+      "done_note": "Agent flow làm, đã merge vào main qua PR #21.",
+      "target": "backend",
+      "depends_on": []
     },
     "set-rep-tempo": {
       "title": "Đếm Set/Rep và Đo Tempo",
@@ -118,7 +142,11 @@
         "training"
       ],
       "owner": "member3",
-      "notes": "Chỉ backend: tạo job phân tích video, nhận kết quả, ghi set/rep qua service của module Training (không import crud chéo)."
+      "notes": "Chỉ backend: tạo job phân tích video, nhận kết quả, ghi set/rep qua service của module Training (không import crud chéo).",
+      "status": "done",
+      "done_note": "Agent flow làm, đã merge vào main qua PR #22.",
+      "target": "backend",
+      "depends_on": []
     },
     "equipment-recognition": {
       "title": "Nhận diện thiết bị phòng tập và gợi ý bài tập",
@@ -132,7 +160,11 @@
         "catalog"
       ],
       "owner": "member2",
-      "notes": "Chỉ backend: nhận ảnh, gọi AI service (mock khi test), gợi ý bài tập qua service của Catalog."
+      "notes": "Chỉ backend: nhận ảnh, gọi AI service (mock khi test), gợi ý bài tập qua service của Catalog.",
+      "status": "done",
+      "done_note": "Agent flow làm, đã merge vào main qua PR #24.",
+      "target": "backend",
+      "depends_on": []
     },
     "reports": {
       "title": "Reports: xuất báo cáo tuần",
@@ -144,10 +176,267 @@
       "db_schemas": [
         "analytics"
       ],
-      "owner": null,
+      "owner": "member2",
       "notes": "Báo cáo tổng hợp từ schema analytics (materialized view).",
       "status": "done",
-      "done_note": "Làm tay ngoài flow, đã merge vào main qua PR #4: /reports xuất thẻ báo cáo tuần/tháng (PNG)."
+      "done_note": "Làm tay ngoài flow, đã merge vào main qua PR #4: /reports xuất thẻ báo cáo tuần/tháng (PNG).",
+      "target": "backend",
+      "depends_on": []
+    },
+    "fe-core": {
+      "title": "Frontend Core: khung Expo, theme, component chung, 4 tab",
+      "target": "frontend",
+      "feature": null,
+      "routes": [],
+      "db_schemas": [],
+      "owner": "phuc",
+      "depends_on": [],
+      "notes": "Làm tay.",
+      "status": "done",
+      "done_note": "Làm tay ngoài flow, đã merge vào main qua PR #28."
+    },
+    "ai-core": {
+      "title": "AI Services Core: FastAPI, /health, hợp đồng",
+      "target": "ai-services",
+      "feature": null,
+      "routes": [
+        "/health"
+      ],
+      "db_schemas": [],
+      "owner": "phuc",
+      "depends_on": [],
+      "notes": "Làm tay.",
+      "status": "done",
+      "done_note": "Làm tay ngoài flow, đã merge vào main qua PR #27."
+    },
+    "fe-auth": {
+      "title": "FE Auth & Cá nhân: đăng nhập, đăng ký, đăng xuất, tab Cá nhân",
+      "target": "frontend",
+      "feature": null,
+      "routes": [
+        "/auth",
+        "/users",
+        "/body/goals"
+      ],
+      "db_schemas": [],
+      "owner": "member3",
+      "depends_on": [
+        "fe-core",
+        "auth-users"
+      ],
+      "notes": "Màn đăng nhập, đăng ký; tab Cá nhân theo ảnh mẫu 13 (SettingsRow: hồ sơ, mục tiêu, đơn vị, thiết bị, đổi mật khẩu, đăng xuất). Bật AUTH_REQUIRED trong src/constants/features.ts (file này không phải core). Màn hình và ảnh mẫu theo docs/guides/frontend-standards.md §8.3; đọc docs/ui-refs/home-workout/README.md và AGENT_RESOURCES.md. Test jest với API giả."
+    },
+    "ai-recovery-predict": {
+      "title": "AI dự đoán phục hồi cơ (heuristic-v1)",
+      "target": "ai-services",
+      "feature": 2,
+      "routes": [
+        "/recovery/predict"
+      ],
+      "db_schemas": [],
+      "owner": "member3",
+      "depends_on": [
+        "ai-core"
+      ],
+      "notes": "POST /recovery/predict theo docs/architecture/06-ai-contracts.md §2.3; thuật toán tất định dựa base_recovery_hours và tải (sets, volume, RPE); model_version heuristic-v1; đăng ký model recovery vào registry."
+    },
+    "be-media-delivery": {
+      "title": "Backend phát media: URL tạm cho ảnh/GIF/video",
+      "target": "backend",
+      "feature": 4,
+      "routes": [
+        "/media"
+      ],
+      "db_schemas": [
+        "media"
+      ],
+      "owner": "phuc",
+      "depends_on": [
+        "exercise-wiki",
+        "progress-gallery"
+      ],
+      "notes": "GET /api/v1/media/{media_id} trả metadata + URL tạm (presigned S3; storage local thì route nội dung) để app hiện GIF bài tập, ảnh tiến độ, video. Media danh mục (catalog) mọi user đăng nhập xem được; media của user chỉ chủ sở hữu. Dùng storage_service sẵn có. Mã lỗi media_not_found chưa có ở Claude_api_respone.md §10: ghi câu hỏi mở."
+    },
+    "fe-exercise-wiki": {
+      "title": "FE Khám phá: thư viện bài tập",
+      "target": "frontend",
+      "feature": 1,
+      "routes": [
+        "/exercises",
+        "/muscle-groups",
+        "/equipment",
+        "/media"
+      ],
+      "db_schemas": [],
+      "owner": "member2",
+      "depends_on": [
+        "fe-auth",
+        "exercise-wiki",
+        "be-media-delivery"
+      ],
+      "notes": "Tab Khám phá (ảnh mẫu 06, 02, 05): tìm kiếm, lọc nhóm cơ/thiết bị/cấp độ, danh sách; chi tiết bài tập (ảnh mẫu 08) với GIF, các bước, lỗi thường gặp, bài thay thế, nút Tập với AI chỉ khi supports_ai_tracking. Màn hình và ảnh mẫu theo docs/guides/frontend-standards.md §8.3; đọc docs/ui-refs/home-workout/README.md và AGENT_RESOURCES.md. Test jest với API giả."
+    },
+    "ai-equipment-classify": {
+      "title": "AI nhận diện thiết bị (YOLOv8-cls)",
+      "target": "ai-services",
+      "feature": 7,
+      "routes": [
+        "/equipment-recognition/classify"
+      ],
+      "db_schemas": [],
+      "owner": "member2",
+      "depends_on": [
+        "ai-core"
+      ],
+      "notes": "POST /equipment-recognition/classify theo 06-ai-contracts.md §2.4–2.5; nạp model lười từ models/equipment/best.pt, thiếu thì model dự phòng (model_version hậu tố -fallback); nhãn đúng 27 ai_label; test dùng model giả, không import ultralytics ở cấp module."
+    },
+    "fe-equipment-scanner": {
+      "title": "FE Quét thiết bị",
+      "target": "frontend",
+      "feature": 7,
+      "routes": [
+        "/ai/equipment-scans"
+      ],
+      "db_schemas": [],
+      "owner": "member2",
+      "depends_on": [
+        "fe-exercise-wiki",
+        "equipment-recognition"
+      ],
+      "notes": "Ô Quét thiết bị ở Khám phá: chụp/chọn ảnh (expo-image-picker/expo-camera, cần allow_new_dependencies), POST /ai/equipment-scans, hiện kết quả + bài gợi ý, thêm vào buổi tập. Màn hình và ảnh mẫu theo docs/guides/frontend-standards.md §8.3; đọc docs/ui-refs/home-workout/README.md và AGENT_RESOURCES.md. Test jest với API giả."
+    },
+    "fe-workout": {
+      "title": "FE Tập luyện: trang chủ, giáo án, buổi tập, phục hồi",
+      "target": "frontend",
+      "feature": 2,
+      "routes": [
+        "/plan-templates",
+        "/workout-plans",
+        "/scheduled-workouts",
+        "/workout-sessions",
+        "/recovery",
+        "/dashboard"
+      ],
+      "db_schemas": [],
+      "owner": "member3",
+      "depends_on": [
+        "fe-auth",
+        "workout-routine",
+        "be-media-delivery"
+      ],
+      "notes": "Tab Tập luyện (ảnh mẫu 01–05, 07–10): trang chủ, chi tiết giáo án, màn đang tập theo AGENT_RESOURCES.md §3.1 (bảng hiệp mục tiêu/lần trước/hôm nay, đồng hồ nghỉ lưu thời điểm kết thúc, quay lại buổi dở, tổng kết), heatmap phục hồi (react-native-body-highlighter, dựng MuscleHeatmap). Mặc định hiệp/rep/nghỉ theo AGENT_RESOURCES.md §2. Màn hình và ảnh mẫu theo docs/guides/frontend-standards.md §8.3; đọc docs/ui-refs/home-workout/README.md và AGENT_RESOURCES.md. Test jest với API giả."
+    },
+    "fe-dashboard": {
+      "title": "FE Báo cáo: chỉ số cơ thể, biểu đồ, báo cáo tuần",
+      "target": "frontend",
+      "feature": 3,
+      "routes": [
+        "/dashboard",
+        "/body",
+        "/reports",
+        "/recovery"
+      ],
+      "db_schemas": [],
+      "owner": "member3",
+      "depends_on": [
+        "fe-auth",
+        "body-dashboard",
+        "reports"
+      ],
+      "notes": "Tab Báo cáo (ảnh mẫu 11, 12): StatCard (không kcal), lịch sử tuần + chuỗi ngày, cân nặng (LineChartCard), BMI (BmiScale) + BMR/TDEE/% mỡ, xuất báo cáo tuần; dựng LineChartCard, BmiScale trong components/common. Màn hình và ảnh mẫu theo docs/guides/frontend-standards.md §8.3; đọc docs/ui-refs/home-workout/README.md và AGENT_RESOURCES.md. Test jest với API giả."
+    },
+    "fe-progress-gallery": {
+      "title": "FE Nhật ký ảnh tiến độ",
+      "target": "frontend",
+      "feature": 4,
+      "routes": [
+        "/progress-photos",
+        "/photo-comparisons",
+        "/media"
+      ],
+      "db_schemas": [],
+      "owner": "phuc",
+      "depends_on": [
+        "fe-auth",
+        "progress-gallery",
+        "be-media-delivery"
+      ],
+      "notes": "Từ tab Báo cáo: lưới ảnh theo thời gian, thêm ảnh (chụp/chọn, góc chụp), so sánh Before/After bằng thanh trượt. Màn hình và ảnh mẫu theo docs/guides/frontend-standards.md §8.3; đọc docs/ui-refs/home-workout/README.md và AGENT_RESOURCES.md. Test jest với API giả."
+    },
+    "fe-pose-logic": {
+      "title": "FE logic tư thế & đếm rep (TypeScript thuần)",
+      "target": "frontend",
+      "feature": 5,
+      "routes": [],
+      "db_schemas": [],
+      "owner": "phuc",
+      "depends_on": [
+        "fe-core"
+      ],
+      "notes": "Không có màn hình. shared/constants/pose-rules.json khoá theo slug (squat, deadlift, push-up, bicep curl, shoulder press, lunge): khớp đo, ngưỡng góc, pha FSM; src/utils/pose/ tính góc 3 điểm, kiểm luật, FSM đếm rep + tempo, hasAiRules(slug). Ngưỡng ghi nguồn (AGENT_RESOURCES.md §4). Unit test kỹ biên."
+    },
+    "be-video-worker-api": {
+      "title": "Backend route cho worker video",
+      "target": "backend",
+      "feature": 6,
+      "routes": [
+        "/ai/video-jobs"
+      ],
+      "db_schemas": [
+        "ai"
+      ],
+      "owner": "member3",
+      "depends_on": [
+        "set-rep-tempo"
+      ],
+      "notes": "Route claim, source-video, result (multipart), failure theo docs/architecture/06-ai-contracts.md §3; xác thực X-Worker-Token = AI_WORKER_TOKEN (sửa core/config.py: allow_core_changes yes); dùng lại start_job/record_result/record_failure."
+    },
+    "ai-video-worker": {
+      "title": "AI worker phân tích video (YOLOv8-Pose)",
+      "target": "ai-services",
+      "feature": 6,
+      "routes": [],
+      "db_schemas": [],
+      "owner": "member3",
+      "depends_on": [
+        "ai-core",
+        "be-video-worker-api",
+        "fe-pose-logic"
+      ],
+      "notes": "Vòng lặp worker theo 06-ai-contracts.md §3.3; luật tư thế và FSM đọc shared/constants/pose-rules.json; vẽ khung xương bằng OpenCV; test với khung hình giả, model giả."
+    },
+    "fe-ai-trainer": {
+      "title": "FE AI chỉnh tư thế & đếm rep bằng camera",
+      "target": "frontend",
+      "feature": 5,
+      "routes": [
+        "/ai/pose-analyses",
+        "/workout-sessions"
+      ],
+      "db_schemas": [],
+      "owner": "phuc",
+      "depends_on": [
+        "fe-pose-logic",
+        "fe-workout",
+        "posture-correction"
+      ],
+      "notes": "Mở từ một bài tập/hiệp cụ thể (không có tab riêng): camera + MediaPipe pose (cần allow_new_dependencies), khung xương, cảnh báo đỏ, đếm rep/tempo dùng src/utils/pose, lưu /ai/pose-analyses, điền hiệp. Agent chỉ kiểm được logic và build; người thử trên điện thoại. Màn hình và ảnh mẫu theo docs/guides/frontend-standards.md §8.3; đọc docs/ui-refs/home-workout/README.md và AGENT_RESOURCES.md. Test jest với API giả."
+    },
+    "fe-video-analysis": {
+      "title": "FE phân tích video tải lên",
+      "target": "frontend",
+      "feature": 6,
+      "routes": [
+        "/ai/video-jobs",
+        "/media"
+      ],
+      "db_schemas": [],
+      "owner": "member3",
+      "depends_on": [
+        "fe-workout",
+        "set-rep-tempo"
+      ],
+      "notes": "Từ hiệp tập: tải video lên, theo dõi trạng thái job, xem kết quả (video khung xương, điểm, rep). Màn hình và ảnh mẫu theo docs/guides/frontend-standards.md §8.3; đọc docs/ui-refs/home-workout/README.md và AGENT_RESOURCES.md. Test jest với API giả."
     }
   }
 }
