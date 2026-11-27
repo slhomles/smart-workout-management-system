@@ -7,6 +7,8 @@ export const PASSWORD_POLICY_MESSAGE = 'Mật khẩu cần 8–72 byte, có ít 
 export const DISPLAY_NAME_MESSAGE = 'Tên hiển thị cần 1–50 ký tự';
 export const EMAIL_MESSAGE = 'Email không hợp lệ';
 export const PASSWORD_REQUIRED_MESSAGE = 'Vui lòng nhập mật khẩu';
+export const PASSWORD_MISMATCH_MESSAGE = 'Mật khẩu nhập lại không khớp';
+export const FULL_NAME_MESSAGE = 'Họ và tên tối đa 100 ký tự';
 
 // Chính sách mật khẩu doc 04 §6.1: bcrypt bỏ qua phần sau byte thứ 72 nên đếm byte UTF-8, không đếm ký tự.
 const PASSWORD_MIN_BYTES = 8;
@@ -18,8 +20,10 @@ const DIGIT_PATTERN = /\p{Nd}/u;
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const EMAIL_MAX_CHARS = 254;
 const DISPLAY_NAME_MAX_CHARS = 50;
+const FULL_NAME_MAX_CHARS = 100;
 
 export type DisplayNameCheck = { value: string; error: string | null };
+export type FullNameCheck = { value: string | null; error: string | null };
 
 /** Đếm theo code point để khớp `len()` của Python và `varchar(n)` của PostgreSQL. */
 function countChars(value: string): number {
@@ -58,4 +62,14 @@ export function checkDisplayName(input: string): DisplayNameCheck {
   const length = countChars(value);
   const isValid = length >= 1 && length <= DISPLAY_NAME_MAX_CHARS;
   return { value, error: isValid ? null : DISPLAY_NAME_MESSAGE };
+}
+
+/**
+ * `value` là họ tên đã trim; trống thì `null` vì spec fe-auth §2.2 gửi `full_name: null` khi ô trống.
+ * Giới hạn theo `full_name: str | None = Field(None, max_length=100)` của backend.
+ */
+export function checkFullName(input: string): FullNameCheck {
+  const value = input.trim();
+  if (value.length === 0) return { value: null, error: null };
+  return { value, error: countChars(value) <= FULL_NAME_MAX_CHARS ? null : FULL_NAME_MESSAGE };
 }
