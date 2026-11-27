@@ -143,3 +143,21 @@ async def set_row(db: AsyncSession, set_id: int) -> Any | None:
 async def rep_events(db: AsyncSession, set_id: int) -> list[SetRepEvent]:
     rows = await db.scalars(select(SetRepEvent).where(SetRepEvent.set_id == set_id).order_by(SetRepEvent.rep_no))
     return list(rows.all())
+
+
+# --- Dành cho module AI (qua services/workout_ai_service.py) ---
+_OWNED_SET_CONTEXT_SQL = """
+SELECT es.id AS set_id, es.session_exercise_id, se.session_id,
+       e.id AS exercise_id, e.name AS exercise_name, e.supports_ai_tracking
+FROM training.exercise_sets es
+JOIN training.session_exercises se ON se.id = es.session_exercise_id
+JOIN training.workout_sessions s ON s.id = se.session_id
+JOIN catalog.exercises e ON e.id = se.exercise_id
+WHERE es.id = :set_id AND s.user_id = :user_id AND s.deleted_at IS NULL
+"""
+
+
+async def owned_set_context(db: AsyncSession, user_id: uuid.UUID, set_id: int) -> Any | None:
+    """Hiệp của user (buổi chưa xoá mềm) kèm buổi và bài tập; None nếu không có/không thuộc user."""
+    params = {"set_id": set_id, "user_id": user_id}
+    return (await db.execute(text(_OWNED_SET_CONTEXT_SQL), params)).mappings().first()
