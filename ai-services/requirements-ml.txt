@@ -1,0 +1,11 @@
+# Thư viện model (cài thêm khi chạy model thật hoặc trong Docker):
+#   pip install -r requirements.txt -r requirements-ml.txt
+torch==2.4.0
+torchvision==0.19.0
+ultralytics==8.2.0
+mediapipe==0.10.14
+opencv-python-headless==4.10.0.84
+
+# --- Notebook R&D (tuỳ chọn) ---
+jupyter==1.0.0
+matplotlib==3.9.0
