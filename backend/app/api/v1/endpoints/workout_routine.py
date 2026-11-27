@@ -12,9 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import CurrentUser, require_permission
 from app.schemas.base import ERROR_RESPONSES, Page
+from app.schemas.recovery import (
+    MuscleRecoveryListQuery,
+    MuscleRecoveryStatusResponse,
+    RecoveryPredictionListQuery,
+    RecoveryPredictionResponse,
+)
 from app.schemas.schedule import CreateScheduledWorkoutRequest, ScheduledWorkoutListQuery, ScheduledWorkoutResponse
 from app.schemas.workout_routine import CreateWorkoutPlanRequest, WorkoutPlanListQuery, WorkoutPlanResponse
-from app.services import schedule_service, workout_plan_service
+from app.services import recovery_service, schedule_service, workout_plan_service
 
 OWN = require_permission("workout", "manage_own")
 PERM = "Quyền: `workout:manage_own`; chỉ thấy và thao tác trên dữ liệu của chính mình."
@@ -114,6 +120,49 @@ async def create_scheduled_workout(
     schedule = await schedule_service.create_schedule(db, current.id, body)
     response.headers["Location"] = f"/api/v1/scheduled-workouts/{schedule.id}"
     return schedule
+
+
+# --- Phục hồi cơ ---
+@recovery_router.get(
+    "/muscle-groups",
+    response_model=Page[MuscleRecoveryStatusResponse],
+    status_code=200,
+    responses=ERROR_RESPONSES,
+    summary="Heatmap phục hồi nhóm cơ của tôi",
+    description=PERM
+    + " Trạng thái phục hồi hiện tại của từng nhóm cơ có vùng Heatmap, theo dự đoán mới nhất của buổi tập"
+    " chưa xoá: `fatigued` (đỏ, hồi phục < 50%), `recovering` (vàng, 50–99%), `ready` (xanh, đã hồi phục"
+    " hoặc chưa có dự đoán). Client gọi `recovery_status=ready` để gợi ý nhóm cơ sẵn sàng tập."
+    " Sắp `muscle_group_id` tăng dần; phân trang cursor (`limit` 1–100, mặc định 20).",
+)
+async def list_muscle_recovery(
+    query: Annotated[MuscleRecoveryListQuery, Query()],
+    current: CurrentUser = Depends(OWN),
+    db: AsyncSession = Depends(get_db),
+) -> Page[MuscleRecoveryStatusResponse]:
+    """Heatmap phục hồi của user đang đăng nhập."""
+    return await recovery_service.list_muscle_recovery(db, current.id, query)
+
+
+@recovery_router.get(
+    "/predictions",
+    response_model=Page[RecoveryPredictionResponse],
+    status_code=200,
+    responses=ERROR_RESPONSES,
+    summary="Lịch sử dự đoán phục hồi của tôi (Báo cáo phục hồi)",
+    description=PERM
+    + " Dự đoán phục hồi theo buổi tập (chưa xoá) và nhóm cơ; mỗi cặp chỉ lấy bản chạy dự đoán mới nhất."
+    " `trained_at` = lúc kết thúc buổi tập. Sắp buổi tập gần nhất trước (`trained_at` giảm dần), trong"
+    " một buổi theo `muscle_group_id` tăng dần. Lọc `muscle_group_id`; phân trang cursor (`limit` 1–100,"
+    " mặc định 20).",
+)
+async def list_recovery_predictions(
+    query: Annotated[RecoveryPredictionListQuery, Query()],
+    current: CurrentUser = Depends(OWN),
+    db: AsyncSession = Depends(get_db),
+) -> Page[RecoveryPredictionResponse]:
+    """Lịch sử dự đoán phục hồi của user đang đăng nhập."""
+    return await recovery_service.list_predictions(db, current.id, query)
 
 
 # Gộp sau khi khai báo route: include_router sao chép các route đang có tại thời điểm gọi.

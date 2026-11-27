@@ -4,6 +4,7 @@ Chạy trên PostgreSQL thật, mỗi test trong transaction rollback (fixture `
 Test case theo spec docs/features/workout-routine.md §5 (mã WRT-xx).
 """
 
+from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
@@ -781,3 +782,328 @@ async def test_create_schedule_without_token_or_permission_is_rejected(client: A
     assert res.headers["WWW-Authenticate"] == "Bearer"
     _err(await client.post(SCHEDULES, json=body, headers=await auth_headers("editor")), 403, "permission_denied")
     assert await _schedule_count(db) == before
+
+
+# --- GET /recovery/muscle-groups (Heatmap) ---
+MUSCLES = "/api/v1/recovery/muscle-groups"
+PREDICTIONS = "/api/v1/recovery/predictions"
+KEYS_MRS = {
+    "muscle_group_id", "muscle_code", "muscle_name", "heatmap_region_key", "recovery_status", "recovery_pct",
+    "remaining_hours", "fatigue_score", "last_trained_at", "recovered_at", "last_session_id", "model_version",
+}
+KEYS_PRED = {
+    "session_id", "session_name", "trained_at", "muscle_group_id", "muscle_code", "muscle_name", "model_version",
+    "fatigue_score", "recovered_at", "predicted_at",
+}
+READY_NO_DATA = {
+    "recovery_status": "ready", "recovery_pct": 100, "remaining_hours": 0.0, "fatigue_score": None,
+    "last_trained_at": None, "recovered_at": None, "last_session_id": None, "model_version": None,
+}
+NO_TIME = timedelta(0)
+
+
+async def _muscle_ids(db) -> dict[str, int]:
+    """Mọi nhóm cơ: code → id (đọc qua `db`, không hard-code ID)."""
+    rows = await db.execute(text("SELECT code, id FROM catalog.muscle_groups"))
+    return {row.code: row.id for row in rows}
+
+
+async def _heatmap_codes(db) -> set[str]:
+    rows = await db.execute(text("SELECT code FROM catalog.muscle_groups WHERE heatmap_region_key IS NOT NULL"))
+    return {row.code for row in rows}
+
+
+async def _insert_session(db, user_id: str, ended_ago: timedelta, name: str = "Phục hồi test") -> str:
+    """Buổi `completed` kết thúc lúc now() - ended_ago, bắt đầu trước đó 1 giờ; trả id."""
+    return await db.scalar(
+        text(
+            "INSERT INTO training.workout_sessions (user_id, name, status, started_at, ended_at)"
+            " VALUES (:uid, :name, 'completed', now() - CAST(:ago AS interval) - interval '1 hour',"
+            " now() - CAST(:ago AS interval)) RETURNING id::text"
+        ),
+        {"uid": user_id, "name": name, "ago": ended_ago},
+    )
+
+
+async def _soft_delete_session(db, session_id: str) -> None:
+    await db.execute(text("UPDATE training.workout_sessions SET deleted_at = now() WHERE id = :id"), {"id": session_id})
+
+
+async def _predict(db, session_id: str, muscle_group_id: int, values: tuple[str, float, timedelta, timedelta]) -> None:
+    """Một dự đoán: (model_version, fatigue_score, recovered_at - now(), now() - predicted_at)."""
+    version, fatigue, recovered_in, predicted_ago = values
+    await db.execute(
+        text(
+            "INSERT INTO training.recovery_predictions"
+            " (session_id, muscle_group_id, model_version, fatigue_score, recovered_at, predicted_at)"
+            " VALUES (:sid, :mid, :version, :fatigue, now() + CAST(:recovered_in AS interval),"
+            " now() - CAST(:predicted_ago AS interval))"
+        ),
+        {
+            "sid": session_id, "mid": muscle_group_id, "version": version, "fatigue": fatigue,
+            "recovered_in": recovered_in, "predicted_ago": predicted_ago,
+        },
+    )
+
+
+async def _ended_at(db, session_id: str) -> datetime:
+    return await db.scalar(text("SELECT ended_at FROM training.workout_sessions WHERE id = :id"), {"id": session_id})
+
+
+def _parse_ts(value: str) -> datetime:
+    """Thời điểm ISO-8601 UTC hậu tố Z → datetime có múi giờ."""
+    assert value.endswith("Z"), value
+    return datetime.fromisoformat(value)
+
+
+def _by_code(items: list[dict]) -> dict[str, dict]:
+    return {item["muscle_code"]: item for item in items}
+
+
+async def _get_page(client: AsyncClient, url: str, headers: dict, **params: Any) -> dict:
+    return _ok_page(await client.get(url, params=params, headers=headers))
+
+
+async def _follow_pages(client: AsyncClient, url: str, headers: dict, limit: int) -> list[dict]:
+    """Lần theo `next_cursor` tới trang cuối (giới hạn số trang để test không lặp vô hạn)."""
+    pages: list[dict] = []
+    params: dict[str, Any] = {"limit": limit}
+    for _ in range(50):
+        page = await _get_page(client, url, headers, **params)
+        pages.append(page)
+        if not page["pagination"]["has_more"]:
+            return pages
+        params["cursor"] = page["pagination"]["next_cursor"]
+    raise AssertionError("Quá nhiều trang")
+
+
+def _assert_all_ready(items: list[dict], heatmap_codes: set[str]) -> None:
+    """Đủ nhóm cơ có Heatmap, đúng KEYS-MRS, ID số nguyên tăng dần, tất cả `ready` và chưa có dữ liệu."""
+    assert len(items) == len(heatmap_codes) == 18
+    assert {item["muscle_code"] for item in items} == heatmap_codes
+    ids = [item["muscle_group_id"] for item in items]
+    assert all(type(mid) is int for mid in ids) and ids == sorted(set(ids))
+    for item in items:
+        _keys(item, KEYS_MRS)
+        assert _pick(item, tuple(READY_NO_DATA)) == READY_NO_DATA, item
+
+
+@pytest.mark.tc("WRT-14")
+async def test_list_muscle_recovery_without_predictions_returns_all_ready(client: AsyncClient, db, auth_headers):
+    heatmap_codes = await _heatmap_codes(db)
+    body = await _get_page(client, MUSCLES, await auth_headers("demo"))
+    assert body["pagination"] == {"next_cursor": None, "has_more": False}
+    _assert_all_ready(body["data"], heatmap_codes)
+    chest = _by_code(body["data"])["chest"]
+    assert _pick(chest, ("muscle_name", "heatmap_region_key")) == {"muscle_name": "Ngực", "heatmap_region_key": "chest"}
+    newbie = await _get_page(client, MUSCLES, await auth_headers("newbie"))
+    assert newbie["pagination"] == {"next_cursor": None, "has_more": False}
+    _assert_all_ready(newbie["data"], heatmap_codes)
+
+
+async def _seed_heatmap_predictions(db) -> str:
+    """Dữ liệu WRT-15: buổi S của demo + buổi đã xoá của demo + buổi của power; trả id buổi S."""
+    ids = await _muscle_ids(db)
+    session = await _insert_session(db, DEMO_ID, timedelta(hours=1))
+    for code, fatigue, recovered_in in (
+        ("chest", 80, timedelta(hours=59)), ("triceps", 45, timedelta(hours=1)), ("front_delts", 30, timedelta(hours=-1)),
+    ):
+        await _predict(db, session, ids[code], ("test-v1", fatigue, recovered_in, NO_TIME))
+    deleted = await _insert_session(db, DEMO_ID, timedelta(minutes=30))
+    await _soft_delete_session(db, deleted)
+    await _predict(db, deleted, ids["quads"], ("test-v1", 90, timedelta(hours=70), NO_TIME))
+    foreign = await _insert_session(db, POWER_ID, timedelta(hours=1))
+    await _predict(db, foreign, ids["lats"], ("test-v1", 90, timedelta(hours=70), NO_TIME))
+    return session
+
+
+def _check_heatmap_with_predictions(items: list[dict], session: str) -> None:
+    """(a) chest fatigued, triceps recovering, front_delts đã hồi phục; quads/lats không lấy dự đoán nào."""
+    by_code = _by_code(items)
+    assert _pick(by_code["chest"], ("recovery_status", "recovery_pct", "remaining_hours", "fatigue_score")) == {
+        "recovery_status": "fatigued", "recovery_pct": 2, "remaining_hours": 59.0, "fatigue_score": 80.0,
+    }
+    assert _pick(by_code["chest"], ("last_session_id", "model_version")) == {
+        "last_session_id": session, "model_version": "test-v1",
+    }
+    assert _pick(by_code["triceps"], ("recovery_status", "recovery_pct", "remaining_hours")) == {
+        "recovery_status": "recovering", "recovery_pct": 50, "remaining_hours": 1.0,
+    }
+    assert _pick(by_code["front_delts"], ("recovery_status", "recovery_pct")) == {
+        "recovery_status": "ready", "recovery_pct": 100,
+    }
+    for code in ("quads", "lats"):
+        assert _pick(by_code[code], ("recovery_status", "last_session_id")) == {
+            "recovery_status": "ready", "last_session_id": None,
+        }
+
+
+async def _codes_with_status(client: AsyncClient, headers: dict, status: str) -> list[str]:
+    items = (await _get_page(client, MUSCLES, headers, recovery_status=status))["data"]
+    assert all(item["recovery_status"] == status for item in items), items
+    return [item["muscle_code"] for item in items]
+
+
+@pytest.mark.tc("WRT-15")
+async def test_list_muscle_recovery_uses_latest_own_predictions_and_filters(client: AsyncClient, db, auth_headers):
+    session = await _seed_heatmap_predictions(db)
+    demo = await auth_headers("demo")
+    items = (await _get_page(client, MUSCLES, demo))["data"]
+    for item in items:
+        _keys(item, KEYS_MRS)
+    _check_heatmap_with_predictions(items, session)
+    chest = _by_code(items)["chest"]
+    assert _parse_ts(chest["last_trained_at"]) == await _ended_at(db, session)
+    assert _parse_ts(chest["recovered_at"]) > _parse_ts(chest["last_trained_at"])
+    assert await _codes_with_status(client, demo, "fatigued") == ["chest"]
+    assert await _codes_with_status(client, demo, "recovering") == ["triceps"]
+    ready = await _codes_with_status(client, demo, "ready")
+    assert len(ready) == len(await _heatmap_codes(db)) - 2 == 16
+    assert not {"chest", "triceps"} & set(ready)
+
+
+async def _assert_invalid_queries(client: AsyncClient, url: str, headers: dict, cases: list[tuple[dict, str]]) -> None:
+    """Mỗi ca (params, field) trả 422 validation_error với đúng một lỗi gắn field đó."""
+    fields = [
+        _fields(_err(await client.get(url, params=params, headers=headers), 422, "validation_error"))
+        for params, _ in cases
+    ]
+    assert fields == [[field] for _, field in cases]
+
+
+async def _check_muscle_pagination(client: AsyncClient, headers: dict) -> None:
+    """(a) limit=5: các trang 5, 5, 5, 3; gộp được 18 nhóm cơ không trùng, ID tăng dần."""
+    pages = await _follow_pages(client, MUSCLES, headers, 5)
+    assert [len(page["data"]) for page in pages] == [5, 5, 5, 3]
+    assert [page["pagination"]["has_more"] for page in pages] == [True, True, True, False]
+    assert pages[-1]["pagination"]["next_cursor"] is None
+    ids = [item["muscle_group_id"] for page in pages for item in page["data"]]
+    assert len(ids) == len(set(ids)) == 18 and ids == sorted(ids)
+
+
+@pytest.mark.tc("WRT-16")
+async def test_list_muscle_recovery_paginates_and_rejects_invalid_query(client: AsyncClient, auth_headers):
+    demo = await auth_headers("demo")
+    await _check_muscle_pagination(client, demo)
+    cases = [
+        ({"limit": 0}, "limit"),
+        ({"limit": 101}, "limit"),
+        ({"cursor": "!!!khong-phai-cursor"}, "cursor"),
+        ({"cursor": encode_cursor({"foo": 1})}, "cursor"),
+        ({"recovery_status": "red"}, "recovery_status"),
+    ]
+    await _assert_invalid_queries(client, MUSCLES, demo, cases)
+
+
+async def test_list_muscle_recovery_with_wrong_cursor_type_returns_422(client: AsyncClient, auth_headers):
+    demo = await auth_headers("demo")
+    for value in ("5", True, 1.5, None, 99999):
+        res = await client.get(MUSCLES, params={"cursor": encode_cursor({"muscle_group_id": value})}, headers=demo)
+        assert _fields(_err(res, 422, "validation_error")) == ["cursor"], value
+
+
+async def test_list_muscle_recovery_without_token_or_permission_is_rejected(client: AsyncClient, auth_headers):
+    res = await client.get(MUSCLES)
+    _err(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+    _err(await client.get(MUSCLES, headers=await auth_headers("editor")), 403, "permission_denied")
+
+
+# --- GET /recovery/predictions ---
+async def _seed_prediction_history(db) -> dict[str, str]:
+    """Dữ liệu WRT-17: buổi A, B của demo; C của demo đã xoá; D của power. Trả tên buổi → id."""
+    ids = await _muscle_ids(db)
+    sessions = {
+        "A": await _insert_session(db, DEMO_ID, timedelta(hours=50), "A"),
+        "B": await _insert_session(db, DEMO_ID, timedelta(hours=1), "B"),
+        "C": await _insert_session(db, DEMO_ID, timedelta(hours=2), "C"),
+        "D": await _insert_session(db, POWER_ID, timedelta(hours=1), "D"),
+    }
+    await _soft_delete_session(db, sessions["C"])
+    predictions = [
+        ("A", "chest", ("test-v1", 70, timedelta(hours=10), NO_TIME)),
+        ("A", "triceps", ("test-v1", 40, timedelta(hours=-20), NO_TIME)),
+        ("B", "chest", ("test-v1", 80, timedelta(hours=59), timedelta(minutes=10))),
+        ("B", "chest", ("test-v2", 85, timedelta(hours=60), NO_TIME)),
+        ("C", "quads", ("test-v1", 90, timedelta(hours=70), NO_TIME)),
+        ("D", "lats", ("test-v1", 90, timedelta(hours=70), NO_TIME)),
+    ]
+    for name, code, values in predictions:
+        await _predict(db, sessions[name], ids[code], values)
+    return sessions
+
+
+def _pairs(items: list[dict]) -> list[tuple[str, str]]:
+    return [(item["session_id"], item["muscle_code"]) for item in items]
+
+
+def _assert_prediction_shape(items: list[dict], ids: dict[str, int]) -> None:
+    """Đúng KEYS-PRED, ID nhóm cơ là số nguyên khớp `code`, thời điểm hậu tố Z."""
+    for item in items:
+        _keys(item, KEYS_PRED)
+        assert item["muscle_group_id"] == ids[item["muscle_code"]] and type(item["muscle_group_id"]) is int
+        for key in ("trained_at", "recovered_at", "predicted_at"):
+            _parse_ts(item[key])
+
+
+async def _check_latest_b_chest(db, item: dict, session_b: str) -> None:
+    """(B, chest) là bản `predicted_at` mới nhất (test-v2)."""
+    assert _pick(item, ("model_version", "fatigue_score", "session_name")) == {
+        "model_version": "test-v2", "fatigue_score": 85.0, "session_name": "B",
+    }
+    assert _parse_ts(item["trained_at"]) == await _ended_at(db, session_b)
+
+
+@pytest.mark.tc("WRT-17")
+async def test_list_predictions_returns_latest_per_session_and_muscle(client: AsyncClient, db, auth_headers):
+    sessions = await _seed_prediction_history(db)
+    ids = await _muscle_ids(db)
+    a, b = sessions["A"], sessions["B"]
+    demo = await auth_headers("demo")
+    items = (await _get_page(client, PREDICTIONS, demo))["data"]
+    _assert_prediction_shape(items, ids)
+    assert _pairs(items) == [(b, "chest"), (a, "chest"), (a, "triceps")]
+    await _check_latest_b_chest(db, items[0], b)
+    assert not {sessions["C"], sessions["D"]} & {item["session_id"] for item in items}
+    chest_only = (await _get_page(client, PREDICTIONS, demo, muscle_group_id=ids["chest"]))["data"]
+    assert _pairs(chest_only) == [(b, "chest"), (a, "chest")]
+    pages = await _follow_pages(client, PREDICTIONS, demo, 2)
+    assert [(len(page["data"]), page["pagination"]["has_more"]) for page in pages] == [(2, True), (1, False)]
+    assert pages[-1]["pagination"]["next_cursor"] is None
+    assert _pairs(pages[-1]["data"]) == [(a, "triceps")]
+
+
+@pytest.mark.tc("WRT-18")
+async def test_list_predictions_invalid_query_returns_422_and_no_data_returns_empty(client: AsyncClient, auth_headers):
+    demo = await auth_headers("demo")
+    cases = [
+        ({"limit": 0}, "limit"),
+        ({"limit": 101}, "limit"),
+        ({"cursor": "!!!khong-phai-cursor"}, "cursor"),
+        ({"muscle_group_id": "abc"}, "muscle_group_id"),
+        ({"muscle_group_id": 0}, "muscle_group_id"),
+    ]
+    await _assert_invalid_queries(client, PREDICTIONS, demo, cases)
+    empty = {"data": [], "pagination": {"next_cursor": None, "has_more": False}}
+    assert await _get_page(client, PREDICTIONS, demo, muscle_group_id=9999) == empty
+    assert await _get_page(client, PREDICTIONS, await auth_headers("newbie")) == empty
+
+
+async def test_list_predictions_with_foreign_cursor_returns_422(client: AsyncClient, auth_headers):
+    demo = await auth_headers("demo")
+    bad_cursors = [
+        {"foo": 1},
+        {"trained_at": "2026-11-27T00:00:00", "session_id": DEMO_ID, "muscle_group_id": 1},
+        {"trained_at": "2026-11-27T00:00:00+00:00", "session_id": 1, "muscle_group_id": 1},
+        {"trained_at": "2026-11-27T00:00:00+00:00", "session_id": DEMO_ID, "muscle_group_id": True},
+    ]
+    for values in bad_cursors:
+        res = await client.get(PREDICTIONS, params={"cursor": encode_cursor(values)}, headers=demo)
+        assert _fields(_err(res, 422, "validation_error")) == ["cursor"], values
+
+
+async def test_list_predictions_without_token_or_permission_is_rejected(client: AsyncClient, auth_headers):
+    res = await client.get(PREDICTIONS)
+    _err(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+    _err(await client.get(PREDICTIONS, headers=await auth_headers("editor")), 403, "permission_denied")
