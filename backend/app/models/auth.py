@@ -49,7 +49,9 @@ class UserProfile(Base):
     avatar_media_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     locale: Mapped[str] = mapped_column(String(10), nullable=False, server_default=text("'vi-VN'"))
     timezone: Mapped[str] = mapped_column(String(50), nullable=False, server_default=text("'Asia/Ho_Chi_Minh'"))
-    unit_system: Mapped[UnitSystem] = mapped_column(pg_enum(UnitSystem, "unit_system", SCHEMA), nullable=False)
+    unit_system: Mapped[UnitSystem] = mapped_column(
+        pg_enum(UnitSystem, "unit_system", SCHEMA), nullable=False, server_default=text("'metric'")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
