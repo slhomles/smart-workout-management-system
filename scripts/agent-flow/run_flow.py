@@ -9,14 +9,18 @@ Mỗi iteration là một phiên `claude -p --agent orchestrator` mới (context
 trí nhớ nằm trong thư mục state. Runner tự chạy check_done.py trên HEAD và chỉ
 dừng "xong" khi: orchestrator đã duyệt đúng commit HEAD VÀ mọi cổng đạt.
 
-Exit code: 0 xong · 1 lỗi · 2 bị chặn (cần người trả lời) · 3 kẹt (không tiến triển)
-           4 hết số iteration · 5 kiểm tra môi trường thất bại.
+Khi xong, runner tự đưa module vào main (integrate.py): gộp main, giải xung đột, chạy lại cổng,
+push, mở PR, chờ CI xanh rồi merge (ngoại lệ agent flow, doc 05 §9.3). Tắt bằng --no-merge.
+
+Exit code: 0 xong (đã vào main) · 1 lỗi · 2 bị chặn (cần người trả lời) · 3 kẹt (không tiến triển)
+           4 hết số iteration · 5 kiểm tra môi trường thất bại · 6 xong nhưng chưa merge được vào main.
 Chi tiết: scripts/agent-flow/README.md
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import ctypes
 import datetime as dt
 import hashlib
@@ -33,16 +37,32 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 sys.path.insert(0, str(HERE))
 import check_done  # noqa: E402
+import integrate as integration  # noqa: E402
 import notify  # noqa: E402
 import team  # noqa: E402
+import timeline  # noqa: E402
+import timeline_render  # noqa: E402
+import usage  # noqa: E402
 from notify import esc  # noqa: E402
 
 AGENT_FILES = [".claude/agents/orchestrator.md", ".claude/agents/implementer.md",
-               ".claude/agents/spec-writer.md"]
+               ".claude/agents/spec-writer.md", ".claude/agents/integrator.md"]
 SETTINGS = HERE / "flow-settings.json"
-MANDATORY_GATES = ["spec", "protected", "clean", "pytest", "tc"]
+MANDATORY_GATES = ["spec", "protected", "clean", "pytest", "tc", "standards"]
+# Tài liệu nguồn của bản tóm tắt quy tắc dùng chung; một trong số này đổi thì phải lập lại bản tóm tắt.
+DIGEST_SOURCES = [
+    "CLAUDE.md",
+    "docs/architecture/Claude_api_respone.md",
+    "docs/architecture/04-auth-strategy.md",
+    "docs/architecture/05-tooling-workflow.md",
+    "docs/architecture/Claude_git.md",
+    "docs/guides/coding-standards.md",
+    "docs/database/design-overview.md",
+    "docs/database/test-dataset.md",
+]
 
 EXIT_DONE, EXIT_ERROR, EXIT_BLOCKED, EXIT_STALLED, EXIT_BUDGET, EXIT_PREFLIGHT = 0, 1, 2, 3, 4, 5
+EXIT_MERGE = 6  # module xong nhưng chưa đưa được vào main (xung đột, cổng trượt sau khi gộp, CI đỏ)
 
 LIMIT_RE = re.compile(
     r"usage limit|rate.?limit|hit your limit|limit reached|overloaded|\b529\b|quota", re.I
@@ -300,13 +320,13 @@ def perm_mcp_config(state_dir: Path, module: str, owner: str | None, timeout_s: 
 
 
 def call_claude(args, prompt: str, cwd: Path, add_dirs: list[Path], log_prefix: Path | None,
-                perm_config: Path | None = None):
+                perm_config: Path | None = None, agent: str = "orchestrator"):
     cmd = [
         find_claude(), "-p",
-        "--agent", "orchestrator",
+        "--agent", agent,
         "--permission-mode", args.permission_mode,
         "--settings", str(SETTINGS),
-        "--output-format", "json",
+        "--output-format", "stream-json", "--verbose",  # stream-json mới có rate_limit_event (hạn mức)
     ]
     env = dict(os.environ)
     if perm_config:  # hỏi quyền qua Telegram; quá hạn thì perm_mcp tự từ chối
@@ -333,27 +353,21 @@ def call_claude(args, prompt: str, cwd: Path, add_dirs: list[Path], log_prefix: 
     if log_prefix:
         log_prefix.with_suffix(".out.json").write_text(out or "", encoding="utf-8")
         log_prefix.with_suffix(".err.txt").write_text(err or "", encoding="utf-8")
-    data = None
-    for line in reversed((out or "").strip().splitlines()):
-        try:
-            data = json.loads(line)
-            break
-        except ValueError:
-            continue
-    if data is None:
-        try:
-            data = json.loads(out)
-        except (ValueError, TypeError):
-            data = None
-    is_error = timed_out or proc.returncode != 0 or data is None or bool(data.get("is_error"))
+    data, rate_limit = usage.parse_stream(out or "")
+    is_error = timed_out or proc.returncode != 0 or not data or bool(data.get("is_error"))
     text = (out or "") + "\n" + (err or "")
+    # Chỉ xét lỗi + câu trả lời cuối: stream-json luôn có dòng rate_limit_event, khớp nhầm LIMIT_RE.
+    limit_text = (err or "") + "\n" + str(data.get("result", ""))
+    rejected = any(w.get("status") == "rejected" for w in usage.windows(rate_limit).values())
     return {
         "rc": proc.returncode,
         "timed_out": timed_out,
-        "data": data or {},
+        "data": data,
         "is_error": is_error,
-        "is_limit": is_error and not timed_out and bool(LIMIT_RE.search(text)),
+        "is_limit": is_error and not timed_out and (rejected or bool(LIMIT_RE.search(limit_text))),
         "text": text,
+        "rate_limit": rate_limit,
+        "tokens": usage.tokens_of(data),
     }
 
 
@@ -378,6 +392,8 @@ class Flow:
         self.spec = check_done.parse_spec(self.spec_src)
         self.module = self.spec.get("module") or "unknown"
         root = Path(args.flow_root) if args.flow_root else REPO.parent / f"{REPO.name}-flow"
+        self.quota_file = root / "quota-alerts.json"  # mốc hạn mức đã báo, dùng chung mọi module
+        self.shared_dir = root / "_shared"  # bản tóm tắt quy tắc, dùng chung mọi module
         self.mod_dir = root / self.module
         self.wt = self.mod_dir / "repo"
         self.state_dir = self.mod_dir / "state"
@@ -387,6 +403,7 @@ class Flow:
         self.state_file = self.state_dir / "state.json"
         self.gate_file = self.state_dir / "gate-runner.json"
         self.warnings: list[str] = []
+        self.tick = time.monotonic()  # mốc đo thời gian chạy thật của module (xem check_timebox)
         self.gates = list(dict.fromkeys(MANDATORY_GATES + self.spec.get("gates", [])))
         self.owner = self.spec.get("owner") or None
         self.notifier = notify.Notifier.load(log)
@@ -474,6 +491,10 @@ class Flow:
             lines += [f"• <code>{esc(c)}</code>" for c in commits.splitlines()[:10]]
         if state.get("questions"):
             lines.append(f"Câu hỏi đang chờ bạn: {len(state['questions'])}")
+        lines.append(f"Token: iteration này {usage.format_tokens(p.get('tokens'))} · "
+                     f"cả flow {usage.format_tokens(self.run_info.get('usage_total'))}")
+        lines.append(usage.format_quota(self.run_info.get("rate_limit")))
+        lines += self.timeline_lines(p.get("session_id"))
         if p["error"]:
             lines.append("Iteration lỗi" + (" (quá thời gian)" if p["timed_out"] else "")
                          + f", xem <code>{esc(self.logs)}</code>")
@@ -584,12 +605,14 @@ class Flow:
         log.file = self.mod_dir / "flow.log"
         run_info = read_json(self.run_file, {})
         branch = self.spec["branch"]
+        self.reused_worktree = False
 
         if (self.wt / ".git").exists():
             current = git(self.wt, "rev-parse", "--abbrev-ref", "HEAD")
             if current != branch:
                 raise FlowError(f"worktree {self.wt} đang ở nhánh {current}, spec yêu cầu {branch}")
             log(f"dùng lại worktree {self.wt} ({branch})")
+            self.reused_worktree = True
         else:
             if run(["git", "fetch", "origin", "main"], cwd=REPO, timeout=300).returncode != 0:
                 log("CẢNH BÁO: git fetch origin main lỗi, dùng main cục bộ")
@@ -667,7 +690,56 @@ class Flow:
             log("CẢNH BÁO: spec bị sửa, đã khôi phục")
 
     # ----------------------------------------------------------- gate + brief
+    def gate_cache_key(self) -> str | None:
+        """Khoá kết quả cổng; None (không dùng lại) khi worktree còn thay đổi chưa commit."""
+        if git(self.wt, "status", "--porcelain", "-uall", check=False).strip():
+            return None
+        parts = [git(self.wt, "rev-parse", "HEAD"), self.run_info.get("spec_sha", ""), self.base_sha,
+                 ",".join(self.gates), str(self.python), sha256(HERE / "check_done.py"), sha256(HERE / "standards.py")]
+        return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
+
+    def check_timebox(self, gate: dict, state: dict) -> None:
+        """Quá mốc thời gian thì báo MỘT lần; flow vẫn chạy tiếp (quyết định của người phụ trách module)."""
+        now_tick = time.monotonic()
+        spent = self.run_info.get("active_seconds", 0) + (now_tick - self.tick)
+        self.run_info["active_seconds"], self.tick = spent, now_tick
+        limit = self.args.time_box_minutes
+        if not limit or self.run_info.get("timebox_warned") or spent < limit * 60:
+            return
+        self.run_info["timebox_warned"] = True
+        write_json(self.run_file, self.run_info)
+        tasks = state.get("tasks", [])
+        done = sum(1 for t in tasks if t.get("status") == "done")
+        tc = gate.get("gates", {}).get("tc", {}).get("summary", "?")
+        self.notify(f"⏱ {self.tag()} đã chạy {round(spent / 60)} phút (mốc {limit} phút, không tính thời gian "
+                    f"chờ hạn mức): {esc(tc)}, task {done}/{len(tasks)} xong. Flow vẫn chạy tiếp.")
+
+    def docs_sha(self) -> str:
+        """Băm nội dung các tài liệu nguồn; khác lần lập bản tóm tắt trước thì phải đọc và lập lại."""
+        digest = hashlib.sha256()
+        for rel in DIGEST_SOURCES:
+            path = self.wt / rel
+            digest.update(rel.encode("utf-8") + (path.read_bytes() if path.exists() else b"-"))
+        return digest.hexdigest()
+
+    def digest_lines(self) -> list[str]:
+        digest, sha_file = self.shared_dir / "rules-digest.md", self.shared_dir / "rules-digest.sha"
+        current = self.docs_sha()
+        is_fresh = digest.exists() and sha_file.exists() and sha_file.read_text(encoding="utf-8").strip() == current
+        if is_fresh:
+            return [f"- RULES_DIGEST: `{digest}` · **CÒN HIỆU LỰC**: đọc nó thay vì đọc lại toàn bộ tài liệu."]
+        return [f"- RULES_DIGEST: `{digest}` · **CẦN TẠO LẠI** (tài liệu đã đổi hoặc chưa có): đọc toàn bộ "
+                f"tài liệu một lần, ghi bản tóm tắt vào file này, rồi ghi đúng chuỗi `{current}` vào `{sha_file}`."]
+
     def run_gate(self) -> dict:
+        # Bộ test chạy trên DB ở VM mất 10+ phút; HEAD không đổi thì kết quả cổng cũng không đổi.
+        key = self.gate_cache_key()
+        cached = read_json(self.gate_file, {})
+        if key and cached.get("cache_key") == key and "gates" in cached:
+            log(f"cổng: HEAD {str(cached.get('head', ''))[:10]} không đổi, dùng lại kết quả lần trước")
+            self.mark("gate", cached=True, seconds=0, head=cached.get("head"))
+            return cached
+        began = time.monotonic()
         try:
             report = check_done.evaluate(
                 self.wt, self.wt / self.spec_rel, self.base_sha, self.gates, str(self.python)
@@ -675,8 +747,40 @@ class Flow:
         except Exception as exc:  # noqa: BLE001 - gate lỗi không được làm sập runner
             report = {"ok": False, "head": git(self.wt, "rev-parse", "HEAD"),
                       "gates": {"runner": {"ok": False, "summary": f"gate lỗi: {exc}"}}}
+            key = None  # lỗi của chính cổng thì lần sau phải chạy lại
+        report["cache_key"] = key
         write_json(self.gate_file, report)
+        self.mark("gate", cached=False, seconds=round(time.monotonic() - began, 1), head=report.get("head"),
+                  per_gate={n: g.get("seconds") for n, g in report.get("gates", {}).items() if g.get("seconds")})
         return report
+
+    def mark(self, kind: str, **fields) -> None:
+        """Ghi một sự kiện thời gian của runner vào state/timeline.jsonl (xem timeline.py)."""
+        entry = {"at": now(), "t": time.time(), "kind": kind, **fields}
+        try:
+            with (self.state_dir / "timeline.jsonl").open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except OSError as exc:
+            log(f"CẢNH BÁO: không ghi được timeline: {exc}")
+
+    def write_timeline(self) -> Path | None:
+        """Ghi state/TIMELINE.md; lỗi ở đây không được làm sập flow."""
+        try:
+            report = timeline.build_report(self.wt, self.state_dir)
+            path = self.state_dir / "TIMELINE.md"
+            path.write_text(timeline_render.markdown(self.module, report), encoding="utf-8")
+            return path
+        except Exception as exc:  # noqa: BLE001 - báo cáo thời gian chỉ để xem, không phải điều kiện của flow
+            log(f"CẢNH BÁO: không dựng được timeline: {exc}")
+            return None
+
+    def timeline_lines(self, session_id: str | None) -> list[str]:
+        try:
+            summary = timeline.session_summary(self.wt, session_id)
+        except Exception as exc:  # noqa: BLE001 - xem write_timeline
+            log(f"CẢNH BÁO: không tóm tắt được thời gian iteration: {exc}")
+            return []
+        return timeline_render.iteration_lines(summary) if summary else []
 
     def write_brief(self, i: int, gate: dict, notes: list[str]) -> Path:
         py = self.python
@@ -691,6 +795,7 @@ class Flow:
             f"- SPEC (đã khoá, KHÔNG sửa): `{self.spec_rel}`",
             f"- BRANCH: `{self.spec['branch']}` · BASE_SHA: `{self.base_sha}` · HEAD: `{gate.get('head', '')}`",
             f"- STATE_DIR: `{self.state_dir}` (state.json, journal.md, REPORT.md, gate.json)",
+            *self.digest_lines(),
             f"- PYTHON (venv backend): `{py}`",
             f"- Cổng do runner bật: {', '.join(self.gates)} · coverage_min: {self.spec['coverage_min']:g}",
             f"- allow_core_changes: {self.spec['allow_core_changes']} · "
@@ -703,7 +808,8 @@ class Flow:
             "",
             "Cổng đầy đủ (chạy từ WORKTREE):",
             f"```\n{gate_cmd}\n```",
-            "Cổng nhanh cho một task: thêm `--gates spec,protected,pytest,tc,ruff`.",
+            "Cổng nhanh cho một task: thêm `--gates spec,protected,pytest,tc,ruff,standards "
+            "--tests <file test của task>` (chỉ chạy file test đó; cổng đầy đủ không có `--tests`).",
             "",
             "Commit (CÁCH DUY NHẤT; `git commit` trực tiếp bị chặn). Viết message vào file, "
             "`git add <đường dẫn cụ thể>`, rồi chạy từ WORKTREE:",
@@ -730,7 +836,9 @@ class Flow:
         return path
 
     # ----------------------------------------------------------- loop
-    def loop(self) -> int:
+    @contextlib.contextmanager
+    def runner_lock(self):
+        """Mỗi module chỉ một runner (vòng lặp hoặc --merge-only) chạy cùng lúc."""
         lock = self.state_dir / "runner.lock"
         if lock.exists():  # khoá mồ côi (runner bị kill) thì gỡ
             try:
@@ -748,10 +856,54 @@ class Flow:
         os.close(fd)
         keep_awake(True)
         try:
-            return self._loop()
+            yield
         finally:
             keep_awake(False)
             lock.unlink(missing_ok=True)
+
+    def loop(self) -> int:
+        with self.runner_lock():
+            return self._loop()
+
+    def merge_only(self) -> int:
+        """`--merge-only`: chỉ đưa module đã được duyệt vào main (thử lại sau exit 6, hoặc /merge)."""
+        with self.runner_lock():
+            if read_json(self.state_file, {}).get("status") != "approved":
+                raise FlowError("module chưa được orchestrator duyệt (state.json status khác approved)")
+            gate = self.run_gate()
+            if not gate.get("ok"):
+                return self.finish(EXIT_ERROR, "Cổng chưa đạt trên HEAD, không merge", gate)
+            return self.finish_done(gate)
+
+    def finish_done(self, gate: dict) -> int:
+        """Module xong: đưa vào main (trừ khi --no-merge), rồi báo kết quả."""
+        if self.args.no_merge:
+            return self.finish(EXIT_DONE, "XONG: orchestrator đã duyệt và mọi cổng đạt (--no-merge: chưa merge)", gate)
+        self.notify(f"🔀 {self.tag()} module xong, đang đưa vào main (gộp main, chạy lại cổng, PR, chờ CI)…")
+        try:
+            detail = integration.integrate(self, log, dry_run=self.args.dry_run)
+        except integration.IntegrationError as exc:
+            return self.finish(EXIT_MERGE, f"XONG nhưng CHƯA vào main: {exc}", read_json(self.gate_file, gate))
+        except Exception as exc:  # noqa: BLE001 - lỗi bất ngờ khi tích hợp không được làm mất kết quả module
+            log(f"LỖI tích hợp: {exc!r}")
+            return self.finish(EXIT_MERGE, f"XONG nhưng CHƯA vào main (lỗi runner: {exc})", gate)
+        return self.finish(EXIT_DONE, f"XONG và đã vào main: {detail}", read_json(self.gate_file, gate))
+
+    def call_integrator(self, prompt: str, name: str) -> dict:
+        """Gọi agent integrator (giải xung đột / sửa lỗi sau khi gộp main), dùng cho integrate.py."""
+        self.sync_files()
+        res = call_claude(self.args, prompt, self.wt, [self.state_dir], self.logs / name, agent="integrator")
+        self.track_usage(res)
+        return res
+
+    def sync_on_start(self) -> None:
+        """Chạy lại module trên worktree cũ: gộp main mới nhất trước, để dùng được code của module đã merge."""
+        try:
+            if integration.sync_main(self, log):
+                self.notify(f"🔀 {self.tag()} đã gộp main mới nhất vào nhánh trước khi chạy tiếp")
+        except integration.IntegrationError as exc:
+            log(f"CẢNH BÁO: chưa gộp được main: {exc}")
+            self.notify(f"⚠️ {self.tag()} chưa gộp được main mới nhất ({esc(exc)}); flow chạy tiếp trên nền cũ")
 
     def _loop(self) -> int:
         args = self.args
@@ -792,13 +944,14 @@ class Flow:
 
             if state.get("status") == "approved":
                 if state.get("approved_sha") == head and gate["ok"]:
-                    return self.finish(EXIT_DONE, "XONG: orchestrator đã duyệt và mọi cổng đạt", gate)
+                    return self.finish_done(gate)
                 state["status"] = "in_progress"
                 write_json(self.state_file, state)
                 notes.append("Trạng thái approved bị runner huỷ: approved_sha khác HEAD hoặc cổng trượt.")
             if state.get("status") == "blocked":
                 return self.finish(EXIT_BLOCKED, "BỊ CHẶN: cần người dùng trả lời câu hỏi trong state.json", gate)
             self.alert_new_questions(state)
+            self.check_timebox(gate, state)
 
             tc_status = gate.get("gates", {}).get("tc", {}).get("per_tc", {})
             fp = json.dumps([head, sorted(k for k, v in tc_status.items() if v["status"] == "passed"),
@@ -823,15 +976,20 @@ class Flow:
                       "Kết thúc bằng một dòng tóm tắt việc đã làm.")
             perm_config = (perm_mcp_config(self.state_dir, self.module, self.owner, args.perm_timeout)
                            if args.ask_permissions else None)
-            res = call_claude(args, prompt, self.wt, [self.state_dir], self.logs / f"iter-{i:03d}",
-                              perm_config)
+            self.shared_dir.mkdir(parents=True, exist_ok=True)
+            res = call_claude(args, prompt, self.wt, [self.state_dir, self.shared_dir],
+                              self.logs / f"iter-{i:03d}", perm_config)
             data = res["data"]
             history.append({
                 "i": i, "started": started, "ended": now(), "rc": res["rc"],
                 "timed_out": res["timed_out"], "is_error": res["is_error"],
                 "cost_usd": data.get("total_cost_usd"), "turns": data.get("num_turns"),
+                "tokens": res["tokens"], "rate_limit": res["rate_limit"],
                 "result": str(data.get("result", ""))[:500],
             })
+            self.track_usage(res)
+            self.mark("iteration", i=i, session_id=data.get("session_id"), started=started, ended=now(),
+                      tokens=res["tokens"], cost_usd=data.get("total_cost_usd"), turns=data.get("num_turns"))
 
             if res["is_limit"]:
                 i -= 1
@@ -839,12 +997,18 @@ class Flow:
                 if limit_waits > args.max_limit_waits:
                     return self.finish(EXIT_ERROR, "Chạm giới hạn sử dụng quá nhiều lần", gate)
                 wait = limit_wait_seconds(res["text"], args.limit_wait)
+                resets = [int(w["resetsAt"]) for w in usage.windows(res["rate_limit"]).values()
+                          if w.get("status") == "rejected" and w.get("resetsAt")]
+                if resets:  # chờ đúng tới giờ reset của cửa sổ đang chặn
+                    wait = max(60, max(resets) - int(time.time()) + 60)
                 log(f"chạm giới hạn sử dụng, chờ {wait // 60} phút rồi chạy lại")
                 resume_at = (dt.datetime.now() + dt.timedelta(seconds=wait)).strftime("%H:%M")
                 self.notify(f"⏸ {self.tag()} chạm giới hạn sử dụng của tài khoản, "
                             f"tạm dừng đến khoảng {resume_at} rồi chạy tiếp")
                 self.save_run(i)
                 time.sleep(wait)
+                self.mark("wait", reason="hạn mức", seconds=wait)
+                self.tick = time.monotonic()  # thời gian chờ hạn mức không tính vào mốc thời gian của module
                 just_waited = True
                 continue
             if res["is_error"]:
@@ -862,7 +1026,9 @@ class Flow:
             minutes = round((dt.datetime.now()
                              - dt.datetime.strptime(started, "%Y-%m-%d %H:%M:%S")).total_seconds() / 60)
             pending = {"i": i, "minutes": minutes, "error": res["is_error"],
-                       "timed_out": res["timed_out"], "result": str(data.get("result", "")).strip()}
+                       "timed_out": res["timed_out"], "result": str(data.get("result", "")).strip(),
+                       "tokens": res["tokens"], "session_id": data.get("session_id")}
+            self.write_timeline()
 
             current = git(self.wt, "rev-parse", "--abbrev-ref", "HEAD")
             if current != self.spec["branch"]:
@@ -888,6 +1054,21 @@ class Flow:
                    "chỉ được commit qua flow_commit.py")
             self.warnings.append(msg)
             log(f"CẢNH BÁO: {msg}")
+
+    def track_usage(self, res: dict) -> None:
+        """Cộng token vào run.json, lưu hạn mức mới nhất, cảnh báo khi hạn mức vượt 80/90/95%."""
+        self.run_info["usage_total"] = usage.add(self.run_info.get("usage_total"), res["tokens"])
+        info = res.get("rate_limit")
+        if not info:
+            return
+        self.run_info["rate_limit"] = info
+        self.run_info["rate_limit_at"] = now()
+        alerted = read_json(self.quota_file, {"tags": []})
+        for key, level, tag in usage.new_alerts(info, alerted["tags"]):
+            alerted["tags"].append(tag)
+            self.notify(f"{self.tag()} {usage.format_alert(info, key, level)}")
+        alerted["tags"] = alerted["tags"][-50:]
+        write_json(self.quota_file, alerted)
 
     def save_run(self, i: int) -> None:
         self.run_info["iterations_done"] = i
@@ -929,19 +1110,28 @@ class Flow:
                       for q in questions]
         if (self.state_dir / "REPORT.md").exists():
             lines += ["", f"Báo cáo của orchestrator: `{self.state_dir / 'REPORT.md'}`"]
-        lines += ["", "Runner KHÔNG push/merge. Xem lại nhánh rồi tự push/mở PR theo Claude_git.md."]
+        timeline_file = self.write_timeline()
+        if timeline_file:
+            lines += ["", f"Thời gian đi đâu (từng iteration, từng task, bước chậm nhất): `{timeline_file}`"]
+        if self.run_info.get("merged_pr"):
+            lines += ["", f"Đã merge vào main: PR #{self.run_info['merged_pr']} ({self.run_info.get('merged_url', '')})"]
+        elif code in (EXIT_DONE, EXIT_MERGE):
+            lines += ["", f"Chưa vào main. Thử lại: `/merge {self.module}` hoặc `run_flow.py {self.spec_rel} --merge-only`."]
         report = self.mod_dir / "RUN-REPORT.md"
         report.write_text("\n".join(lines) + "\n", encoding="utf-8")
         log(f"{message}. Báo cáo: {report}")
 
-        icon = {EXIT_DONE: "✅", EXIT_BLOCKED: "⛔", EXIT_STALLED: "🧱", EXIT_BUDGET: "⌛"}.get(code, "❌")
+        icon = {EXIT_DONE: "✅", EXIT_BLOCKED: "⛔", EXIT_STALLED: "🧱", EXIT_BUDGET: "⌛",
+                EXIT_MERGE: "⚠️"}.get(code, "❌")
         gate_line = check_done.format_summary(gate).splitlines() if "head" in gate and "gates" in gate else []
         tc_line = gate.get("gates", {}).get("tc", {}).get("summary", "?")
         msg = [f"{icon} {self.tag()} {esc(message)}",
                f"Nhánh <code>{esc(self.spec['branch'])}</code> · "
                f"{len(commits.splitlines()) if commits else 0} commit · "
                f"{self.run_info.get('iterations_done', 0)} iteration",
-               f"Test case: {esc(tc_line)}"]
+               f"Test case: {esc(tc_line)}",
+               f"Token cả flow: {usage.format_tokens(self.run_info.get('usage_total'))}",
+               usage.format_quota(self.run_info.get("rate_limit"))]
         if gate_line:
             msg.append(f"Cổng: {esc(gate_line[0])}")
         if questions:
@@ -949,8 +1139,10 @@ class Flow:
             for q in questions[:5]:
                 text = q.get("question", q) if isinstance(q, dict) else q
                 msg.append(f"• {esc(str(text)[:300])}")
-        if code == EXIT_DONE:
-            msg.append("Runner không push. Hãy review nhánh rồi tự push/mở PR.")
+        if self.run_info.get("merged_url"):
+            msg.append(f"🔀 Đã merge vào main: {esc(self.run_info['merged_url'])}")
+        elif code == EXIT_MERGE:
+            msg.append(f"Thử lại sau khi xử lý: <code>/merge {esc(self.module)}</code>")
         msg.append(f"Báo cáo: <code>{esc(report)}</code>")
         self.notify("\n".join(msg))
         return code
@@ -975,7 +1167,9 @@ def main() -> int:
     ap.add_argument("--max-iterations", type=int, default=40)
     ap.add_argument("--max-stall", type=int, default=3,
                     help="số iteration liên tiếp không tiến triển thì dừng")
-    ap.add_argument("--iteration-timeout", type=int, default=5400, help="giây cho mỗi iteration")
+    ap.add_argument("--iteration-timeout", type=int, default=2700, help="giây cho mỗi iteration")
+    ap.add_argument("--time-box-minutes", type=int, default=60,
+                    help="quá số phút này (không tính chờ hạn mức) thì báo một lần, flow chạy tiếp; 0 = tắt")
     ap.add_argument("--limit-wait", type=int, default=1800,
                     help="giây chờ khi chạm giới hạn sử dụng mà không biết giờ reset")
     ap.add_argument("--max-limit-waits", type=int, default=30)
@@ -991,6 +1185,14 @@ def main() -> int:
                     help="hỏi quyền qua Telegram (nút Cho phép/Từ chối) thay vì tự từ chối; bot.py bật cờ này")
     ap.add_argument("--perm-timeout", type=int, default=1800,
                     help="giây chờ người duyệt quyền trước khi tự từ chối (mặc định 30 phút)")
+    ap.add_argument("--no-merge", action="store_true",
+                    help="xong thì dừng, KHÔNG tự đưa module vào main (mặc định: gộp main, PR, chờ CI, merge)")
+    ap.add_argument("--merge-only", action="store_true",
+                    help="chỉ đưa module ĐÃ được duyệt vào main (thử lại sau exit 6)")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="khi tích hợp: chỉ gộp main + chạy cổng, không push/PR/merge")
+    ap.add_argument("--no-sync", action="store_true",
+                    help="chạy lại module trên worktree cũ mà KHÔNG gộp main mới nhất trước")
     ap.add_argument("--preflight-only", action="store_true")
     ap.add_argument("--smoke", action="store_true", help="kiểm tra agent/quyền rồi thoát")
     args = ap.parse_args()
@@ -1017,6 +1219,10 @@ def main() -> int:
                 log(f"CẢNH BÁO thông báo: {problem}")
             return EXIT_DONE
         flow.setup_worktree()
+        if args.merge_only:
+            return flow.merge_only()
+        if flow.reused_worktree and not args.no_sync:
+            flow.sync_on_start()
         return flow.loop()
     except FlowError as exc:
         log(f"LỖI: {exc}")

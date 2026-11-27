@@ -9,7 +9,9 @@ Lệnh (gửi trong group cho bot chung, hoặc nhắn riêng bot của bạn):
   /run <module> [--respec]  đưa module lên ĐẦU hàng đợi (không dừng flow đang chạy); mỗi lúc chạy một flow
   /run <module> --force     chạy lại cả module đã đánh dấu xong (status: done trong modules.json)
   /status                   flow đang chạy, hàng đợi, kết quả gần nhất
+  /timeline [module]        thời gian đi đâu: từng iteration, từng task, bước chậm nhất, việc đang làm
   /stop <module>            dừng flow đang chạy hoặc bỏ khỏi hàng đợi
+  /merge <module>           đưa module ĐÃ duyệt vào main (gộp main, PR, chờ CI, merge); thử lại sau "chưa merge"
   /answer <module> <nội dung>  trả lời câu hỏi của agent (flow đang bị chặn sẽ chạy tiếp)
   /owner <module> <thành viên> đổi người phụ trách module (key trong team.json)
   /auto [on|off]            bật/tắt tự xếp hàng các module chưa chạy (mặc định bật)
@@ -41,13 +43,17 @@ import check_done  # noqa: E402
 import notify  # noqa: E402
 import run_flow as rf  # noqa: E402
 import team  # noqa: E402
+import timeline  # noqa: E402
+import timeline_render  # noqa: E402
+import usage  # noqa: E402
 from notify import _call, esc  # noqa: E402
 
 MODULES_FILE = HERE / "modules.json"
 DOCX = REPO / "Mô tả dự án.docx"
 SPEC_RE = re.compile(r"<<<SPEC\s*\n(.*?)\n\s*SPEC>>>", re.S)
 EXIT_TEXT = {0: "✅ xong", 1: "❌ lỗi", 2: "⛔ bị chặn, chờ trả lời", 3: "🧱 kẹt",
-             4: "⌛ hết iteration", 5: "❌ môi trường chưa sẵn sàng", -1: "⏹ đã dừng"}
+             4: "⌛ hết iteration", 5: "❌ môi trường chưa sẵn sàng", 6: "⚠️ xong, chưa vào main",
+             -1: "⏹ đã dừng"}
 HELP = __doc__.split("Lệnh", 1)[1].split("Chỉ nhận", 1)[0]
 
 
@@ -201,7 +207,8 @@ class Bot:
         self.log(f"lệnh từ {who}: {text[:200]}")
         handler = {
             "/start": self.cmd_help, "/help": self.cmd_help, "/modules": self.cmd_modules,
-            "/run": self.cmd_run, "/status": self.cmd_status, "/stop": self.cmd_stop,
+            "/run": self.cmd_run, "/status": self.cmd_status, "/timeline": self.cmd_timeline, "/stop": self.cmd_stop,
+            "/merge": self.cmd_merge,
             "/answer": self.cmd_answer, "/owner": self.cmd_owner, "/auto": self.cmd_auto,
         }.get(cmd)
         if not handler:
@@ -291,8 +298,10 @@ class Bot:
                            if not p.with_name(p.name.replace(".req", ".res")).exists()]
                 if pending:
                     lines.append(f"   🔐 đang chờ duyệt {len(pending)} yêu cầu quyền")
+                lines += self.activity_lines(cur["module"])
         else:
             lines.append("Không có flow nào đang chạy.")
+        lines += self.usage_lines(cur)
         lines.append("Hàng đợi: " + (", ".join(j["module"] + (" (tự động)" if j.get("by") == "auto" else "")
                                               for j in q) if q else "trống"))
         lines.append(f"Tự xếp hàng: {'bật' if self.state.get('auto') else 'tắt'}")
@@ -300,6 +309,45 @@ class Bot:
             lines.append("Gần nhất:")
             lines += [f"• {k}: {EXIT_TEXT.get(v['code'], v['code'])} ({v['at']})" for k, v in last.items()]
         self.reply(token, chat_id, "\n".join(lines))
+
+    def activity_lines(self, module: str) -> list[str]:
+        """Việc agent đang làm lúc này, đọc từ transcript đang ghi (không làm hỏng /status nếu lỗi)."""
+        try:
+            line = timeline_render.status_line(timeline.current_activity(self.root / module / "repo", time.time()))
+        except Exception as exc:  # noqa: BLE001 - dòng phụ, không phải lý do để /status thất bại
+            self.log(f"CẢNH BÁO: không đọc được việc đang làm của {module}: {exc}")
+            return []
+        return [f"   {line}"] if line else []
+
+    def cmd_timeline(self, token, chat_id, who, args) -> None:
+        with self.lock:
+            cur, last = self.state.get("current"), dict(self.state["last"])
+        key = args[0].strip().lower() if args else (cur or {}).get("module") or next(reversed(last), "")
+        if not key or not (self.root / key / "state").exists():
+            self.reply(token, chat_id, "Chưa có dữ liệu. Dùng: <code>/timeline &lt;module&gt;</code> "
+                       "cho module đã chạy flow.")
+            return
+        is_running = bool(cur and cur["module"] == key and cur["phase"] == "run")
+        try:
+            report = timeline.build_report(self.root / key / "repo", self.root / key / "state", is_running)
+        except Exception as exc:  # noqa: BLE001 - báo lỗi cho người hỏi thay vì im lặng
+            self.reply(token, chat_id, f"Không dựng được timeline của <code>{esc(key)}</code>: {esc(exc)}")
+            return
+        self.reply(token, chat_id, timeline_render.telegram(key, report))
+
+    def usage_lines(self, cur: dict | None) -> list[str]:
+        """Token flow đang chạy đã dùng (spec + iteration) và hạn mức Claude còn lại."""
+        lines, info = [], None
+        if cur:
+            mdir = self.root / cur["module"]
+            spent = usage.summarize_logs(sorted(mdir.glob("spec-writer-*.log"))
+                                         + sorted((mdir / "logs").glob("iter-*.out.json")))
+            lines.append(f"   token đã dùng: {usage.format_tokens(spent)}")
+            info = rf.read_json(mdir / "state" / "run.json", {}).get("rate_limit")
+        if info is None:  # không có flow chạy hoặc chưa có số liệu: hỏi trực tiếp (cache 10 phút)
+            info = usage.probe_quota(rf.find_claude())
+        lines.append(usage.format_quota(info))
+        return lines
 
     def cmd_stop(self, token, chat_id, who, args) -> None:
         key = self.module_arg(token, chat_id, args)
@@ -329,6 +377,25 @@ class Bot:
         (self.root / key / "state" / "runner.lock").unlink(missing_ok=True)
         self.announce(owner, f"⏹ {esc(self.name(who))} đã dừng <b>[{key}]</b>. "
                       f"Chạy lại bằng <code>/run {key}</code> (tiếp tục từ chỗ dừng).")
+
+    def cmd_merge(self, token, chat_id, who, args) -> None:
+        key = self.module_arg(token, chat_id, args)
+        if not key:
+            return
+        if rf.read_json(self.root / key / "state" / "state.json", {}).get("status") != "approved":
+            self.reply(token, chat_id, f"<code>{key}</code> chưa được orchestrator duyệt nên chưa đưa vào main được.")
+            return
+        with self.lock:
+            cur = self.state.get("current")
+            if (cur and cur["module"] == key) or any(j["module"] == key for j in self.state["queue"]):
+                self.reply(token, chat_id, f"<code>{key}</code> đang chạy hoặc đã có trong hàng đợi.")
+                return
+            self.state["queue"].insert(0, {"module": key, "by": who, "respec": False, "resume": False,
+                                           "merge_only": True})
+            self.save()
+        owner = load_modules()["modules"][key].get("owner")
+        self.announce(owner, f"🔀 {esc(self.name(who))} đưa <b>[{key}]</b> lên đầu hàng đợi để vào main "
+                      "(gộp main, chạy lại cổng, PR, chờ CI, merge).")
 
     def cmd_answer(self, token, chat_id, who, args) -> None:
         key = self.module_arg(token, chat_id, args)
@@ -498,6 +565,8 @@ class Bot:
                 cmd.append("--ask-permissions")
             if job.get("resume"):
                 cmd.append("--resume-blocked")
+            if job.get("merge_only"):
+                cmd.append("--merge-only")
             cmd += shlex.split(self.args.runner_args, posix=os.name != "nt") if self.args.runner_args else []
             console = (self.root / key / "runner-console.log")
             console.parent.mkdir(parents=True, exist_ok=True)

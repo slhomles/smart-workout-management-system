@@ -26,6 +26,7 @@ runner tự chạy check_done.py trên HEAD → chỉ dừng "XONG" khi:
 | `.claude/agents/implementer.md` | Agent triển khai, mỗi lần làm đúng một task |
 | `scripts/agent-flow/run_flow.py` | Vòng lặp chạy không giám sát: worktree, preflight, giới hạn sử dụng, phát hiện kẹt, báo cáo |
 | `scripts/agent-flow/check_done.py` | Cổng "xong" chạy độc lập với model |
+| `scripts/agent-flow/timeline.py`, `transcript.py`, `timeline_render.py` | Dựng và hiển thị timeline thời gian của từng phiên (mục 4) |
 | `scripts/agent-flow/tc_plugin.py` | Plugin pytest ánh xạ `@pytest.mark.tc("ID")` → kết quả |
 | `scripts/agent-flow/flow-settings.json` | Quyền cho chế độ không giám sát + tắt chữ ký AI trong commit |
 | `scripts/agent-flow/team.example.json` | **Mẫu file thành viên**: danh tính git, module phụ trách, bot Telegram. Bản thật `team.json` bị gitignore |
@@ -78,9 +79,27 @@ Runner tự làm các việc sau:
 - tạo **git worktree riêng** `..\smart_workout-flow\<module>\repo` trên nhánh của spec, từ `main` mới nhất. Thư mục bạn đang làm việc không bị đụng tới;
 - chặn Windows tự sleep trong lúc chạy (tự hoàn nguyên khi xong). **Gập nắp laptop thì máy vẫn có thể sleep**: cắm sạc và chỉnh "When I close the lid" thành "Do nothing";
 - khi chạm giới hạn sử dụng của tài khoản: chờ đến giờ reset (hoặc 30 phút) rồi chạy tiếp, không tính là một iteration;
-- dừng khi: xong (0), bị chặn cần bạn trả lời (2), 3 iteration liền không tiến triển (3), hết 40 iteration (4).
+- chạy lại module trên worktree có sẵn (`/run`, `--resume-blocked`) mà `main` đã có commit mới: **gộp `main` mới nhất vào nhánh trước** (giải xung đột như bên dưới), để module dùng được code các module đã merge (tắt bằng `--no-sync`);
+- **xong thì tự đưa module vào `main`** (ngoại lệ agent flow, doc 05 §9.3; tắt bằng `--no-merge`), xem "Đưa module vào main" bên dưới;
+- dừng khi: xong và đã vào main (0), bị chặn cần bạn trả lời (2), 3 iteration liền không tiến triển (3), hết 40 iteration (4), xong nhưng chưa vào main được (6).
 
-Tuỳ chọn hay dùng: `--max-iterations 60`, `--model sonnet` (tiết kiệm hạn mức), `--iteration-timeout 7200`, `--skip-services`.
+### Đưa module vào main
+
+Khi orchestrator duyệt và mọi cổng đạt, runner (`integrate.py`, `pr_publish.py`):
+1. `git fetch` rồi gộp `origin/main` vào nhánh module (`git merge --no-ff`).
+2. Giải xung đột: `router.py` và file hai phía thêm giống hệt nhau được giải tự động (`merge_resolvers.py`); còn lại agent **`integrator`** giải, giữ tính năng của cả hai phía. Commit gộp đi qua `flow_commit.py` (`chore(<scope>): merge main into <branch>`), tác giả theo `team.json`.
+3. Đặt BASE mới = `origin/main` vừa gộp, chạy **cổng đầy đủ**. Trượt thì `integrator` sửa (tối đa 2 lần, commit `fix(<scope>): adapt module to latest main`).
+4. Push nhánh (không bao giờ `--force`), mở PR vào `main` (hoặc dùng PR đang mở), **chờ CI xanh**, rồi `gh pr merge --merge` (merge commit để giữ tác giả từng commit). PR báo xung đột vì `main` vừa đổi thì quay lại bước 1 (tối đa 3 vòng).
+
+Bất kỳ bước nào thất bại (xung đột không giải được, cổng vẫn trượt, CI đỏ, push bị từ chối): runner **không merge**, nhánh giữ nguyên, exit 6, báo Telegram kèm lý do. Xử lý xong thì `/merge <module>` (hoặc `run_flow.py <spec> --merge-only`; thêm `--dry-run` để chỉ gộp + chạy cổng, không push). Chỉ runner push/merge; agent LLM vẫn bị chặn mọi lệnh git ghi và `gh`.
+
+Tuỳ chọn hay dùng: `--max-iterations 60`, `--model sonnet` (tiết kiệm hạn mức), `--iteration-timeout 3600` (mặc định 2700 giây), `--time-box-minutes 90` (mặc định 60, `0` = tắt), `--skip-services`.
+
+Mục tiêu một module xong trong khoảng 1 giờ, nhờ:
+- **Bản tóm tắt quy tắc dùng chung** (`<flow-root>/_shared/rules-digest.md`): orchestrator đọc toàn bộ tài liệu một lần rồi tóm tắt; implementer và các lần sau chỉ đọc bản tóm tắt cộng đúng các mục được chỉ định (ngoại lệ ở CLAUDE.md §1). Runner băm các tài liệu nguồn (`DIGEST_SOURCES` trong `run_flow.py`); tài liệu đổi thì brief báo "CẦN TẠO LẠI". Muốn ép lập lại thì xoá `_shared/rules-digest.sha`.
+- **Cổng nhanh chỉ chạy test của task**: `check_done.py ... --gates spec,protected,pytest,tc,ruff,standards --tests <file test>`. Toàn bộ suite chỉ chạy ở cổng của runner và cổng cuối.
+- **Task gộp lớn hơn**: 4–6 task mỗi module.
+- **Mốc thời gian**: quá `--time-box-minutes` phút chạy thật (không tính chờ hạn mức) thì runner báo Telegram một lần, flow vẫn chạy tiếp.
 
 ## 4. Theo dõi và nhận kết quả
 
@@ -93,9 +112,25 @@ Mọi thứ nằm trong `..\smart_workout-flow\<module>\`:
 | `state\state.json` | Kế hoạch task, trạng thái, câu hỏi |
 | `state\journal.md` | Nhật ký orchestrator theo từng iteration |
 | `state\REPORT.md` | Báo cáo nghiệm thu của orchestrator: TC → test → commit, checklist tài liệu |
+| `state\TIMELINE.md` | **Thời gian đi đâu**: từng iteration, từng task, bước chậm nhất (xem mục "Xem thời gian đi đâu" bên dưới) |
+| `state\timeline.jsonl` | Sự kiện thời gian của runner: cổng (chạy thật hay dùng lại kết quả cũ, mất bao lâu), chờ hạn mức, ranh giới iteration |
 | `logs\iter-NNN.*` | Output thô của từng phiên Claude |
 
-Xem lại code: `git log main..<branch>` hoặc mở thư mục worktree trong VS Code. Runner **không push, không mở PR**. Việc đó là của bạn, làm theo `Claude_git.md`.
+### Xem thời gian đi đâu
+
+Sau mỗi iteration, tin Telegram có thêm khối `⏱ Thời gian` (ví dụ `implementer 35,2 (53%) · chờ test chạy nền 10,9 (16%) · ...`, thời gian từng task, bước chậm nhất), và `state\TIMELINE.md` được ghi lại. Xem bất cứ lúc nào:
+
+- Telegram: `/timeline [module]` (kèm dòng "đang làm" của flow đang chạy); `/status` cũng có dòng "đang làm".
+- Máy tính: `python scripts\agent-flow\timeline.py <module>` (dùng được cả cho phiên đã chạy từ trước).
+
+Các nhóm thời gian: `implementer` (cả lần gọi implementer, bên trong tách tiếp pytest/đọc/ghi code/model), `chờ test chạy nền` (vòng lặp `sleep` đợi kết quả test hoặc cổng đang chạy nền), `cổng check_done`, `pytest`, `ruff/mypy`, `commit`, `đọc tài liệu/code`, `ghi state/journal`, `lệnh khác`. Đoạn không có lệnh nào đang chạy là `model suy nghĩ/viết`. Hai nhóm tính cạnh nhau thì nhóm ưu tiên (thứ tự ở trên) được tính, nên tổng các nhóm luôn bằng tổng thời gian phiên.
+
+Dữ liệu lấy từ transcript của Claude Code (`~/.claude/projects/...`, chỉ đọc) và `timeline.jsonl` của runner. Hạn chế:
+- chỉ có trên máy chạy flow; định dạng transcript là nội bộ của Claude Code nên có thể đổi theo phiên bản (khi đó chỉ mất phần timeline, flow vẫn chạy);
+- thời lượng mỗi lệnh là từ lúc gọi đến lúc có kết quả, sai số vài giây;
+- phiên chạy trước khi có tính năng này thiếu thời gian cổng của runner và thời gian chờ hạn mức.
+
+Xem lại code: PR do runner mở trên GitHub (link ở tin kết thúc và `RUN-REPORT.md`), hoặc `git log main..<branch>` trong thư mục worktree. Module dùng `--no-merge` hoặc chưa vào main được thì vẫn ở nhánh local cho tới khi `/merge`.
 
 ## 5. Khi flow bị chặn (exit 2)
 
@@ -177,11 +212,13 @@ Bot chặn Windows tự sleep trong lúc chạy. Muốn bot tự bật khi đăn
 |---|---|
 | `/run <module>` | Đưa module lên **đầu** hàng đợi (đã có trong hàng thì chuyển lên đầu); **không** dừng flow đang chạy. Nếu chưa có spec: agent `spec-writer` soạn `docs/features/<module>.md` từ Mô tả dự án + doc 05 + tài liệu DB. Bot kiểm tra spec (cấu trúc, owner, `error.code` phải có trong §10), gửi bảng test case lên Telegram, rồi **chạy luôn** flow (nhóm đã chọn không cần duyệt spec) |
 | `/run <module> --respec` | Soạn lại spec rồi chạy |
+| `/timeline [module]` | Thời gian đi đâu: từng iteration, từng task, bước chậm nhất, thời gian cổng và chờ hạn mức, và việc agent đang làm lúc này. Bỏ trống module thì dùng module đang chạy |
 | `/auto [on\|off]` | Bật/tắt **tự xếp hàng** (mặc định bật): khi rảnh, bot tự thêm vào cuối hàng đợi các module chưa xong, có owner, chưa từng chạy, theo thứ tự `modules.json`. Module đã chạy mà lỗi/kẹt/bị chặn không tự chạy lại. `/stop` một module đang xếp hàng thì bot không tự thêm lại nó |
 | `/run <module> --force` | Chạy lại module đã đánh dấu `"status": "done"` trong `modules.json`. Không có `--force` thì bot từ chối để tránh làm trùng việc đã xong (vd `core` đã làm tay qua PR #2, #3) |
-| `/status` | Flow đang chạy (iteration, TC pass, task, yêu cầu quyền đang chờ), hàng đợi, kết quả gần nhất |
+| `/status` | Flow đang chạy (iteration, TC pass, task, yêu cầu quyền đang chờ, **token đã dùng**), **hạn mức Claude còn lại** (cửa sổ 5 giờ và 7 ngày, giờ reset), hàng đợi, kết quả gần nhất |
 | `/stop <module>` | Dừng flow đang chạy hoặc bỏ khỏi hàng đợi. `/run` lại sẽ tiếp tục từ chỗ dừng |
 | `/answer <module> <nội dung>` | Trả lời câu hỏi của agent. Flow đang bị chặn sẽ tự được xếp hàng chạy tiếp |
+| `/merge <module>` | Đưa module **đã được duyệt** vào main (gộp main, giải xung đột, chạy lại cổng, PR, chờ CI, merge). Dùng để thử lại khi kết quả là "⚠️ xong, chưa vào main" |
 | `/owner <module> <thành viên>` | Đổi người phụ trách (commit của module mang tên người này) |
 | `/modules`, `/help` | Danh mục module, hướng dẫn |
 
@@ -195,9 +232,10 @@ Bot chặn Windows tự sleep trong lúc chạy. Muốn bot tự bật khi đăn
 ## 9. Hàng rào an toàn
 
 - **Model không tự tuyên bố xong được.** Runner dùng bản `check_done.py` của repo chính, không dùng bản trong worktree, và tự chạy trên HEAD.
-  Các cổng: spec hợp lệ · không đụng file bảo vệ (docs, schema DB baseline, tooling, core nếu không cho phép) · không xoá test · worktree sạch · toàn bộ pytest pass · **mọi TC có test gắn marker và đều pass** (skip/xfail không tính) · coverage · ruff · mypy.
+  Các cổng: spec hợp lệ · không đụng file bảo vệ (docs, schema DB baseline, tooling, core nếu không cho phép) · không xoá test · worktree sạch · toàn bộ pytest pass · **mọi TC có test gắn marker và đều pass** (skip/xfail không tính) · coverage · ruff · mypy · **standards** (cảnh báo, không làm trượt: hàm > 40 dòng, file > 300 dòng, > 4 tham số, lồng > 3, complexity > 10 ở code thêm/sửa từ BASE_SHA; xem `docs/guides/coding-standards.md` §6, mã ở `standards.py`).
+  Kết quả cổng chỉ được dùng lại (`gate-runner.json`, trường `cache_key`) khi khớp **cả** HEAD, spec, base, danh sách cổng, python và nội dung `check_done.py`, **và** worktree sạch. Khác bất kỳ điểm nào, hoặc lần trước chính cổng bị lỗi, thì runner chạy lại đầy đủ. Mục đích: không tốn 10+ phút chạy lại toàn bộ pytest trên cùng một commit. Nếu lần chạy trước trượt vì môi trường (DB/Redis sập giữa chừng) thì xoá `state/gate-runner.json` để ép chạy lại.
 - Spec và file agent trong worktree bị sửa thì runner khôi phục và ghi cảnh báo.
-- `flow-settings.json` chặn: `git commit` và `git -c` trực tiếp (agent phải commit qua `flow_commit.py`), push/pull/merge/rebase/switch/checkout/reset --hard/stash, git config, `docker compose down`, xoá volume, web, hỏi người dùng. `pip install/uninstall` được phép chạy không cần hỏi; việc thêm thư viện vào `requirements.txt` vẫn bị cổng `protected` chặn khi spec để `allow_new_dependencies: no`.
+- `flow-settings.json` chặn: `git commit` và `git -c` trực tiếp (agent phải commit qua `flow_commit.py`), push/pull/merge/rebase/switch/checkout/reset --hard/stash, `gh`, git config, `docker compose down`, xoá volume, web, hỏi người dùng. Push, mở PR và merge vào `main` chỉ do runner (Python) làm sau khi cổng đạt và CI xanh; không bao giờ `--force`. `pip install/uninstall` được phép chạy không cần hỏi; việc thêm thư viện vào `requirements.txt` vẫn bị cổng `protected` chặn khi spec để `allow_new_dependencies: no`.
 - `flow_commit.py` từ chối message sai `Claude_git.md` §2 (type, chữ thường, tối đa 72 ký tự, dấu chấm cuối, có `Co-Authored-By`/chữ ký AI), từ chối commit khi đang ở `main`/`develop` hoặc chưa stage gì.
 - Chế độ quyền mặc định là `auto`, kèm `--permission-prompts none`: thao tác nào cần hỏi thì bị từ chối ngay, nên flow không treo chờ người bấm.
 

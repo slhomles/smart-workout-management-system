@@ -25,12 +25,16 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
+
+import standards
 
 HERE = Path(__file__).resolve().parent
 
-ALL_GATES = ["spec", "protected", "clean", "pytest", "tc", "coverage", "ruff", "mypy"]
+ALL_GATES = ["spec", "protected", "clean", "pytest", "tc", "coverage", "ruff", "mypy", "standards"]
 DEFAULT_GATES = ALL_GATES
+MAX_SHOWN_WARNINGS = 10
 TC_RE = re.compile(r"^[A-Z][A-Z0-9_]*(?:-[A-Z0-9_]+)*-\d+$")
 MODULE_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 # Claude_git.md §1: <type>/<mo-ta>, 2-5 từ kebab-case, không dấu, <= 60 ký tự.
@@ -252,12 +256,17 @@ def gate_clean(root: Path, spec_rel: str) -> dict:
     }
 
 
-def run_pytest(root: Path, python: str, want_cov: bool, tmp: Path) -> dict:
+def backend_test_paths(tests: list[str] | None) -> list[str]:
+    """Đường dẫn test tính từ `backend/` (agent hay viết `backend/tests/...`)."""
+    return [t.removeprefix("backend/") for t in tests] if tests else ["tests"]
+
+
+def run_pytest(root: Path, python: str, want_cov: bool, tmp: Path, tests: list[str] | None = None) -> dict:
     backend = root / "backend"
     tc_json = tmp / "tc.json"
     cov_json = tmp / "cov.json"
     cmd = [
-        python, "-m", "pytest", "tests", "-q", "-rfEs", "--no-header",
+        python, "-m", "pytest", *backend_test_paths(tests), "-q", "-rfEs", "--no-header",
         "-p", "tc_plugin", f"--tc-report={tc_json}",
     ]
     if want_cov:
@@ -280,9 +289,26 @@ def run_pytest(root: Path, python: str, want_cov: bool, tmp: Path) -> dict:
     return {"rc": proc.returncode, "output": proc.stdout + proc.stderr, "tc": tc, "cov": cov}
 
 
-def gate_pytest(res: dict) -> dict:
+def timed_pytest(root: Path, python: str, want_cov: bool, tests: list[str] | None) -> dict:
+    """Chạy pytest một lần cho các cổng pytest/tc/coverage và ghi số giây đã mất vào kết quả."""
+    began = time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="flowgate-") as tmp:
+        res = run_pytest(root, python, want_cov, Path(tmp), tests)
+    res["seconds"] = round(time.monotonic() - began, 1)
+    return res
+
+
+def timed(func, *args) -> dict:
+    """Gọi một hàm cổng và ghi số giây đã mất vào kết quả (để biết cổng nào chậm)."""
+    began = time.monotonic()
+    result = func(*args)
+    result["seconds"] = round(time.monotonic() - began, 1)
+    return result
+
+
+def gate_pytest(res: dict, is_subset: bool = False) -> dict:
     rc = res["rc"]
-    labels = {0: "toàn bộ test pass", 1: "có test fail", 5: "không thu thập được test nào"}
+    labels = {0: "test đã chọn pass" if is_subset else "toàn bộ test pass", 1: "có test fail", 5: "không thu thập được test nào"}
     return {
         "ok": rc == 0,
         "summary": labels.get(rc, f"pytest lỗi (exit {rc})"),
@@ -323,6 +349,19 @@ def gate_coverage(spec: dict, res: dict) -> dict:
     return {"ok": cov >= need, "summary": f"coverage {cov:.1f}% (yêu cầu >= {need:g}%)"}
 
 
+def changed_files(root: Path, base: str) -> list[str]:
+    """File thêm/sửa từ BASE_SHA, gồm cả thay đổi chưa commit (không tính file đã xoá)."""
+    committed = git(root, "diff", "--name-only", "--diff-filter=AM", f"{base}...HEAD").splitlines()
+    pending = [path for status, path in porcelain(root) if "D" not in status]
+    return sorted(set(committed) | set(pending))
+
+
+def gate_standards(root: Path, base: str | None) -> dict:
+    if not base:
+        return {"ok": True, "summary": "thiếu --base, bỏ qua", "details": []}
+    return standards.evaluate(root, changed_files(root, base))
+
+
 def gate_tool(root: Path, cmd: list[str], name: str) -> dict:
     try:
         proc = run(cmd, cwd=root / "backend", timeout=900)
@@ -337,7 +376,8 @@ def gate_tool(root: Path, cmd: list[str], name: str) -> dict:
 
 # --------------------------------------------------------------------------- main
 
-def evaluate(root: Path, spec_path: Path, base: str | None, gates: list[str], python: str) -> dict:
+def evaluate(root: Path, spec_path: Path, base: str | None, gates: list[str], python: str,
+             tests: list[str] | None = None) -> dict:
     spec = parse_spec(spec_path)
     spec_rel = spec_path.resolve().relative_to(root.resolve()).as_posix()
     results: dict[str, dict] = {}
@@ -349,22 +389,23 @@ def evaluate(root: Path, spec_path: Path, base: str | None, gates: list[str], py
             "details": spec["errors"],
         }
     if "protected" in gates:
-        results["protected"] = gate_protected(root, base, spec_rel, spec)
+        results["protected"] = timed(gate_protected, root, base, spec_rel, spec)
     if "clean" in gates:
         results["clean"] = gate_clean(root, spec_rel)
     if {"pytest", "tc", "coverage"} & set(gates):
-        with tempfile.TemporaryDirectory(prefix="flowgate-") as tmp:
-            res = run_pytest(root, python, "coverage" in gates, Path(tmp))
+        res = timed_pytest(root, python, "coverage" in gates, tests)
         if "pytest" in gates:
-            results["pytest"] = gate_pytest(res)
+            results["pytest"] = {**gate_pytest(res, is_subset=bool(tests)), "seconds": res["seconds"]}
         if "tc" in gates:
             results["tc"] = gate_tc(spec, res)
         if "coverage" in gates:
             results["coverage"] = gate_coverage(spec, res)
     if "ruff" in gates:
-        results["ruff"] = gate_tool(root, [python, "-m", "ruff", "check", ".", "--no-cache"], "ruff")
+        results["ruff"] = timed(gate_tool, root, [python, "-m", "ruff", "check", ".", "--no-cache"], "ruff")
     if "mypy" in gates:
-        results["mypy"] = gate_tool(root, [python, "-m", "mypy", "app/"], "mypy")
+        results["mypy"] = timed(gate_tool, root, [python, "-m", "mypy", "app/"], "mypy")
+    if "standards" in gates:
+        results["standards"] = timed(gate_standards, root, base)
 
     head = git(root, "rev-parse", "HEAD").strip()
     return {
@@ -375,14 +416,23 @@ def evaluate(root: Path, spec_path: Path, base: str | None, gates: list[str], py
     }
 
 
+def took(result: dict) -> str:
+    seconds = result.get("seconds") or 0
+    return f" ({seconds:.0f}s)" if seconds >= 5 else ""
+
+
 def format_summary(report: dict) -> str:
     lines = [f"GATE {'PASS' if report['ok'] else 'FAIL'} @ {report['head'][:10]}"]
     for name, r in report["gates"].items():
-        lines.append(f"  [{'x' if r['ok'] else ' '}] {name}: {r['summary']}")
+        lines.append(f"  [{'x' if r['ok'] else ' '}] {name}: {r['summary']}{took(r)}")
     tc = report["gates"].get("tc", {}).get("per_tc", {})
     bad = [f"{k}={v['status']}" for k, v in tc.items() if v["status"] != "passed"]
     if bad:
         lines.append("  TC chưa đạt: " + ", ".join(bad))
+    warnings = report["gates"].get("standards", {}).get("details", [])
+    lines += [f"  ! {w}" for w in warnings[:MAX_SHOWN_WARNINGS]]
+    if len(warnings) > MAX_SHOWN_WARNINGS:
+        lines.append(f"  ! ... và {len(warnings) - MAX_SHOWN_WARNINGS} cảnh báo nữa (xem gate.json)")
     return "\n".join(lines)
 
 
@@ -393,6 +443,8 @@ def main() -> int:
     ap.add_argument("--spec", required=True, type=Path)
     ap.add_argument("--base", help="SHA gốc của nhánh (để kiểm tra file bảo vệ)")
     ap.add_argument("--gates", help=f"danh sách cổng, mặc định lấy từ spec. Có: {ALL_GATES}")
+    ap.add_argument("--tests", nargs="+", metavar="PATH",
+                    help="chỉ chạy các file/thư mục test này (cổng nhanh); bỏ trống = toàn bộ suite")
     ap.add_argument("--json-out", type=Path)
     ap.add_argument("--python", default=sys.executable)
     ap.add_argument("--meta", action="store_true", help="chỉ in thông tin spec dạng JSON")
@@ -412,7 +464,7 @@ def main() -> int:
         print(f"gate không hợp lệ: {bad}", file=sys.stderr)
         return 2
 
-    report = evaluate(root, spec_path, args.base, gates, args.python)
+    report = evaluate(root, spec_path, args.base, gates, args.python, args.tests)
     if args.json_out:
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
         args.json_out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
