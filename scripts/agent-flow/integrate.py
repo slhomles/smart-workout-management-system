@@ -83,13 +83,13 @@ def has_markers(wt: Path, path: str) -> bool:
         return False  # file nhị phân: git đã báo xung đột riêng nếu có
 
 
-def settle(wt: Path, paths: list[str]) -> None:
-    """Sau khi integrator sửa: chỉ khi MỌI file hết dấu xung đột mới stage (kể cả sửa phụ trong backend/)."""
+def settle(wt: Path, paths: list[str], code_dir: str) -> None:
+    """Sau khi integrator sửa: chỉ khi MỌI file hết dấu xung đột mới stage (kể cả sửa phụ trong thư mục target)."""
     unresolved = [p for p in paths if has_markers(wt, p)]
     if unresolved:
         raise IntegrationError(f"còn xung đột chưa giải được: {', '.join(unresolved)}")
     git(wt, "add", "-A", "--", *paths)
-    git(wt, "add", "-A", "--", "backend")
+    git(wt, "add", "-A", "--", code_dir)
 
 
 def assert_no_markers(wt: Path) -> None:
@@ -121,7 +121,7 @@ def finish_merge(flow, log) -> bool:
     if left:
         log(f"tích hợp: nhờ integrator giải {len(left)} file: {', '.join(left)}")
         ask_integrator(flow, resolve_prompt(flow, left), "integrate-resolve")
-        settle(flow.wt, left)
+        settle(flow.wt, left, flow.target.root)
     remaining = conflicted(flow.wt)
     if remaining:
         raise IntegrationError(f"còn xung đột chưa giải được: {', '.join(remaining)}")
@@ -183,7 +183,7 @@ def verify(flow, log) -> dict:
             break
         log(f"tích hợp: cổng trượt sau khi gộp main, integrator sửa (lần {attempt})")
         ask_integrator(flow, fix_prompt(report), f"integrate-fix-{attempt}")
-        git(flow.wt, "add", "-A", "--", "backend")
+        git(flow.wt, "add", "-A", "--", flow.target.root)
         if git(flow.wt, "diff", "--cached", "--name-only"):
             commit(flow, f"fix({scope(flow)}): adapt module to latest main")
         report = flow.run_gate()

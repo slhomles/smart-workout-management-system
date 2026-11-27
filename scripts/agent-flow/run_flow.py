@@ -41,6 +41,7 @@ import integrate as integration  # noqa: E402
 import notify  # noqa: E402
 import team  # noqa: E402
 import timeline  # noqa: E402
+import targets  # noqa: E402
 import timeline_render  # noqa: E402
 import usage  # noqa: E402
 from notify import esc  # noqa: E402
@@ -48,18 +49,27 @@ from notify import esc  # noqa: E402
 AGENT_FILES = [".claude/agents/orchestrator.md", ".claude/agents/implementer.md",
                ".claude/agents/spec-writer.md", ".claude/agents/integrator.md"]
 SETTINGS = HERE / "flow-settings.json"
-MANDATORY_GATES = ["spec", "protected", "clean", "pytest", "tc", "standards"]
-# Tài liệu nguồn của bản tóm tắt quy tắc dùng chung; một trong số này đổi thì phải lập lại bản tóm tắt.
-DIGEST_SOURCES = [
-    "CLAUDE.md",
-    "docs/architecture/Claude_api_respone.md",
-    "docs/architecture/04-auth-strategy.md",
-    "docs/architecture/05-tooling-workflow.md",
-    "docs/architecture/Claude_git.md",
-    "docs/guides/coding-standards.md",
-    "docs/database/design-overview.md",
-    "docs/database/test-dataset.md",
-]
+# Cổng luôn bật theo loại target (targets.py), dù spec có ghi `gates` ít hơn.
+MANDATORY_GATES = {"python": ["spec", "protected", "clean", "pytest", "tc", "standards"],
+                   "node": ["spec", "protected", "clean", "jest", "tc", "standards"]}
+# Tài liệu nguồn của bản tóm tắt quy tắc theo target (mỗi target một bản, dùng chung mọi module cùng target);
+# một trong số này đổi thì phải lập lại bản tóm tắt. Theo bảng CLAUDE.md §2.
+_COMMON_SOURCES = ["CLAUDE.md", "docs/architecture/Claude_api_respone.md", "docs/architecture/Claude_git.md"]
+DIGEST_SOURCES = {
+    "backend": _COMMON_SOURCES + [
+        "docs/architecture/04-auth-strategy.md", "docs/architecture/05-tooling-workflow.md",
+        "docs/guides/coding-standards.md", "docs/database/design-overview.md", "docs/database/test-dataset.md",
+        "docs/architecture/06-ai-contracts.md",
+    ],
+    "ai-services": _COMMON_SOURCES + [
+        "docs/architecture/06-ai-contracts.md", "docs/guides/coding-standards.md", "ai-services/README.md",
+        "docs/architecture/05-tooling-workflow.md", "AGENT_RESOURCES.md",
+    ],
+    "frontend": _COMMON_SOURCES + [
+        "docs/guides/frontend-standards.md", "docs/architecture/04-auth-strategy.md", "frontend/README.md",
+        "AGENT_RESOURCES.md", "docs/ui-refs/home-workout/README.md",
+    ],
+}
 
 EXIT_DONE, EXIT_ERROR, EXIT_BLOCKED, EXIT_STALLED, EXIT_BUDGET, EXIT_PREFLIGHT = 0, 1, 2, 3, 4, 5
 EXIT_MERGE = 6  # module xong nhưng chưa đưa được vào main (xung đột, cổng trượt sau khi gộp, CI đỏ)
@@ -285,9 +295,10 @@ def find_claude() -> str:
     return path
 
 
-def default_python() -> Path:
-    sub = ("Scripts", "python.exe") if os.name == "nt" else ("bin", "python")
-    return REPO / "backend" / ".venv" / sub[0] / sub[1]
+def default_python(target: targets.Target | None = None) -> Path:
+    """Venv của target python; target frontend dùng venv backend (chỉ để chạy script của flow)."""
+    tgt = target if target and target.kind == "python" else targets.TARGETS["backend"]
+    return targets.venv_python(REPO, tgt)
 
 
 def read_env(path: Path) -> dict[str, str]:
@@ -398,13 +409,14 @@ class Flow:
         self.wt = self.mod_dir / "repo"
         self.state_dir = self.mod_dir / "state"
         self.logs = self.mod_dir / "logs"
-        self.python = Path(args.python) if args.python else default_python()
+        self.target = targets.TARGETS.get(self.spec.get("target") or "backend", targets.TARGETS["backend"])
+        self.python = Path(args.python) if args.python else default_python(self.target)
         self.run_file = self.state_dir / "run.json"
         self.state_file = self.state_dir / "state.json"
         self.gate_file = self.state_dir / "gate-runner.json"
         self.warnings: list[str] = []
         self.tick = time.monotonic()  # mốc đo thời gian chạy thật của module (xem check_timebox)
-        self.gates = list(dict.fromkeys(MANDATORY_GATES + self.spec.get("gates", [])))
+        self.gates = list(dict.fromkeys(MANDATORY_GATES[self.target.kind] + self.spec.get("gates", [])))
         self.owner = self.spec.get("owner") or None
         self.notifier = notify.Notifier.load(log)
         self.team_cfg, self.team_err = team.load()
@@ -522,28 +534,36 @@ class Flow:
             email = git(REPO, "config", "user.email", check=False)
             if not name or not email:
                 errors.append("git user.name/user.email trống (Claude_git.md §2.8: phải hỏi người dùng)")
-        if not self.python.exists():
-            errors.append(
-                f"không có python venv tại {self.python}. Tạo bằng:\n"
-                f"    py -3.11 -m venv backend\\.venv\n"
-                f"    backend\\.venv\\Scripts\\python -m pip install -r backend\\requirements.txt"
-            )
-        else:
-            probe = run([str(self.python), "-c",
-                         "import pytest, pytest_asyncio, pytest_cov, httpx, fastapi, asyncpg, redis"],
-                        cwd=REPO)
-            if probe.returncode != 0:
-                errors.append(f"venv thiếu thư viện test: {probe.stderr.strip()[-300:]}")
-            for tool in ("ruff", "mypy"):
-                if tool in self.gates and run([str(self.python), "-m", tool, "--version"],
-                                              cwd=REPO).returncode != 0:
-                    errors.append(f"venv thiếu {tool} (cổng '{tool}' đang bật trong spec)")
+        errors += self.check_toolchain()
+        if self.target.name != "backend":
+            return errors  # chỉ backend cần PostgreSQL/Redis trên VM để chạy test
         if not (REPO / "backend" / ".env").exists():
             errors.append("thiếu backend/.env (copy từ backend/.env.example, sửa POSTGRES_PASSWORD "
                           "khớp docker-compose.yml)")
         if errors or self.args.skip_services:
             return errors
         return self.ensure_services()
+
+    def check_toolchain(self) -> list[str]:
+        """Python venv (mọi target, vì flow_commit.py chạy bằng nó) và công cụ cổng của target."""
+        venv = self.target.venv or "backend/.venv"
+        if not self.python.exists():
+            req = f"{self.target.root}\\requirements.txt" if self.target.kind == "python" else "backend\\requirements.txt"
+            return [f"không có python venv tại {self.python}. Tạo bằng:\n"
+                    f"    py -3.11 -m venv {venv.replace('/', chr(92))}\n"
+                    f"    {venv.replace('/', chr(92))}\\Scripts\\python -m pip install -r {req}"]
+        if self.target.kind == "node":
+            return [] if shutil.which("node") and shutil.which("npm") else ["không có node/npm trong PATH (cần Node.js)"]
+        modules = {"backend": "pytest, pytest_asyncio, pytest_cov, httpx, fastapi, asyncpg, redis",
+                   "ai-services": "pytest, pytest_cov, httpx, fastapi"}[self.target.name]
+        errors = []
+        probe = run([str(self.python), "-c", f"import {modules}"], cwd=REPO)
+        if probe.returncode != 0:
+            errors.append(f"venv thiếu thư viện test: {probe.stderr.strip()[-300:]}")
+        for tool in ("ruff", "mypy"):
+            if tool in self.gates and run([str(self.python), "-m", tool, "--version"], cwd=REPO).returncode != 0:
+                errors.append(f"venv thiếu {tool} (cổng '{tool}' đang bật trong spec)")
+        return errors
 
     def ensure_services(self) -> list[str]:
         env_vals = read_env(REPO / "backend" / ".env")
@@ -630,7 +650,7 @@ class Flow:
         self.base_sha = run_info["base_sha"]
 
         env_dst = self.wt / "backend" / ".env"
-        if not env_dst.exists():
+        if self.target.name == "backend" and not env_dst.exists():
             if git_ok(self.wt, "check-ignore", "-q", "backend/.env"):
                 shutil.copy2(REPO / "backend" / ".env", env_dst)
             else:
@@ -695,7 +715,8 @@ class Flow:
         if git(self.wt, "status", "--porcelain", "-uall", check=False).strip():
             return None
         parts = [git(self.wt, "rev-parse", "HEAD"), self.run_info.get("spec_sha", ""), self.base_sha,
-                 ",".join(self.gates), str(self.python), sha256(HERE / "check_done.py"), sha256(HERE / "standards.py")]
+                 ",".join(self.gates), str(self.python)]
+        parts += [sha256(HERE / name) for name in ("check_done.py", "standards.py", "targets.py", "check_frontend.py")]
         return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
 
     def check_timebox(self, gate: dict, state: dict) -> None:
@@ -717,19 +738,23 @@ class Flow:
     def docs_sha(self) -> str:
         """Băm nội dung các tài liệu nguồn; khác lần lập bản tóm tắt trước thì phải đọc và lập lại."""
         digest = hashlib.sha256()
-        for rel in DIGEST_SOURCES:
+        for rel in DIGEST_SOURCES[self.target.name]:
             path = self.wt / rel
             digest.update(rel.encode("utf-8") + (path.read_bytes() if path.exists() else b"-"))
         return digest.hexdigest()
 
     def digest_lines(self) -> list[str]:
-        digest, sha_file = self.shared_dir / "rules-digest.md", self.shared_dir / "rules-digest.sha"
+        suffix = "" if self.target.name == "backend" else f"-{self.target.name}"
+        digest = self.shared_dir / f"rules-digest{suffix}.md"
+        sha_file = self.shared_dir / f"rules-digest{suffix}.sha"
         current = self.docs_sha()
         is_fresh = digest.exists() and sha_file.exists() and sha_file.read_text(encoding="utf-8").strip() == current
         if is_fresh:
             return [f"- RULES_DIGEST: `{digest}` · **CÒN HIỆU LỰC**: đọc nó thay vì đọc lại toàn bộ tài liệu."]
+        sources = ", ".join(f"`{rel}`" for rel in DIGEST_SOURCES[self.target.name])
         return [f"- RULES_DIGEST: `{digest}` · **CẦN TẠO LẠI** (tài liệu đã đổi hoặc chưa có): đọc toàn bộ "
-                f"tài liệu một lần, ghi bản tóm tắt vào file này, rồi ghi đúng chuỗi `{current}` vào `{sha_file}`."]
+                f"tài liệu một lần, ghi bản tóm tắt vào file này, rồi ghi đúng chuỗi `{current}` vào `{sha_file}`.",
+                f"- RULES_SOURCES (target `{self.target.name}`): {sources}"]
 
     def run_gate(self) -> dict:
         # Bộ test chạy trên DB ở VM mất 10+ phút; HEAD không đổi thì kết quả cổng cũng không đổi.
@@ -782,6 +807,21 @@ class Flow:
             return []
         return timeline_render.iteration_lines(summary) if summary else []
 
+    def quick_gates(self) -> str:
+        if self.target.kind == "node":
+            return "spec,protected,tsc,eslint,jest,tc,standards"
+        return "spec,protected,pytest,tc,ruff,standards"
+
+    def quick_test_hint(self) -> str:
+        cwd = self.wt / self.target.root
+        if self.target.kind == "node":
+            return (f"Test nhanh (cwd = `{cwd}`): `node node_modules/jest/bin/jest.js <file>`; "
+                    "kiểu: `node node_modules/typescript/bin/tsc --noEmit`; lint: `node node_modules/eslint/bin/eslint.js .`.")
+        py = self.python
+        return (f"Test nhanh (cwd = `{cwd}`): "
+                f'`"{py}" -m pytest tests -q -p tc_plugin` với PYTHONPATH chứa `{HERE}`, '
+                f'hoặc đơn giản `"{py}" -m pytest tests/<file> -q`.')
+
     def write_brief(self, i: int, gate: dict, notes: list[str]) -> Path:
         py = self.python
         gate_cmd = (f'"{py}" "{HERE / "check_done.py"}" --spec "{self.spec_rel}" '
@@ -796,7 +836,7 @@ class Flow:
             f"- BRANCH: `{self.spec['branch']}` · BASE_SHA: `{self.base_sha}` · HEAD: `{gate.get('head', '')}`",
             f"- STATE_DIR: `{self.state_dir}` (state.json, journal.md, REPORT.md, gate.json)",
             *self.digest_lines(),
-            f"- PYTHON (venv backend): `{py}`",
+            f"- TARGET: `{self.target.name}` (thư mục `{self.target.root}/`) · PYTHON: `{py}`",
             f"- Cổng do runner bật: {', '.join(self.gates)} · coverage_min: {self.spec['coverage_min']:g}",
             f"- allow_core_changes: {self.spec['allow_core_changes']} · "
             f"allow_new_dependencies: {self.spec['allow_new_dependencies']}",
@@ -808,7 +848,7 @@ class Flow:
             "",
             "Cổng đầy đủ (chạy từ WORKTREE):",
             f"```\n{gate_cmd}\n```",
-            "Cổng nhanh cho một task: thêm `--gates spec,protected,pytest,tc,ruff,standards "
+            f"Cổng nhanh cho một task: thêm `--gates {self.quick_gates()} "
             "--tests <file test của task>` (chỉ chạy file test đó; cổng đầy đủ không có `--tests`).",
             "",
             "Commit (CÁCH DUY NHẤT; `git commit` trực tiếp bị chặn). Viết message vào file, "
@@ -818,9 +858,7 @@ class Flow:
             f"Script tự chọn tác giả (rotation: `{self.rotation}`) và kiểm tra message theo "
             "Claude_git.md §2. Nếu bị TỪ CHỐI thì sửa đúng lỗi được báo, KHÔNG tìm cách lách.",
             "",
-            f"Test nhanh (cwd = `{self.wt / 'backend'}`): "
-            f'`"{py}" -m pytest tests -q -p tc_plugin` với PYTHONPATH chứa `{HERE}`, '
-            f'hoặc đơn giản `"{py}" -m pytest tests/<file> -q`.',
+            self.quick_test_hint(),
             "",
             "## Kết quả cổng runner vừa chạy trên HEAD",
             "",
@@ -1176,7 +1214,7 @@ def main() -> int:
     ap.add_argument("--model", default="opus", help="model cho orchestrator (implementer: inherit)")
     ap.add_argument("--permission-mode", default="auto",
                     choices=["auto", "acceptEdits", "dontAsk", "bypassPermissions"])
-    ap.add_argument("--python", help="python của venv backend (mặc định backend/.venv)")
+    ap.add_argument("--python", help="python của venv cho cổng (mặc định theo target: backend/.venv, ai-services/.venv)")
     ap.add_argument("--flow-root", help="thư mục chứa worktree + state (mặc định ../<repo>-flow)")
     ap.add_argument("--skip-services", action="store_true", help="bỏ kiểm tra/khởi động PostgreSQL+Redis")
     ap.add_argument("--resume-blocked", action="store_true",
