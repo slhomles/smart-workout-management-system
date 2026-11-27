@@ -1,0 +1,428 @@
+{
+ "plank": {
+  "exds_id": "2135",
+  "exds_name": "weighted front plank",
+  "fedb_id": "Plank",
+  "confidence": "low"
+ },
+ "cable-triceps-pushdown": {
+  "exds_id": "0201",
+  "exds_name": "cable pushdown",
+  "fedb_id": "Triceps_Pushdown",
+  "confidence": "high"
+ },
+ "hammer-curl": {
+  "exds_id": "0313",
+  "exds_name": "dumbbell hammer curl",
+  "fedb_id": "Hammer_Curls",
+  "confidence": "high"
+ },
+ "barbell-curl": {
+  "exds_id": "0031",
+  "exds_name": "barbell curl",
+  "fedb_id": "Barbell_Curl",
+  "confidence": "high"
+ },
+ "face-pull": {
+  "exds_id": null,
+  "exds_name": null,
+  "fedb_id": "Face_Pull",
+  "confidence": "low"
+ },
+ "dumbbell-lateral-raise": {
+  "exds_id": "0334",
+  "exds_name": "dumbbell lateral raise",
+  "fedb_id": "Side_Lateral_Raise",
+  "confidence": "high"
+ },
+ "dumbbell-shoulder-press": {
+  "exds_id": "0405",
+  "exds_name": "dumbbell seated shoulder press",
+  "fedb_id": "Dumbbell_Shoulder_Press",
+  "confidence": "medium"
+ },
+ "seated-cable-row": {
+  "exds_id": "0861",
+  "exds_name": "cable seated row",
+  "fedb_id": "Seated_Cable_Rows",
+  "confidence": "high"
+ },
+ "lat-pulldown": {
+  "exds_id": "0150",
+  "exds_name": "cable bar lateral pulldown",
+  "fedb_id": "Wide-Grip_Lat_Pulldown",
+  "confidence": "medium"
+ },
+ "dumbbell-row": {
+  "exds_id": "0292",
+  "exds_name": "dumbbell one arm bent-over row",
+  "fedb_id": "One-Arm_Dumbbell_Row",
+  "confidence": "high"
+ },
+ "pec-deck-fly": {
+  "exds_id": "0596",
+  "exds_name": "lever seated fly",
+  "fedb_id": "Butterfly",
+  "confidence": "medium"
+ },
+ "cable-chest-fly": {
+  "exds_id": "0227",
+  "exds_name": "cable standing fly",
+  "fedb_id": "Cable_Crossover",
+  "confidence": "medium"
+ },
+ "push-up": {
+  "exds_id": "0662",
+  "exds_name": "push-up",
+  "fedb_id": "Pushups",
+  "confidence": "high"
+ },
+ "machine-chest-press": {
+  "exds_id": "0577",
+  "exds_name": "lever chest press",
+  "fedb_id": "Leverage_Chest_Press",
+  "confidence": "high"
+ },
+ "dumbbell-bench-press": {
+  "exds_id": "0289",
+  "exds_name": "dumbbell bench press",
+  "fedb_id": "Dumbbell_Bench_Press",
+  "confidence": "high"
+ },
+ "standing-calf-raise": {
+  "exds_id": "0605",
+  "exds_name": "lever standing calf raise",
+  "fedb_id": "Standing_Calf_Raises",
+  "confidence": "high"
+ },
+ "lying-leg-curl": {
+  "exds_id": "0586",
+  "exds_name": "lever lying leg curl",
+  "fedb_id": "Lying_Leg_Curls",
+  "confidence": "high"
+ },
+ "leg-extension": {
+  "exds_id": "0585",
+  "exds_name": "lever leg extension",
+  "fedb_id": "Leg_Extensions",
+  "confidence": "high"
+ },
+ "leg-press": {
+  "exds_id": "1463",
+  "exds_name": "sled 45° leg press (side pov)",
+  "fedb_id": "Leg_Press",
+  "confidence": "high"
+ },
+ "goblet-squat": {
+  "exds_id": "1760",
+  "exds_name": "dumbbell goblet squat",
+  "fedb_id": "Goblet_Squat",
+  "confidence": "high"
+ },
+ "hanging-leg-raise": {
+  "exds_id": "0472",
+  "exds_name": "hanging leg raise",
+  "fedb_id": "Hanging_Leg_Raise",
+  "confidence": "high"
+ },
+ "overhead-press": {
+  "exds_id": "1456",
+  "exds_name": "barbell standing close grip military press",
+  "fedb_id": "Standing_Military_Press",
+  "confidence": "medium"
+ },
+ "barbell-row": {
+  "exds_id": "0027",
+  "exds_name": "barbell bent over row",
+  "fedb_id": "Bent_Over_Barbell_Row",
+  "confidence": "high"
+ },
+ "chest-dip": {
+  "exds_id": "0251",
+  "exds_name": "chest dip",
+  "fedb_id": "Dips_-_Chest_Version",
+  "confidence": "high"
+ },
+ "incline-dumbbell-press": {
+  "exds_id": "0314",
+  "exds_name": "dumbbell incline bench press",
+  "fedb_id": "Incline_Dumbbell_Press",
+  "confidence": "high"
+ },
+ "barbell-bench-press": {
+  "exds_id": "0025",
+  "exds_name": "barbell bench press",
+  "fedb_id": "Barbell_Bench_Press_-_Medium_Grip",
+  "confidence": "high"
+ },
+ "hip-thrust": {
+  "exds_id": "3562",
+  "exds_name": "barbell glute bridge two legs on bench (male)",
+  "fedb_id": "Barbell_Hip_Thrust",
+  "confidence": "medium"
+ },
+ "romanian-deadlift": {
+  "exds_id": "0085",
+  "exds_name": "barbell romanian deadlift",
+  "fedb_id": "Romanian_Deadlift",
+  "confidence": "high"
+ },
+ "bulgarian-split-squat": {
+  "exds_id": "0410",
+  "exds_name": "dumbbell single leg split squat",
+  "fedb_id": null,
+  "confidence": "medium"
+ },
+ "barbell-back-squat": {
+  "exds_id": "0043",
+  "exds_name": "barbell full squat",
+  "fedb_id": "Barbell_Full_Squat",
+  "confidence": "high"
+ },
+ "pull-up": {
+  "exds_id": "0652",
+  "exds_name": "pull-up",
+  "fedb_id": "Pullups",
+  "confidence": "high"
+ },
+ "conventional-deadlift": {
+  "exds_id": "0032",
+  "exds_name": "barbell deadlift",
+  "fedb_id": "Barbell_Deadlift",
+  "confidence": "high"
+ },
+ "farmers-walk": {
+  "exds_id": "2133",
+  "exds_name": "farmers walk",
+  "fedb_id": "Farmers_Walk",
+  "confidence": "high"
+ },
+ "russian-twist": {
+  "exds_id": "0687",
+  "exds_name": "russian twist",
+  "fedb_id": "Russian_Twist",
+  "confidence": "high"
+ },
+ "dead-bug": {
+  "exds_id": "0276",
+  "exds_name": "dead bug",
+  "fedb_id": "Dead_Bug",
+  "confidence": "high"
+ },
+ "side-plank": {
+  "exds_id": "0705",
+  "exds_name": "side bridge v. 2",
+  "fedb_id": "Side_Bridge",
+  "confidence": "medium"
+ },
+ "crunch": {
+  "exds_id": "0274",
+  "exds_name": "crunch floor",
+  "fedb_id": "Crunches",
+  "confidence": "high"
+ },
+ "machine-shoulder-press": {
+  "exds_id": "0603",
+  "exds_name": "lever shoulder press",
+  "fedb_id": "Leverage_Shoulder_Press",
+  "confidence": "high"
+ },
+ "reverse-pec-deck": {
+  "exds_id": "0602",
+  "exds_name": "lever seated reverse fly",
+  "fedb_id": "Reverse_Machine_Flyes",
+  "confidence": "high"
+ },
+ "overhead-triceps-extension": {
+  "exds_id": "2188",
+  "exds_name": "dumbbell seated triceps extension",
+  "fedb_id": "Standing_Dumbbell_Triceps_Extension",
+  "confidence": "medium"
+ },
+ "dumbbell-shrug": {
+  "exds_id": "0406",
+  "exds_name": "dumbbell shrug",
+  "fedb_id": "Dumbbell_Shrug",
+  "confidence": "high"
+ },
+ "inverted-row": {
+  "exds_id": "0499",
+  "exds_name": "inverted row",
+  "fedb_id": "Inverted_Row",
+  "confidence": "high"
+ },
+ "glute-bridge": {
+  "exds_id": "3013",
+  "exds_name": "low glute bridge on floor",
+  "fedb_id": "Butt_Lift_Bridge",
+  "confidence": "medium"
+ },
+ "step-up": {
+  "exds_id": "0431",
+  "exds_name": "dumbbell step-up",
+  "fedb_id": "Dumbbell_Step_Ups",
+  "confidence": "medium"
+ },
+ "walking-lunge": {
+  "exds_id": "1460",
+  "exds_name": "walking lunge",
+  "fedb_id": "Bodyweight_Walking_Lunge",
+  "confidence": "high"
+ },
+ "smith-machine-squat": {
+  "exds_id": "0770",
+  "exds_name": "smith squat",
+  "fedb_id": "Smith_Machine_Squat",
+  "confidence": "high"
+ },
+ "cat-cow": {
+  "exds_id": null,
+  "exds_name": null,
+  "fedb_id": "Cat_Stretch",
+  "confidence": "low"
+ },
+ "childs-pose": {
+  "exds_id": null,
+  "exds_name": null,
+  "fedb_id": "Childs_Pose",
+  "confidence": "low"
+ },
+ "doorway-chest-stretch": {
+  "exds_id": "1271",
+  "exds_name": "chest and front of shoulder stretch",
+  "fedb_id": "Chest_And_Front_Of_Shoulder_Stretch",
+  "confidence": "low"
+ },
+ "kneeling-hip-flexor-stretch": {
+  "exds_id": null,
+  "exds_name": null,
+  "fedb_id": "Kneeling_Hip_Flexor",
+  "confidence": "low"
+ },
+ "standing-hamstring-stretch": {
+  "exds_id": "1511",
+  "exds_name": "hamstring stretch",
+  "fedb_id": "Standing_Hamstring_and_Calf_Stretch",
+  "confidence": "low"
+ },
+ "medicine-ball-slam": {
+  "exds_id": "1354",
+  "exds_name": "medicine ball overhead slam",
+  "fedb_id": "Overhead_Slam",
+  "confidence": "medium"
+ },
+ "mountain-climber": {
+  "exds_id": "0630",
+  "exds_name": "mountain climber",
+  "fedb_id": "Mountain_Climbers",
+  "confidence": "high"
+ },
+ "jump-squat": {
+  "exds_id": "0514",
+  "exds_name": "jump squat",
+  "fedb_id": "Freehand_Jump_Squat",
+  "confidence": "high"
+ },
+ "jump-rope": {
+  "exds_id": "2612",
+  "exds_name": "jump rope",
+  "fedb_id": "Rope_Jumping",
+  "confidence": "high"
+ },
+ "stationary-bike": {
+  "exds_id": "0798",
+  "exds_name": "stationary bike walk",
+  "fedb_id": "Bicycling_Stationary",
+  "confidence": "medium"
+ },
+ "incline-treadmill-walk": {
+  "exds_id": "3666",
+  "exds_name": "walking on incline treadmill",
+  "fedb_id": "Walking_Treadmill",
+  "confidence": "medium"
+ },
+ "treadmill-run": {
+  "exds_id": "0684",
+  "exds_name": "run (equipment)",
+  "fedb_id": "Running_Treadmill",
+  "confidence": "medium"
+ },
+ "cable-crunch": {
+  "exds_id": "0175",
+  "exds_name": "cable kneeling crunch",
+  "fedb_id": "Cable_Crunch",
+  "confidence": "high"
+ },
+ "cable-lateral-raise": {
+  "exds_id": "0178",
+  "exds_name": "cable lateral raise",
+  "fedb_id": "Cable_Seated_Lateral_Raise",
+  "confidence": "high"
+ },
+ "preacher-curl": {
+  "exds_id": "0070",
+  "exds_name": "barbell preacher curl",
+  "fedb_id": "Preacher_Curl",
+  "confidence": "medium"
+ },
+ "skull-crusher": {
+  "exds_id": "0060",
+  "exds_name": "barbell lying triceps extension skull crusher",
+  "fedb_id": "EZ-Bar_Skullcrusher",
+  "confidence": "medium"
+ },
+ "close-grip-bench-press": {
+  "exds_id": "0030",
+  "exds_name": "barbell close-grip bench press",
+  "fedb_id": "Close-Grip_Barbell_Bench_Press",
+  "confidence": "high"
+ },
+ "chin-up": {
+  "exds_id": "1326",
+  "exds_name": "chin-up",
+  "fedb_id": "Chin-Up",
+  "confidence": "high"
+ },
+ "kettlebell-swing": {
+  "exds_id": "0549",
+  "exds_name": "kettlebell swing",
+  "fedb_id": "One-Arm_Kettlebell_Swings",
+  "confidence": "medium"
+ },
+ "worlds-greatest-stretch": {
+  "exds_id": "1604",
+  "exds_name": "world greatest stretch",
+  "fedb_id": "Worlds_Greatest_Stretch",
+  "confidence": "high"
+ },
+ "burpee": {
+  "exds_id": "1160",
+  "exds_name": "burpee",
+  "fedb_id": null,
+  "confidence": "high"
+ },
+ "box-jump": {
+  "exds_id": null,
+  "exds_name": null,
+  "fedb_id": "Front_Box_Jump",
+  "confidence": "low"
+ },
+ "rowing-machine": {
+  "exds_id": null,
+  "exds_name": null,
+  "fedb_id": "Rowing_Stationary",
+  "confidence": "low"
+ },
+ "ab-wheel-rollout": {
+  "exds_id": "0857",
+  "exds_name": "wheel rollerout",
+  "fedb_id": "Ab_Roller",
+  "confidence": "high"
+ },
+ "sumo-deadlift": {
+  "exds_id": "0117",
+  "exds_name": "barbell sumo deadlift",
+  "fedb_id": "Sumo_Deadlift",
+  "confidence": "high"
+ }
+}

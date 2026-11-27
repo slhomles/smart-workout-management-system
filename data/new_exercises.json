@@ -1,0 +1,5671 @@
+[
+ {
+  "slug": "incline-barbell-bench-press",
+  "name": "Đẩy ngực dốc lên với tạ đòn",
+  "name_en": "Incline Barbell Bench Press",
+  "description": "Đẩy tạ đòn trên ghế dốc lên để nhấn vào phần ngực trên. Cơ chính là ngực, hỗ trợ bởi vai trước và tay sau.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "barbell",
+   "adjustable_bench"
+  ],
+  "exds_id": "0047",
+  "fedb_id": "Barbell_Incline_Bench_Press_-_Medium_Grip",
+  "instructions_vi": [
+   "Chỉnh ghế dốc lên góc 45 độ.",
+   "Nằm xuống ghế, hai bàn chân đặt phẳng trên sàn.",
+   "Nắm thanh tạ đòn bằng tay úp, rộng hơn vai một chút.",
+   "Nhấc thanh tạ khỏi giá và từ từ hạ xuống ngực, giữ khuỷu tay ở góc 45 độ.",
+   "Dừng lại một chút ở điểm thấp nhất, sau đó đẩy thanh tạ lên về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "decline-barbell-bench-press",
+  "name": "Đẩy ngực dốc xuống với tạ đòn",
+  "name_en": "Decline Barbell Bench Press",
+  "description": "Đẩy tạ đòn trên ghế dốc xuống, nhấn vào phần ngực dưới. Cơ chính là ngực, hỗ trợ bởi tay sau và vai trước.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "barbell",
+   "adjustable_bench"
+  ],
+  "exds_id": "0033",
+  "fedb_id": "Decline_Barbell_Bench_Press",
+  "instructions_vi": [
+   "Nằm trên ghế dốc xuống, hai chân được cố định và đầu thấp hơn hông.",
+   "Nắm thanh tạ đòn bằng tay úp, rộng hơn vai một chút.",
+   "Nhấc thanh tạ khỏi giá và từ từ hạ xuống ngực, giữ khuỷu tay khép vào.",
+   "Dừng lại một chút ở điểm thấp nhất, sau đó đẩy thanh tạ lên về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-fly",
+  "name": "Ép ngực với tạ đơn",
+  "name_en": "Dumbbell Fly",
+  "description": "Dang và khép hai tạ đơn theo vòng cung khi nằm trên ghế phẳng để kéo giãn và siết cơ ngực.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "dumbbell",
+   "flat_bench"
+  ],
+  "exds_id": "0308",
+  "fedb_id": "Dumbbell_Flyes",
+  "instructions_vi": [
+   "Nằm ngửa trên ghế phẳng, mỗi tay cầm một tạ đơn, lòng bàn tay hướng vào nhau.",
+   "Duỗi thẳng hai tay lên phía trên ngực, khuỷu tay hơi gập.",
+   "Giữ khuỷu tay hơi gập, hạ hai tay ra hai bên theo một vòng cung rộng cho đến khi cảm thấy cơ ngực được kéo giãn.",
+   "Dừng lại một chút, sau đó đảo ngược chuyển động và đưa tạ đơn trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "incline-dumbbell-fly",
+  "name": "Ép ngực dốc lên với tạ đơn",
+  "name_en": "Incline Dumbbell Fly",
+  "description": "Ép tạ đơn trên ghế dốc lên, tập trung vào phần ngực trên.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "dumbbell",
+   "adjustable_bench"
+  ],
+  "exds_id": "0319",
+  "fedb_id": "Incline_Dumbbell_Flyes",
+  "instructions_vi": [
+   "Chỉnh ghế dốc lên góc 45 độ.",
+   "Ngồi trên ghế, mỗi tay cầm một tạ đơn, lòng bàn tay hướng vào nhau.",
+   "Nằm ngả ra sau trên ghế và đẩy tạ đơn lên vị trí bắt đầu, ngay phía trên ngực.",
+   "Hạ tạ đơn ra hai bên theo một vòng cung rộng cho đến khi cảm thấy cơ ngực được kéo giãn.",
+   "Dừng lại một chút, sau đó siết cơ ngực để đưa tạ đơn trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "low-cable-fly",
+  "name": "Ép ngực cáp từ dưới lên",
+  "name_en": "Low Cable Fly",
+  "description": "Kéo hai dây cáp từ thấp lên cao theo vòng cung để siết phần ngực trên.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0179",
+  "fedb_id": "Low_Cable_Crossover",
+  "instructions_vi": [
+   "Gắn tay cầm vào hai ròng rọc thấp của máy cáp và chọn mức tạ phù hợp.",
+   "Đứng ở giữa máy, hai chân rộng bằng vai và gối hơi khuỵu.",
+   "Nắm tay cầm bằng tay úp và dang hai tay sang hai bên, giữ khuỷu tay hơi gập.",
+   "Giữ kiểm soát, từ từ đưa hai tay về phía trước theo chuyển động vòng cung, bắt chéo trước người.",
+   "Dừng lại một chút ở điểm cao nhất của động tác, cảm nhận cơ ngực được kéo giãn.",
+   "Đảo ngược chuyển động và từ từ đưa hai tay về vị trí ban đầu, duy trì lực căng lên cơ ngực trong suốt động tác.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "cable-crossover",
+  "name": "Ép ngực cáp bắt chéo",
+  "name_en": "Cable Crossover",
+  "description": "Đứng giữa hai cột cáp, kéo tay từ trên xuống và bắt chéo trước người để siết cơ ngực.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0155",
+  "fedb_id": "Cable_Crossover",
+  "instructions_vi": [
+   "Điều chỉnh ròng rọc cáp ở độ cao ngang ngực.",
+   "Đứng ở giữa máy cáp, một chân đặt trước chân kia.",
+   "Nắm tay cầm với lòng bàn tay hướng xuống và hai tay dang ra hai bên.",
+   "Bước lên phía trước, giữ hai tay hơi gập.",
+   "Giữ khuỷu tay hơi gập, đưa hai tay lại gần nhau trước ngực.",
+   "Dừng lại một chút, sau đó từ từ đưa hai tay về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "incline-push-up",
+  "name": "Hít đất tay cao chân thấp",
+  "name_en": "Incline Push-up",
+  "description": "Hít đất với hai tay đặt trên bề mặt cao, giảm tải so với hít đất thường; phù hợp cho người mới tập ngực.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0493",
+  "fedb_id": "Incline_Push-Up",
+  "instructions_vi": [
+   "Đặt hai tay lên một bề mặt cao như ghế hoặc bục, rộng hơn vai một chút.",
+   "Duỗi hai chân ra sau, đặt trên phần trước bàn chân, tạo thành một đường thẳng từ đầu đến gót chân.",
+   "Hạ ngực về phía bề mặt cao bằng cách gập khuỷu tay, giữ thân người thẳng.",
+   "Dừng lại một chút ở điểm thấp nhất, sau đó đẩy người trở lại vị trí ban đầu bằng cách duỗi thẳng hai tay.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "decline-push-up",
+  "name": "Hít đất chân cao",
+  "name_en": "Decline Push-up",
+  "description": "Hít đất với hai chân đặt cao hơn tay để tăng tải lên ngực trên và vai trước.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "front_delts",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0279",
+  "fedb_id": "Decline_Push-Up",
+  "instructions_vi": [
+   "Đặt hai tay xuống sàn, rộng hơn vai một chút, hai chân gác lên một bề mặt vững chắc.",
+   "Giữ cơ thể thành một đường thẳng từ đầu đến chân và siết cơ core.",
+   "Hạ ngực xuống sàn bằng cách gập khuỷu tay, giữ khuỷu tay sát thân.",
+   "Đẩy qua lòng bàn tay để duỗi thẳng hai tay và trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "wide-hand-push-up",
+  "name": "Hít đất tay rộng",
+  "name_en": "Wide Hand Push-up",
+  "description": "Hít đất với hai tay đặt rộng hơn vai để nhấn nhiều hơn vào cơ ngực.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1311",
+  "fedb_id": "Push-Up_Wide",
+  "instructions_vi": [
+   "Bắt đầu ở tư thế plank cao, hai tay đặt rộng hơn vai.",
+   "Giữ cơ thể thành một đường thẳng từ đầu đến chân.",
+   "Hạ ngực xuống sàn bằng cách gập khuỷu tay, giữ khuỷu tay sát hai bên thân.",
+   "Đẩy qua lòng bàn tay để duỗi thẳng hai tay và trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "kneeling-push-up",
+  "name": "Hít đất quỳ gối",
+  "name_en": "Kneeling Push-up",
+  "description": "Hít đất với hai gối chạm sàn, giảm độ khó cho người mới bắt đầu.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [],
+  "exds_id": "3211",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Bắt đầu bằng cách quỳ trên sàn, hai tay đặt rộng bằng vai, các ngón tay hướng về phía trước.",
+   "Duỗi hai chân ra sau, đặt trên phần trước bàn chân, sao cho cơ thể tạo thành một đường thẳng từ đầu đến gót chân.",
+   "Siết cơ core và hạ người xuống sàn bằng cách gập khuỷu tay, giữ khuỷu tay sát hai bên thân.",
+   "Tiếp tục hạ cho đến khi ngực cách sàn một đoạn ngắn, sau đó đẩy người trở lại vị trí ban đầu bằng cách duỗi thẳng hai tay.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "smith-machine-bench-press",
+  "name": "Đẩy ngực máy Smith",
+  "name_en": "Smith Machine Bench Press",
+  "description": "Đẩy ngực trên ghế phẳng với thanh tạ chạy trên ray của máy Smith, giúp ổn định và an toàn hơn tạ đòn tự do.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "smith_machine",
+   "flat_bench"
+  ],
+  "exds_id": "0748",
+  "fedb_id": "Smith_Machine_Bench_Press",
+  "instructions_vi": [
+   "Điều chỉnh độ cao của thanh tạ máy Smith ngang tầm ngực.",
+   "Nằm ngửa trên ghế phẳng, hai bàn chân đặt vững trên sàn.",
+   "Nắm thanh tạ bằng tay úp, rộng hơn vai một chút.",
+   "Nhấc thanh tạ khỏi giá và hạ xuống ngực, giữ khuỷu tay khép vào.",
+   "Dừng lại một chút khi thanh tạ chạm ngực.",
+   "Đẩy thanh tạ lên về vị trí ban đầu, duỗi thẳng hoàn toàn hai tay.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "incline-machine-chest-press",
+  "name": "Đẩy ngực dốc lên trên máy",
+  "name_en": "Incline Machine Chest Press",
+  "description": "Đẩy tay cầm máy theo quỹ đạo dốc lên để tập ngực trên với độ ổn định cao.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "chest_press_machine"
+  ],
+  "exds_id": "1299",
+  "fedb_id": "Leverage_Incline_Chest_Press",
+  "instructions_vi": [
+   "Điều chỉnh ghế và tựa lưng của máy ở vị trí thoải mái.",
+   "Ngồi vào máy với lưng tựa vào tựa lưng và hai bàn chân đặt phẳng trên sàn.",
+   "Nắm tay cầm bằng tay úp và đặt hai tay rộng hơn vai một chút.",
+   "Đẩy tay cầm về phía trước và ra xa cơ thể cho đến khi hai tay duỗi thẳng hoàn toàn.",
+   "Dừng lại một chút, sau đó từ từ gập khuỷu tay và hạ tay cầm về phía ngực.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-pullover",
+  "name": "Pullover tạ đơn",
+  "name_en": "Dumbbell Pullover",
+  "description": "Nằm trên ghế, đưa một tạ đơn từ trên đầu ra sau rồi kéo về trên ngực, kéo giãn ngực và cơ xô.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "lats",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "dumbbell",
+   "flat_bench"
+  ],
+  "exds_id": "0375",
+  "fedb_id": "Bent-Arm_Dumbbell_Pullover",
+  "instructions_vi": [
+   "Nằm ngửa trên ghế phẳng, đầu ở một đầu ghế và hai bàn chân đặt trên sàn.",
+   "Cầm một tạ đơn bằng hai tay và duỗi thẳng hai tay phía trên ngực.",
+   "Giữ khuỷu tay hơi gập, từ từ hạ tạ đơn ra sau đầu cho đến khi cảm thấy ngực và vai được kéo giãn.",
+   "Dừng lại một chút, sau đó nâng tạ đơn trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "t-bar-row",
+  "name": "Chèo T-bar",
+  "name_en": "T-Bar Row",
+  "description": "Chèo thanh tạ T-bar về phía thân, tập trung vào lưng giữa và cơ xô.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "lats",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "upper_back",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "biceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "rear_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   },
+   {
+    "code": "lower_back",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   }
+  ],
+  "equipment": [
+   "barbell"
+  ],
+  "exds_id": "0606",
+  "fedb_id": "T-Bar_Row_with_Handle",
+  "instructions_vi": [
+   "Điều chỉnh độ cao ghế và vị trí bệ chân để có tư thế đúng.",
+   "Ngồi vào máy với ngực tựa vào đệm và hai bàn chân đặt phẳng trên bệ chân.",
+   "Nắm tay cầm bằng tay úp, rộng hơn vai một chút.",
+   "Giữ lưng thẳng và siết cơ core.",
+   "Kéo tay cầm về phía thân, siết hai bả vai lại với nhau.",
+   "Dừng lại một chút ở điểm co cơ tối đa, sau đó từ từ thả tay cầm về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "pendlay-row",
+  "name": "Chèo tạ đòn Pendlay",
+  "name_en": "Pendlay Row",
+  "description": "Chèo tạ đòn từ sàn với thân gần song song mặt đất, mỗi lần chèo bắt đầu từ vị trí tạ chạm sàn.",
+  "difficulty": "advanced",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "upper_back",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "lats",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "biceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "lower_back",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   },
+   {
+    "code": "rear_delts",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   }
+  ],
+  "equipment": [
+   "barbell"
+  ],
+  "exds_id": "3017",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và gối hơi khuỵu.",
+   "Gập người về trước từ hông, giữ lưng thẳng và ngực ưỡn.",
+   "Nắm thanh tạ đòn bằng tay úp, rộng hơn vai một chút.",
+   "Kéo thanh tạ về phía phần bụng trên, siết hai bả vai lại với nhau.",
+   "Hạ thanh tạ về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "reverse-grip-barbell-row",
+  "name": "Chèo tạ đòn tay ngửa",
+  "name_en": "Reverse-Grip Barbell Row",
+  "description": "Chèo tạ đòn với tay nắm ngửa, nhấn nhiều hơn vào cơ xô và tay trước.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "lats",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "upper_back",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "biceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "rear_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "barbell"
+  ],
+  "exds_id": "0118",
+  "fedb_id": "Reverse_Grip_Bent-Over_Rows",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và gối hơi khuỵu.",
+   "Cầm thanh tạ đòn bằng tay úp (lòng bàn tay hướng xuống), hai tay rộng hơn vai một chút.",
+   "Gập người về trước từ hông, giữ lưng thẳng và ngực ưỡn, cho đến khi thân người gần song song với sàn.",
+   "Kéo thanh tạ về phía phần ngực dưới, siết hai bả vai lại với nhau.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ thanh tạ về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-bent-over-row",
+  "name": "Chèo tạ đơn hai tay cúi người",
+  "name_en": "Dumbbell Bent-Over Row",
+  "description": "Cúi người và chèo hai tạ đơn về phía hông để tập lưng giữa và cơ xô.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "upper_back",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "lats",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "biceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "rear_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0293",
+  "fedb_id": "Bent_Over_Two-Dumbbell_Row",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, gối hơi khuỵu, mỗi tay cầm một tạ đơn, lòng bàn tay hướng vào thân.",
+   "Gập người về trước từ hông, giữ lưng thẳng và siết cơ core.",
+   "Để hai tay buông thẳng xuống sàn, khuỷu tay hơi gập.",
+   "Kéo tạ đơn lên về phía ngực, siết hai bả vai lại với nhau.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ tạ đơn về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "incline-dumbbell-row",
+  "name": "Chèo tạ đơn nằm sấp ghế dốc",
+  "name_en": "Incline Dumbbell Row",
+  "description": "Nằm sấp trên ghế dốc và chèo tạ đơn, loại bỏ lực đẩy từ lưng dưới nên cô lập tốt cơ lưng giữa.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "upper_back",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "lats",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "rear_delts",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "biceps",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "dumbbell",
+   "adjustable_bench"
+  ],
+  "exds_id": "0327",
+  "fedb_id": "Dumbbell_Incline_Row",
+  "instructions_vi": [
+   "Chỉnh ghế dốc lên góc 45 độ.",
+   "Cầm mỗi tay một tạ đơn và ngồi lên ghế, ngực tựa vào mặt ghế dốc.",
+   "Duỗi thẳng hoàn toàn hai tay, để tạ đơn buông thẳng xuống từ vai.",
+   "Kéo tạ đơn lên về phía ngực, siết hai bả vai lại với nhau.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ tạ đơn về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "underhand-lat-pulldown",
+  "name": "Kéo xô tay ngửa",
+  "name_en": "Underhand Lat Pulldown",
+  "description": "Kéo thanh xô xuống ngực với tay nắm ngửa, tăng sự tham gia của tay trước và phần dưới cơ xô.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "lats",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "biceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "upper_back",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "lat_pulldown_machine"
+  ],
+  "exds_id": "0245",
+  "fedb_id": "Underhand_Cable_Pulldowns",
+  "instructions_vi": [
+   "Điều chỉnh máy cáp sao cho thanh kéo ở vị trí cao hơn đầu.",
+   "Ngồi xuống ghế và nắm thanh kéo bằng tay ngửa, hai tay rộng hơn vai một chút.",
+   "Giữ lưng thẳng và ngả người ra sau một chút.",
+   "Kéo thanh xuống về phía ngực, siết hai bả vai lại với nhau.",
+   "Dừng lại một chút ở điểm thấp nhất của động tác, sau đó từ từ thả thanh lên về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "straight-arm-pulldown",
+  "name": "Kéo cáp tay thẳng",
+  "name_en": "Straight-Arm Pulldown",
+  "description": "Giữ tay thẳng và kéo thanh cáp từ trên xuống đùi để cô lập cơ xô.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "lats",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "upper_back",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0238",
+  "fedb_id": "Straight-Arm_Pulldown",
+  "instructions_vi": [
+   "Gắn thanh thẳng vào ròng rọc cao của máy cáp.",
+   "Đứng đối diện máy, hai chân rộng bằng vai.",
+   "Nắm thanh bằng tay úp, giữ hai tay thẳng và lòng bàn tay hướng xuống.",
+   "Siết cơ xô và kéo thanh xuống về phía đùi, giữ hai tay thẳng trong suốt động tác.",
+   "Dừng lại một chút ở điểm thấp nhất, sau đó từ từ đưa thanh về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "wide-grip-pull-up",
+  "name": "Hít xà tay rộng",
+  "name_en": "Wide Grip Pull-up",
+  "description": "Hít xà với tay nắm rộng hơn vai, nhấn mạnh độ rộng của cơ xô.",
+  "difficulty": "advanced",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "lats",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "biceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "upper_back",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   },
+   {
+    "code": "rear_delts",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   }
+  ],
+  "equipment": [
+   "pull_up_bar"
+  ],
+  "exds_id": "1429",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Treo người trên xà đơn với lòng bàn tay hướng ra xa người và hai tay rộng hơn vai.",
+   "Siết cơ core và ép hai bả vai lại với nhau.",
+   "Kéo người lên về phía xà cho đến khi cằm vượt qua xà.",
+   "Hạ người về vị trí ban đầu một cách có kiểm soát.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "neutral-grip-pull-up",
+  "name": "Hít xà tay trung tính",
+  "name_en": "Neutral Grip Pull-up",
+  "description": "Hít xà với hai lòng bàn tay đối diện nhau, thân thiện với khớp vai và cổ tay hơn tay úp.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "lats",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "biceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "upper_back",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "pull_up_bar"
+  ],
+  "exds_id": "0651",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Treo người trên xà đơn với tay nắm trung tính (hai lòng bàn tay đối diện nhau) và hai tay duỗi thẳng hoàn toàn.",
+   "Siết cơ core và ép hai bả vai lại với nhau.",
+   "Kéo người lên về phía xà bằng cách gập khuỷu tay và đưa khuỷu tay xuống về phía hông.",
+   "Tiếp tục kéo cho đến khi cằm vượt qua xà.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ người về vị trí ban đầu một cách có kiểm soát.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "cable-one-arm-row",
+  "name": "Chèo cáp một tay",
+  "name_en": "Cable One-Arm Row",
+  "description": "Chèo cáp một tay khi cúi người, tập từng bên lưng riêng biệt.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "upper_back",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "lats",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "biceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "rear_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0189",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng đối diện máy cáp, hai chân rộng bằng vai.",
+   "Hơi khuỵu gối và gập người về trước từ hông, giữ lưng thẳng.",
+   "Nắm tay cầm cáp bằng một tay, lòng bàn tay hướng vào trong, và duỗi thẳng hoàn toàn cánh tay.",
+   "Kéo tay cầm cáp về phía thân, giữ khuỷu tay sát hông, cho đến khi bàn tay chạm phần ngực dưới.",
+   "Dừng lại một chút, sau đó từ từ duỗi tay trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn, sau đó đổi sang bên còn lại."
+  ]
+ },
+ {
+  "slug": "machine-seated-row",
+  "name": "Chèo ngồi trên máy",
+  "name_en": "Machine Seated Row",
+  "description": "Ngồi trên máy chèo có tựa ngực, kéo tay cầm về phía thân để tập lưng giữa.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "upper_back",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "lats",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "biceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "rear_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "seated_row_machine"
+  ],
+  "exds_id": "1350",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Điều chỉnh độ cao ghế và bệ chân ở vị trí thoải mái.",
+   "Ngồi vào máy với ngực tựa vào đệm và hai bàn chân đặt trên bệ chân.",
+   "Nắm tay cầm bằng tay úp, hai tay rộng bằng vai.",
+   "Giữ lưng thẳng và siết cơ core.",
+   "Kéo tay cầm về phía thân, siết hai bả vai lại với nhau.",
+   "Dừng lại một chút ở điểm cao nhất của động tác.",
+   "Từ từ thả tay cầm và trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "hyperextension",
+  "name": "Gập lưng trên ghế La Mã",
+  "name_en": "Hyperextension",
+  "description": "Gập thân người xuống rồi nâng lên trên ghế hyperextension để tập cơ lưng dưới, mông và đùi sau.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "lower_back",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "hamstrings",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0489",
+  "fedb_id": "Hyperextensions_Back_Extensions",
+  "instructions_vi": [
+   "Điều chỉnh ghế hyperextension sao cho phần đùi trên tựa lên đệm và hai bàn chân được cố định.",
+   "Khoanh hai tay trước ngực hoặc đặt hai tay sau đầu.",
+   "Hạ thân trên xuống phía sàn trong khi giữ lưng thẳng.",
+   "Dừng lại một chút ở điểm thấp nhất, sau đó nâng thân trên lên cho đến khi thẳng hàng với hai chân.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "rack-pull",
+  "name": "Rack pull",
+  "name_en": "Barbell Rack Pull",
+  "description": "Kéo tạ đòn từ giá đặt cao ngang gối, biến thể của deadlift tập trung vào lưng trên và phần kéo cuối.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "traps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "lower_back",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "glutes",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "hamstrings",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   },
+   {
+    "code": "forearms",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   }
+  ],
+  "equipment": [
+   "barbell",
+   "power_rack"
+  ],
+  "exds_id": "0074",
+  "fedb_id": "Rack_Pulls",
+  "instructions_vi": [
+   "Đặt thanh tạ đòn lên giá ở độ cao ngang gối.",
+   "Đứng với hai chân rộng bằng vai, mũi chân hơi hướng ra ngoài.",
+   "Gập hông và gối để hạ người xuống và nắm thanh tạ bằng tay úp, hai tay rộng bằng vai.",
+   "Siết cơ core và nâng thanh tạ lên bằng cách duỗi hông và gối, kéo vai ra sau và siết cơ mông ở điểm cao nhất.",
+   "Hạ thanh tạ về vị trí ban đầu bằng cách gập hông và gối.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "scapular-pull-up",
+  "name": "Kéo bả vai trên xà",
+  "name_en": "Scapular Pull-up",
+  "description": "Treo trên xà và chỉ dùng bả vai để nâng người lên xuống nhẹ, giúp học kích hoạt cơ lưng trước khi hít xà.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "traps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "lats",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "upper_back",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "pull_up_bar"
+  ],
+  "exds_id": "0688",
+  "fedb_id": "Scapular_Pull-Up",
+  "instructions_vi": [
+   "Bắt đầu bằng cách treo người trên xà đơn với lòng bàn tay hướng ra xa người và hai tay duỗi thẳng hoàn toàn.",
+   "Thu hai bả vai lại bằng cách kéo chúng xuống và ra sau.",
+   "Siết cơ lưng và kéo người lên về phía xà, tập trung vào việc siết hai bả vai lại với nhau.",
+   "Dừng lại một chút ở điểm cao nhất của động tác, sau đó từ từ hạ người về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "barbell-shrug",
+  "name": "Nhún vai tạ đòn",
+  "name_en": "Barbell Shrug",
+  "description": "Cầm tạ đòn và nhún vai lên cao để tập cơ cầu vai.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "traps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "forearms",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "upper_back",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "barbell"
+  ],
+  "exds_id": "0095",
+  "fedb_id": "Barbell_Shrug",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và cầm thanh tạ đòn trước người bằng tay úp.",
+   "Giữ hai tay thẳng và lưng thẳng trong suốt bài tập.",
+   "Nhún vai lên phía tai cao nhất có thể, siết cơ cầu vai ở điểm cao nhất.",
+   "Giữ một chút, sau đó từ từ hạ vai về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "arnold-press",
+  "name": "Đẩy vai Arnold",
+  "name_en": "Dumbbell Arnold Press",
+  "description": "Đẩy tạ đơn qua đầu đồng thời xoay cổ tay từ úp sang ngửa, kích hoạt đều các đầu cơ vai.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "front_delts",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "side_delts",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "2137",
+  "fedb_id": "Arnold_Dumbbell_Press",
+  "instructions_vi": [
+   "Ngồi trên ghế có tựa lưng, cầm mỗi tay một tạ đơn ngang tầm vai, lòng bàn tay hướng vào thân và khuỷu tay gập.",
+   "Đẩy tạ đơn lên cho đến khi hai tay duỗi thẳng hoàn toàn và lòng bàn tay hướng ra trước.",
+   "Xoay cổ tay trong lúc nâng, sao cho lòng bàn tay hướng ra trước ở điểm cao nhất của động tác.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ tạ đơn về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-front-raise",
+  "name": "Nâng tạ đơn ra trước",
+  "name_en": "Dumbbell Front Raise",
+  "description": "Nâng tạ đơn thẳng ra trước đến ngang vai để tập vai trước.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "front_delts",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "side_delts",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0310",
+  "fedb_id": "Front_Dumbbell_Raise",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, mỗi tay cầm một tạ đơn, lòng bàn tay hướng vào đùi.",
+   "Giữ hai tay thẳng, thở ra và nâng tạ đơn ra phía trước cho đến khi ngang tầm vai.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó hít vào và từ từ hạ tạ đơn về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "barbell-front-raise",
+  "name": "Nâng tạ đòn ra trước",
+  "name_en": "Barbell Front Raise",
+  "description": "Nâng tạ đòn ra trước đến ngang vai để tập vai trước.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "front_delts",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "side_delts",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "chest",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "barbell"
+  ],
+  "exds_id": "0041",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và cầm thanh tạ đòn trước đùi bằng tay úp.",
+   "Giữ hai tay thẳng và nâng thanh tạ ra phía trước và lên cao cho đến khi ngang tầm vai.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ thanh tạ về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "bent-over-dumbbell-reverse-fly",
+  "name": "Dang tạ đơn ngược cúi người",
+  "name_en": "Bent-Over Dumbbell Reverse Fly",
+  "description": "Cúi người và dang hai tạ đơn sang hai bên để tập vai sau và lưng giữa.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "rear_delts",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "upper_back",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "traps",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0383",
+  "fedb_id": "Reverse_Flyes",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, mỗi tay cầm một tạ đơn.",
+   "Hơi khuỵu gối và gập người về trước từ hông, giữ lưng thẳng.",
+   "Duỗi thẳng hai tay xuống phía trước, lòng bàn tay hướng vào nhau.",
+   "Giữ khuỷu tay hơi gập, nâng hai tay ra hai bên cho đến khi song song với mặt đất.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ hai tay về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "incline-dumbbell-rear-raise",
+  "name": "Dang vai sau nằm sấp ghế dốc",
+  "name_en": "Incline Dumbbell Rear Lateral Raise",
+  "description": "Nằm sấp trên ghế dốc và dang tạ đơn sang hai bên, cô lập vai sau.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "rear_delts",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "upper_back",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "dumbbell",
+   "adjustable_bench"
+  ],
+  "exds_id": "0326",
+  "fedb_id": "Bent_Over_Dumbbell_Rear_Delt_Raise_With_Head_On_Bench",
+  "instructions_vi": [
+   "Chỉnh ghế dốc lên góc 45 độ.",
+   "Ngồi úp ngực vào tựa lưng của ghế, mỗi tay cầm một tạ đơn.",
+   "Duỗi thẳng hai tay xuống phía dưới, lòng bàn tay hướng vào nhau.",
+   "Giữ khuỷu tay hơi gập, nâng hai tay ra hai bên cho đến khi song song với mặt đất.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ hai tay về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "cable-reverse-fly",
+  "name": "Dang cáp ngược bắt chéo",
+  "name_en": "Cable Reverse Fly",
+  "description": "Kéo hai dây cáp bắt chéo từ cao ra hai bên để tập vai sau.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "rear_delts",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "upper_back",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0225",
+  "fedb_id": "Cable_Rear_Delt_Fly",
+  "instructions_vi": [
+   "Gắn một tay cầm chữ D vào mỗi bên máy cáp ở độ cao ngang vai.",
+   "Đứng ở giữa máy cáp, hai chân rộng bằng vai.",
+   "Nắm tay cầm bằng tay úp và dang hai tay ra hai bên, lòng bàn tay hướng ra trước.",
+   "Giữ khuỷu tay hơi gập và giữ lưng thẳng trong suốt bài tập.",
+   "Siết cơ vai và ép hai bả vai lại với nhau khi kéo tay cầm về phía trước cơ thể.",
+   "Dừng lại một chút ở điểm cao nhất của động tác, sau đó từ từ trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "barbell-upright-row",
+  "name": "Kéo tạ đòn đứng thẳng",
+  "name_en": "Barbell Upright Row",
+  "description": "Kéo tạ đòn dọc theo thân người lên ngang ngực để tập vai giữa và cơ cầu vai.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "side_delts",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "traps",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "biceps",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "barbell"
+  ],
+  "exds_id": "0120",
+  "fedb_id": "Upright_Barbell_Row",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và cầm thanh tạ đòn bằng tay úp, hai tay rộng hơn vai một chút.",
+   "Để thanh tạ buông trước đùi, hai tay duỗi thẳng hoàn toàn.",
+   "Giữ lưng thẳng và siết cơ core, thở ra và kéo thanh tạ thẳng lên về phía cằm, dẫn động bằng khuỷu tay.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó hít vào và từ từ hạ thanh tạ về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-upright-row",
+  "name": "Kéo tạ đơn đứng thẳng",
+  "name_en": "Dumbbell Upright Row",
+  "description": "Kéo hai tạ đơn dọc thân người lên ngang ngực để tập vai giữa và cơ cầu vai.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "side_delts",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "traps",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "biceps",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0437",
+  "fedb_id": "Standing_Dumbbell_Upright_Row",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, mỗi tay cầm một tạ đơn bằng tay úp.",
+   "Để tạ đơn buông trước đùi, hai tay duỗi thẳng hoàn toàn.",
+   "Giữ lưng thẳng và siết cơ core, thở ra và kéo tạ đơn thẳng lên về phía cằm, dẫn động bằng khuỷu tay.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó hít vào và từ từ hạ tạ đơn về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "cable-front-raise",
+  "name": "Nâng cáp ra trước",
+  "name_en": "Cable Front Raise",
+  "description": "Nâng tay cầm cáp ra trước đến ngang vai, giữ lực căng liên tục lên vai trước.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "front_delts",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "side_delts",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0162",
+  "fedb_id": "Front_Cable_Raise",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và nắm tay cầm cáp bằng tay úp.",
+   "Giữ lưng thẳng và siết cơ core.",
+   "Nâng tay cầm cáp ra phía trước, giữ hai tay thẳng và lòng bàn tay hướng xuống.",
+   "Tiếp tục nâng cho đến khi hai tay song song với sàn.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ tay cầm cáp về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-push-press",
+  "name": "Đẩy vai tạ đơn có đà chân",
+  "name_en": "Dumbbell Push Press",
+  "description": "Nhún nhẹ hai gối rồi dùng đà từ chân để đẩy hai tạ đơn lên qua đầu, cho phép nâng tạ nặng hơn đẩy vai thường.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "front_delts",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "side_delts",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "quads",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "1700",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, mỗi tay cầm một tạ đơn ngang tầm vai.",
+   "Hơi khuỵu gối và nhún người xuống, sau đó duỗi chân bật mạnh và đẩy tạ đơn lên qua đầu.",
+   "Khóa hai tay ở điểm cao nhất của động tác, sau đó hạ tạ đơn về lại ngang tầm vai.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "seated-barbell-overhead-press",
+  "name": "Đẩy vai tạ đòn ngồi",
+  "name_en": "Seated Barbell Overhead Press",
+  "description": "Ngồi tựa lưng và đẩy tạ đòn thẳng lên qua đầu, hạn chế dùng lực từ chân.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "front_delts",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "side_delts",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "barbell",
+   "adjustable_bench"
+  ],
+  "exds_id": "0091",
+  "fedb_id": "Seated_Barbell_Military_Press",
+  "instructions_vi": [
+   "Ngồi trên ghế với lưng thẳng và hai bàn chân đặt phẳng trên sàn.",
+   "Cầm thanh tạ đòn bằng tay úp, rộng hơn vai một chút.",
+   "Nhấc thanh tạ khỏi giá và đưa về ngang vai, khuỷu tay gập và lòng bàn tay hướng ra trước.",
+   "Đẩy thanh tạ lên qua đầu bằng cách duỗi thẳng hoàn toàn hai tay.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ thanh tạ về lại ngang vai.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "smith-machine-shoulder-press",
+  "name": "Đẩy vai máy Smith",
+  "name_en": "Smith Machine Shoulder Press",
+  "description": "Đẩy vai với thanh tạ trượt trên ray của máy Smith, dễ kiểm soát cho người mới.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "front_delts",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "side_delts",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "smith_machine",
+   "adjustable_bench"
+  ],
+  "exds_id": "0766",
+  "fedb_id": "Smith_Machine_Overhead_Shoulder_Press",
+  "instructions_vi": [
+   "Điều chỉnh độ cao ghế và vào vị trí trên máy Smith, hai chân rộng bằng vai.",
+   "Nắm thanh tạ bằng tay úp, rộng hơn vai một chút.",
+   "Nhấc thanh tạ khỏi giá và đưa về ngang vai, khuỷu tay gập và lòng bàn tay hướng ra trước.",
+   "Đẩy thanh tạ lên cho đến khi hai tay duỗi thẳng hoàn toàn trên đầu.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ thanh tạ về lại ngang vai.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "cable-upright-row",
+  "name": "Kéo cáp đứng thẳng",
+  "name_en": "Cable Upright Row",
+  "description": "Kéo thanh cáp thấp dọc thân người lên ngang ngực để tập vai giữa và cơ cầu vai.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "side_delts",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "traps",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "biceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0246",
+  "fedb_id": "Upright_Cable_Row",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, gối hơi khuỵu, cầm tay cầm cáp bằng tay úp.",
+   "Giữ lưng thẳng và siết cơ core trong suốt bài tập.",
+   "Kéo tay cầm cáp thẳng lên về phía cằm, dẫn động bằng khuỷu tay.",
+   "Dừng lại một chút ở điểm cao nhất, siết hai bả vai lại với nhau.",
+   "Từ từ hạ tay cầm cáp về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "handstand-push-up",
+  "name": "Hít đất trồng chuối",
+  "name_en": "Handstand Push-up",
+  "description": "Hít đất ở tư thế trồng chuối tựa tường, là bài đẩy vai nâng cao dùng trọng lượng cơ thể.",
+  "difficulty": "advanced",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "front_delts",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "side_delts",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "traps",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0471",
+  "fedb_id": "Handstand_Push-Ups",
+  "instructions_vi": [
+   "Tìm một bức tường và đứng quay lưng về phía tường, cách vài bước chân.",
+   "Đặt hai tay xuống sàn rộng bằng vai và đá chân lên tựa vào tường, vào tư thế trồng chuối.",
+   "Gập khuỷu tay và hạ đầu xuống sàn, giữ cơ thể thành một đường thẳng.",
+   "Đẩy qua hai bàn tay và duỗi thẳng hai tay để trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "alternating-dumbbell-curl",
+  "name": "Cuốn tạ đơn luân phiên",
+  "name_en": "Alternating Dumbbell Curl",
+  "description": "Cuốn hai tạ đơn luân phiên từng tay để tập cơ tay trước.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "biceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "forearms",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0285",
+  "fedb_id": "Dumbbell_Alternate_Bicep_Curl",
+  "instructions_vi": [
+   "Đứng thẳng, mỗi tay cầm một tạ đơn, lòng bàn tay hướng ra trước và hai tay duỗi thẳng hoàn toàn.",
+   "Giữ cố định cánh tay trên, thở ra và cuốn tạ lên trong khi siết cơ tay trước.",
+   "Tiếp tục nâng tạ đơn cho đến khi cơ tay trước co tối đa và tạ đơn ngang tầm vai.",
+   "Giữ tư thế co cơ một chút và siết chặt cơ tay trước.",
+   "Hít vào và từ từ hạ tạ đơn về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn, đổi tay luân phiên."
+  ]
+ },
+ {
+  "slug": "dumbbell-curl",
+  "name": "Cuốn tạ đơn",
+  "name_en": "Dumbbell Biceps Curl",
+  "description": "Cuốn hai tạ đơn đồng thời để tập cơ tay trước.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "biceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "forearms",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0294",
+  "fedb_id": "Dumbbell_Bicep_Curl",
+  "instructions_vi": [
+   "Đứng thẳng, mỗi tay cầm một tạ đơn, lòng bàn tay hướng ra trước và hai tay duỗi thẳng hoàn toàn.",
+   "Giữ cố định cánh tay trên, thở ra và cuốn tạ lên trong khi siết cơ tay trước.",
+   "Tiếp tục nâng tạ cho đến khi cơ tay trước co tối đa và tạ đơn ngang tầm vai.",
+   "Giữ tư thế co cơ một chút và siết chặt cơ tay trước.",
+   "Hít vào và từ từ hạ tạ đơn về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "incline-dumbbell-curl",
+  "name": "Cuốn tạ đơn ghế dốc",
+  "name_en": "Dumbbell Incline Curl",
+  "description": "Cuốn tạ đơn khi ngả lưng trên ghế dốc để kéo giãn tay trước nhiều hơn.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "biceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "forearms",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "dumbbell",
+   "adjustable_bench"
+  ],
+  "exds_id": "0318",
+  "fedb_id": "Incline_Dumbbell_Curl",
+  "instructions_vi": [
+   "Chỉnh ghế dốc lên góc 45 độ và ngồi lên ghế, mỗi tay cầm một tạ đơn, lòng bàn tay hướng ra trước.",
+   "Để cánh tay trên tựa vào ghế dốc và thả khuỷu tay buông xuống, duỗi thẳng hoàn toàn hai tay.",
+   "Giữ cố định cánh tay trên, thở ra và cuốn tạ lên trong khi siết cơ tay trước.",
+   "Tiếp tục nâng tạ đơn cho đến khi cơ tay trước co tối đa và tạ đơn ngang tầm vai.",
+   "Giữ tư thế co cơ một chút và siết chặt cơ tay trước.",
+   "Hít vào và từ từ hạ tạ đơn về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "concentration-curl",
+  "name": "Cuốn tạ đơn tập trung",
+  "name_en": "Dumbbell Concentration Curl",
+  "description": "Ngồi, tì khuỷu tay vào đùi trong và cuốn một tạ đơn để cô lập cơ tay trước.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "biceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "forearms",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "dumbbell",
+   "flat_bench"
+  ],
+  "exds_id": "0297",
+  "fedb_id": "Concentration_Curls",
+  "instructions_vi": [
+   "Ngồi trên ghế, hai chân dạng rộng, một tay cầm tạ đơn và tì khuỷu tay vào mặt trong đùi.",
+   "Duỗi thẳng hoàn toàn cánh tay và cầm tạ đơn bằng tay ngửa.",
+   "Giữ cố định cánh tay trên, thở ra và cuốn tạ lên về phía vai trong khi siết cơ tay trước.",
+   "Tiếp tục nâng tạ đơn cho đến khi cơ tay trước co tối đa và tạ đơn ngang tầm vai.",
+   "Giữ tư thế co cơ một chút và siết chặt cơ tay trước.",
+   "Hít vào và từ từ hạ tạ đơn về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn, sau đó đổi tay."
+  ]
+ },
+ {
+  "slug": "cable-curl",
+  "name": "Cuốn cáp",
+  "name_en": "Cable Curl",
+  "description": "Cuốn thanh cáp thấp lên vai, giữ lực căng liên tục lên tay trước.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "biceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "forearms",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0868",
+  "fedb_id": "Standing_Biceps_Cable_Curl",
+  "instructions_vi": [
+   "Đứng đối diện máy cáp, hai chân rộng bằng vai.",
+   "Nắm tay cầm cáp bằng tay ngửa, lòng bàn tay hướng lên.",
+   "Giữ khuỷu tay sát hai bên thân và cố định cánh tay trên.",
+   "Thở ra và cuốn tay cầm cáp về phía vai, siết cơ tay trước.",
+   "Dừng lại một chút ở điểm cao nhất của động tác và siết cơ tay trước.",
+   "Hít vào và từ từ hạ tay cầm cáp về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "ez-bar-curl",
+  "name": "Cuốn tạ đòn EZ",
+  "name_en": "EZ-Bar Curl",
+  "description": "Cuốn thanh EZ, tư thế cầm nghiêng giảm áp lực lên cổ tay.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "biceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "forearms",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "ez_bar"
+  ],
+  "exds_id": "0447",
+  "fedb_id": "EZ-Bar_Curl",
+  "instructions_vi": [
+   "Đứng thẳng, hai chân rộng bằng vai, cầm thanh EZ bằng tay ngửa, lòng bàn tay hướng lên.",
+   "Giữ khuỷu tay sát thân và cố định cánh tay trên trong suốt động tác.",
+   "Thở ra khi cuốn thanh tạ lên về phía vai, siết cơ tay trước.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó hít vào và từ từ hạ thanh tạ về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "reverse-barbell-curl",
+  "name": "Cuốn tạ đòn tay úp",
+  "name_en": "Reverse Barbell Curl",
+  "description": "Cuốn tạ đòn với tay nắm úp, nhấn mạnh cơ cẳng tay và cơ cánh tay trước.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "forearms",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "biceps",
+    "role": "primary",
+    "activation_ratio": 0.8
+   }
+  ],
+  "equipment": [
+   "barbell"
+  ],
+  "exds_id": "0080",
+  "fedb_id": "Reverse_Barbell_Curl",
+  "instructions_vi": [
+   "Đứng thẳng, hai chân rộng bằng vai, cầm thanh tạ đòn bằng tay úp, lòng bàn tay hướng xuống.",
+   "Giữ cố định cánh tay trên và thở ra khi cuốn thanh tạ lên, đồng thời siết cơ tay trước.",
+   "Tiếp tục nâng thanh tạ cho đến khi cơ tay trước co tối đa và thanh tạ ngang tầm vai.",
+   "Giữ tư thế co cơ một chút và siết chặt cơ tay trước.",
+   "Hít vào khi từ từ hạ thanh tạ về vị trí ban đầu, giữ cố định cánh tay trên.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "cross-body-hammer-curl",
+  "name": "Cuốn búa chéo người",
+  "name_en": "Dumbbell Cross Body Hammer Curl",
+  "description": "Cuốn tạ đơn kiểu búa chéo qua ngực để nhấn vào cơ cánh tay trước.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "biceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "forearms",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0298",
+  "fedb_id": "Cross_Body_Hammer_Curl",
+  "instructions_vi": [
+   "Đứng thẳng, mỗi tay cầm một tạ đơn, lòng bàn tay hướng vào thân.",
+   "Giữ khuỷu tay sát thân và cố định cánh tay trên.",
+   "Thở ra và cuốn tạ lên trong khi siết cơ tay trước, đưa tạ đơn chéo qua người về phía vai đối diện.",
+   "Tiếp tục nâng tạ đơn cho đến khi cơ tay trước co tối đa và tạ đơn ngang tầm vai.",
+   "Giữ tư thế co cơ một chút và siết chặt cơ tay trước.",
+   "Hít vào và từ từ hạ tạ đơn về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "cable-rope-hammer-curl",
+  "name": "Cuốn búa cáp dây thừng",
+  "name_en": "Cable Rope Hammer Curl",
+  "description": "Cuốn dây thừng cáp với lòng bàn tay đối nhau để tập tay trước và cẳng tay.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "biceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "forearms",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0165",
+  "fedb_id": "Cable_Hammer_Curls_-_Rope_Attachment",
+  "instructions_vi": [
+   "Đứng thẳng, hai chân rộng bằng vai và gối hơi khuỵu.",
+   "Cầm dây thừng cáp bằng tay ngửa, hai lòng bàn tay hướng vào nhau, hai tay duỗi thẳng hoàn toàn.",
+   "Giữ cố định cánh tay trên, thở ra và cuốn tạ lên trong khi siết cơ tay trước.",
+   "Tiếp tục nâng dây thừng cáp cho đến khi cơ tay trước co tối đa và dây thừng ngang tầm vai.",
+   "Giữ tư thế co cơ một chút và siết chặt cơ tay trước.",
+   "Hít vào và từ từ hạ dây thừng cáp về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "zottman-curl",
+  "name": "Cuốn Zottman",
+  "name_en": "Dumbbell Zottman Curl",
+  "description": "Cuốn tạ đơn lên bằng tay ngửa rồi xoay úp tay để hạ xuống, tập cả tay trước và cẳng tay.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "biceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "forearms",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0439",
+  "fedb_id": "Zottman_Curl",
+  "instructions_vi": [
+   "Đứng thẳng, mỗi tay cầm một tạ đơn, lòng bàn tay hướng vào thân.",
+   "Giữ khuỷu tay sát thân và xoay lòng bàn tay hướng ra trước.",
+   "Cuốn tạ đơn lên đến vai trong khi giữ cố định cánh tay trên.",
+   "Ở điểm cao nhất của động tác, xoay cổ tay sao cho lòng bàn tay hướng ra xa người.",
+   "Từ từ hạ tạ đơn về vị trí ban đầu, xoay lòng bàn tay trở lại hướng vào thân.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-preacher-curl",
+  "name": "Cuốn tạ đơn ghế Preacher",
+  "name_en": "Dumbbell Preacher Curl",
+  "description": "Cuốn hai tạ đơn khi cánh tay tì trên ghế Preacher, loại bỏ lực quán tính.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "biceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "forearms",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "dumbbell",
+   "adjustable_bench"
+  ],
+  "exds_id": "0372",
+  "fedb_id": "Two-Arm_Dumbbell_Preacher_Curl",
+  "instructions_vi": [
+   "Ngồi trên ghế tập tay trước kiểu Preacher, cánh tay trên đặt lên đệm và ngực tựa vào ghế.",
+   "Mỗi tay cầm một tạ đơn, lòng bàn tay hướng lên và hai tay duỗi thẳng hoàn toàn.",
+   "Giữ cố định cánh tay trên, thở ra và cuốn tạ lên trong khi siết cơ tay trước.",
+   "Tiếp tục nâng tạ đơn cho đến khi cơ tay trước co tối đa và tạ đơn ngang tầm vai.",
+   "Giữ tư thế co cơ một chút và siết chặt cơ tay trước.",
+   "Hít vào và từ từ hạ tạ đơn về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "rope-triceps-pushdown",
+  "name": "Kéo cáp tay sau dây thừng",
+  "name_en": "Rope Triceps Pushdown",
+  "description": "Ấn dây thừng cáp xuống và tách hai đầu dây ra cuối động tác để siết tay sau.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "triceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0200",
+  "fedb_id": "Triceps_Pushdown_-_Rope_Attachment",
+  "instructions_vi": [
+   "Gắn dây thừng vào ròng rọc cao của máy cáp.",
+   "Đứng đối diện máy, hai chân rộng bằng vai và gối hơi khuỵu.",
+   "Nắm dây thừng bằng tay úp, hai lòng bàn tay hướng vào nhau.",
+   "Giữ khuỷu tay sát hai bên thân và cố định cánh tay trên trong suốt bài tập.",
+   "Thở ra và ấn dây thừng xuống bằng cách duỗi khuỷu tay cho đến khi hai tay duỗi thẳng hoàn toàn.",
+   "Dừng lại một chút, sau đó hít vào và từ từ trở về vị trí ban đầu bằng cách để khuỷu tay gập lại.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "reverse-grip-triceps-pushdown",
+  "name": "Kéo cáp tay sau tay ngửa",
+  "name_en": "Reverse-Grip Triceps Pushdown",
+  "description": "Ấn thanh cáp xuống với tay nắm ngửa, nhấn vào đầu trong của cơ tay sau.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "triceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "forearms",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0207",
+  "fedb_id": "Reverse_Grip_Triceps_Pushdown",
+  "instructions_vi": [
+   "Gắn thanh thẳng vào máy cáp ở ròng rọc cao.",
+   "Đứng đối diện máy, hai chân rộng bằng vai.",
+   "Nắm thanh bằng tay ngửa, lòng bàn tay hướng lên, hai tay rộng bằng vai.",
+   "Giữ khuỷu tay sát hai bên thân và cố định cánh tay trên trong suốt bài tập.",
+   "Dùng cơ tay sau để ấn thanh xuống cho đến khi hai tay duỗi thẳng hoàn toàn và cơ tay sau co tối đa.",
+   "Dừng lại một chút, sau đó từ từ đưa thanh về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-kickback",
+  "name": "Đá tạ đơn ra sau",
+  "name_en": "Dumbbell Kickback",
+  "description": "Cúi người, cố định bắp tay và duỗi cẳng tay ra sau để siết cơ tay sau.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "triceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "rear_delts",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0333",
+  "fedb_id": "Tricep_Dumbbell_Kickback",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, mỗi tay cầm một tạ đơn.",
+   "Hơi khuỵu gối và gập người về trước từ hông, giữ lưng thẳng.",
+   "Đưa cánh tay trên sát hai bên người, khuỷu tay gập góc 90 độ.",
+   "Duỗi thẳng hai tay ra sau, siết cơ tay sau ở điểm cao nhất của động tác.",
+   "Dừng lại một chút, sau đó từ từ hạ tạ đơn về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "overhead-cable-triceps-extension",
+  "name": "Duỗi tay sau qua đầu với cáp",
+  "name_en": "Cable Overhead Triceps Extension",
+  "description": "Duỗi hai tay qua đầu kéo dây thừng cáp để kéo giãn và siết đầu dài cơ tay sau.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "triceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0194",
+  "fedb_id": "Cable_Rope_Overhead_Triceps_Extension",
+  "instructions_vi": [
+   "Gắn dây thừng vào máy cáp ở vị trí cao.",
+   "Đứng quay lưng về phía máy, hai chân rộng bằng vai.",
+   "Nắm dây thừng bằng hai tay, lòng bàn tay hướng vào nhau, và đưa hai tay lên trên đầu.",
+   "Giữ cánh tay trên sát đầu và khuỷu tay hướng ra trước.",
+   "Từ từ hạ dây thừng ra sau đầu bằng cách gập khuỷu tay.",
+   "Dừng lại một chút, sau đó duỗi thẳng hai tay trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "lying-dumbbell-triceps-extension",
+  "name": "Duỗi tay sau nằm với tạ đơn",
+  "name_en": "Lying Dumbbell Triceps Extension",
+  "description": "Nằm trên ghế và gập khuỷu để hạ hai tạ đơn về hai bên đầu rồi duỗi tay lên.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "triceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "dumbbell",
+   "flat_bench"
+  ],
+  "exds_id": "0351",
+  "fedb_id": "Lying_Dumbbell_Tricep_Extension",
+  "instructions_vi": [
+   "Nằm ngửa trên ghế phẳng, mỗi tay cầm một tạ đơn, lòng bàn tay hướng vào nhau.",
+   "Duỗi thẳng hai tay lên phía trên ngực, giữ khuỷu tay sát thân.",
+   "Hạ tạ đơn xuống về phía trán bằng cách gập khuỷu tay.",
+   "Dừng lại một chút, sau đó duỗi thẳng hai tay trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "standing-barbell-triceps-extension",
+  "name": "Duỗi tay sau qua đầu với tạ đòn đứng",
+  "name_en": "Standing Barbell Overhead Triceps Extension",
+  "description": "Đứng, đưa tạ đòn qua đầu rồi gập duỗi khuỷu để tập tay sau.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "triceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "barbell"
+  ],
+  "exds_id": "0109",
+  "fedb_id": "Standing_Overhead_Barbell_Triceps_Extension",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và cầm thanh tạ đòn bằng tay úp.",
+   "Nâng thanh tạ lên qua đầu, duỗi thẳng hoàn toàn hai tay.",
+   "Giữ cánh tay trên sát đầu, từ từ hạ thanh tạ ra sau đầu bằng cách gập khuỷu tay.",
+   "Dừng lại một chút, sau đó nâng thanh tạ trở về vị trí ban đầu bằng cách duỗi thẳng hai tay.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "bench-dip",
+  "name": "Dips ghế gập gối",
+  "name_en": "Bench Dip",
+  "description": "Chống tay lên ghế phía sau, gập khuỷu hạ người xuống rồi đẩy lên để tập tay sau.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "triceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "chest",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "flat_bench"
+  ],
+  "exds_id": "0129",
+  "fedb_id": "Bench_Dips",
+  "instructions_vi": [
+   "Ngồi ở mép ghế hoặc ghế đẩu, hai tay nắm vào mép ghế bên cạnh hông.",
+   "Trượt mông ra khỏi ghế và duỗi thẳng hai chân phía trước, gót chân chạm sàn.",
+   "Gập khuỷu tay và hạ người xuống sàn, giữ lưng sát ghế.",
+   "Dừng lại một chút ở điểm thấp nhất, sau đó đẩy người trở lại vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "straight-leg-bench-dip",
+  "name": "Dips ghế duỗi thẳng chân",
+  "name_en": "Straight-Leg Bench Dip",
+  "description": "Chống tay lên ghế phía sau, duỗi thẳng hai chân và hạ người xuống rồi đẩy lên; khó hơn dips ghế gập gối.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "triceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "chest",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "flat_bench"
+  ],
+  "exds_id": "0814",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Ngồi ở mép ghế hoặc ghế đẩu, hai tay nắm vào mép ghế, các ngón tay hướng về phía trước.",
+   "Trượt mông ra khỏi ghế, dùng hai tay đỡ trọng lượng cơ thể.",
+   "Gập khuỷu tay và hạ người xuống sàn, giữ lưng sát ghế.",
+   "Dừng lại một chút ở điểm thấp nhất, sau đó đẩy người trở lại vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "diamond-push-up",
+  "name": "Hít đất kim cương",
+  "name_en": "Diamond Push-up",
+  "description": "Hít đất với hai bàn tay chụm tạo hình kim cương dưới ngực, nhấn mạnh cơ tay sau.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "triceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "chest",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0283",
+  "fedb_id": "Push-Ups_-_Close_Triceps_Position",
+  "instructions_vi": [
+   "Bắt đầu ở tư thế plank cao, hai tay đặt sát nhau, ngón cái và ngón trỏ chạm nhau tạo thành hình kim cương.",
+   "Giữ cơ thể thành một đường thẳng từ đầu đến chân, siết cơ core và cơ mông.",
+   "Hạ ngực về phía hình kim cương do hai bàn tay tạo ra, giữ khuỷu tay sát thân.",
+   "Dừng lại một chút ở điểm thấp nhất, sau đó đẩy người trở lại vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "one-arm-cable-pushdown",
+  "name": "Kéo cáp tay sau một tay",
+  "name_en": "One-Arm Cable Triceps Pushdown",
+  "description": "Ấn tay cầm cáp xuống bằng một tay để tập riêng từng bên tay sau.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "triceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "1723",
+  "fedb_id": "Cable_One_Arm_Tricep_Extension",
+  "instructions_vi": [
+   "Đứng đối diện máy cáp có gắn thanh thẳng ở độ cao ngang ngực.",
+   "Nắm thanh bằng tay úp và bước lùi để tạo lực căng cho dây cáp.",
+   "Đặt hai chân rộng bằng vai và hơi khuỵu gối.",
+   "Giữ lưng thẳng và siết cơ core trong suốt bài tập.",
+   "Bắt đầu với cánh tay duỗi thẳng hoàn toàn và vuông góc với sàn.",
+   "Giữ cố định cánh tay trên, thở ra và ấn thanh xuống cho đến khi cánh tay duỗi thẳng hoàn toàn.",
+   "Dừng lại một chút, sau đó hít vào và từ từ trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn, sau đó đổi tay."
+  ]
+ },
+ {
+  "slug": "incline-ez-bar-triceps-extension",
+  "name": "Duỗi tay sau ghế dốc với tạ đòn EZ",
+  "name_en": "Incline EZ-Bar Triceps Extension",
+  "description": "Nằm ghế dốc, gập duỗi khuỷu để hạ thanh EZ về phía đầu và đẩy lên.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "triceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "ez_bar",
+   "adjustable_bench"
+  ],
+  "exds_id": "0449",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Chỉnh ghế dốc lên góc 45 độ.",
+   "Ngồi trên ghế với lưng tựa vào đệm và cầm thanh EZ bằng tay úp.",
+   "Duỗi thẳng hoàn toàn hai tay qua đầu, giữ khuỷu tay sát đầu.",
+   "Hạ thanh tạ ra sau đầu bằng cách gập khuỷu tay, giữ cố định cánh tay trên.",
+   "Dừng lại một chút, sau đó duỗi thẳng hai tay trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "close-grip-push-up",
+  "name": "Hít đất tay hẹp",
+  "name_en": "Close-grip Push-up",
+  "description": "Hít đất với hai tay đặt hẹp hơn vai để tăng sự tham gia của cơ tay sau.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "triceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0259",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Bắt đầu ở tư thế plank cao, hai tay đặt sát nhau và ngay dưới vai.",
+   "Siết cơ core và hạ người xuống sàn, giữ khuỷu tay sát hai bên thân.",
+   "Đẩy qua lòng bàn tay để duỗi thẳng hai tay và trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "barbell-wrist-curl",
+  "name": "Cuốn cổ tay tạ đòn",
+  "name_en": "Barbell Wrist Curl",
+  "description": "Ngồi, tì cẳng tay trên ghế hoặc đùi và cuốn cổ tay lên để tập cơ cẳng tay mặt trong.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "forearms",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "barbell",
+   "flat_bench"
+  ],
+  "exds_id": "0126",
+  "fedb_id": "Palms-Up_Barbell_Wrist_Curl_Over_A_Bench",
+  "instructions_vi": [
+   "Ngồi trên ghế, hai bàn chân đặt phẳng trên sàn và cẳng tay đặt trên đùi, cầm thanh tạ đòn bằng tay ngửa.",
+   "Để thanh tạ lăn xuống đến đầu ngón tay, giữ cổ tay thẳng.",
+   "Từ từ cuốn thanh tạ lên về phía cẳng tay bằng cách gập cổ tay.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ thanh tạ về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "barbell-reverse-wrist-curl",
+  "name": "Cuốn cổ tay úp tạ đòn",
+  "name_en": "Barbell Reverse Wrist Curl",
+  "description": "Cuốn cổ tay với lòng bàn tay úp để tập cơ duỗi cổ tay ở mặt ngoài cẳng tay.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "forearms",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "barbell",
+   "flat_bench"
+  ],
+  "exds_id": "0082",
+  "fedb_id": "Palms-Down_Wrist_Curl_Over_A_Bench",
+  "instructions_vi": [
+   "Ngồi trên ghế, hai bàn chân đặt phẳng trên sàn, cầm thanh tạ đòn bằng tay úp, lòng bàn tay hướng xuống.",
+   "Đặt cẳng tay lên đùi, để cổ tay thả ra ngoài mép đùi.",
+   "Từ từ cuốn cổ tay lên, đưa thanh tạ về phía cơ thể.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ thanh tạ về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-wrist-curl",
+  "name": "Cuốn cổ tay tạ đơn trên ghế",
+  "name_en": "Dumbbell Wrist Curl",
+  "description": "Đặt cẳng tay lên ghế và cuốn cổ tay với tạ đơn để tập cơ cẳng tay.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "forearms",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "dumbbell",
+   "flat_bench"
+  ],
+  "exds_id": "0369",
+  "fedb_id": "Palms-Up_Dumbbell_Wrist_Curl_Over_A_Bench",
+  "instructions_vi": [
+   "Ngồi trên ghế, cẳng tay đặt trên mặt ghế và lòng bàn tay hướng lên, mỗi tay cầm một tạ đơn.",
+   "Để cổ tay thả ra ngoài mép ghế.",
+   "Từ từ cuốn cổ tay lên, siết cơ cẳng tay ở điểm cao nhất của động tác.",
+   "Dừng lại một chút, sau đó từ từ hạ cổ tay về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-reverse-wrist-curl",
+  "name": "Cuốn cổ tay úp tạ đơn",
+  "name_en": "Dumbbell Reverse Wrist Curl",
+  "description": "Cuốn cổ tay úp với tạ đơn để tập cơ duỗi cổ tay.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "forearms",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0385",
+  "fedb_id": "Palms-Down_Dumbbell_Wrist_Curl_Over_A_Bench",
+  "instructions_vi": [
+   "Ngồi trên ghế dài hoặc ghế đẩu, hai bàn chân đặt phẳng trên sàn.",
+   "Mỗi tay cầm một tạ đơn bằng tay úp, lòng bàn tay hướng xuống.",
+   "Đặt cẳng tay lên đùi, để cổ tay thả ra ngoài mép đùi.",
+   "Từ từ cuốn cổ tay lên, đưa tạ đơn về phía cơ thể.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ tạ đơn về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "cable-wrist-curl",
+  "name": "Cuốn cổ tay với cáp",
+  "name_en": "Cable Wrist Curl",
+  "description": "Cuốn cổ tay với tay cầm cáp thấp để duy trì lực căng liên tục lên cẳng tay.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "forearms",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0247",
+  "fedb_id": "Cable_Wrist_Curl",
+  "instructions_vi": [
+   "Gắn thanh thẳng vào máy cáp ở ròng rọc thấp.",
+   "Đứng đối diện máy, hai chân rộng bằng vai.",
+   "Nắm thanh bằng tay ngửa, lòng bàn tay hướng lên, hai tay rộng bằng vai.",
+   "Đặt cẳng tay lên ghế hoặc đệm, để cổ tay thả ra ngoài mép.",
+   "Giữ cố định cẳng tay, thở ra và cuốn cổ tay lên cao nhất có thể.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó hít vào và từ từ hạ thanh về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "behind-the-back-barbell-wrist-curl",
+  "name": "Cuốn cổ tay tạ đòn sau lưng",
+  "name_en": "Behind-the-Back Barbell Wrist Curl",
+  "description": "Đứng, cầm tạ đòn sau lưng và cuốn cổ tay để tập cơ cẳng tay.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "forearms",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "barbell"
+  ],
+  "exds_id": "0104",
+  "fedb_id": "Standing_Palms-Up_Barbell_Behind_The_Back_Wrist_Curl",
+  "instructions_vi": [
+   "Đứng thẳng, hai chân rộng bằng vai, cầm thanh tạ đòn bằng tay úp.",
+   "Đặt thanh tạ lên mu bàn tay, lòng bàn tay hướng xuống và các ngón tay hướng về phía cơ thể.",
+   "Giữ cố định cánh tay trên, thở ra và cuốn cổ tay lên cao nhất có thể.",
+   "Giữ tư thế co cơ một chút, sau đó hít vào và từ từ hạ thanh tạ về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "barbell-front-squat",
+  "name": "Squat tạ đòn trước ngực",
+  "name_en": "Barbell Front Squat",
+  "description": "Squat với tạ đòn đặt trước vai, thân người dựng thẳng hơn nên nhấn mạnh đùi trước và cơ core.",
+  "difficulty": "advanced",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "abs",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   },
+   {
+    "code": "lower_back",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   }
+  ],
+  "equipment": [
+   "barbell",
+   "power_rack"
+  ],
+  "exds_id": "0042",
+  "fedb_id": "Front_Barbell_Squat",
+  "instructions_vi": [
+   "Bắt đầu bằng cách đứng với hai chân rộng bằng vai, mũi chân hơi hướng ra ngoài.",
+   "Giữ thanh tạ đòn trước vai, đặt tựa lên xương đòn và vai.",
+   "Siết cơ core và giữ ngực ưỡn khi hạ người xuống tư thế squat, đẩy hông ra sau và gập gối.",
+   "Hạ người cho đến khi đùi song song với sàn, hoặc xuống thấp nhất mà bạn thấy thoải mái.",
+   "Dừng lại một chút ở điểm thấp nhất, sau đó đạp qua gót chân để trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-squat",
+  "name": "Squat tạ đơn",
+  "name_en": "Dumbbell Squat",
+  "description": "Squat với hai tạ đơn cầm hai bên người, phù hợp để tập chân khi không có tạ đòn.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "hamstrings",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "lower_back",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0413",
+  "fedb_id": "Dumbbell_Squat",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, mỗi tay cầm một tạ đơn buông hai bên người.",
+   "Giữ ngực ưỡn và siết cơ core, hạ người xuống bằng cách gập gối và hông, như đang ngồi xuống ghế.",
+   "Tiếp tục hạ cho đến khi đùi song song với sàn, hoặc xuống thấp nhất mà bạn thấy thoải mái.",
+   "Dừng lại một chút ở điểm thấp nhất, sau đó đạp qua gót chân để trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "barbell-lunge",
+  "name": "Chùng chân với tạ đòn",
+  "name_en": "Barbell Lunge",
+  "description": "Đặt tạ đòn sau vai và bước chùng từng chân để tập đùi trước và mông.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "hamstrings",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "adductors",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "barbell"
+  ],
+  "exds_id": "0054",
+  "fedb_id": "Barbell_Lunge",
+  "instructions_vi": [
+   "Bắt đầu bằng cách đứng với hai chân rộng bằng vai và thanh tạ đòn đặt trên lưng trên.",
+   "Bước chân phải về phía trước, giữ thân người thẳng.",
+   "Hạ người xuống bằng cách gập gối phải cho đến khi đùi song song với sàn.",
+   "Đạp qua gót chân phải để trở về vị trí ban đầu.",
+   "Lặp lại với chân trái, đổi chân luân phiên với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-lunge",
+  "name": "Chùng chân với tạ đơn",
+  "name_en": "Dumbbell Lunge",
+  "description": "Bước chùng từng chân khi cầm hai tạ đơn hai bên người để tập đùi trước và mông.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "hamstrings",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "adductors",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0336",
+  "fedb_id": "Dumbbell_Lunges",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, mỗi tay cầm một tạ đơn.",
+   "Bước chân phải về phía trước, hạ người xuống tư thế chùng chân.",
+   "Giữ lưng thẳng và ngực ưỡn khi hạ người xuống.",
+   "Đạp qua gót chân phải để trở về vị trí ban đầu.",
+   "Lặp lại với chân trái.",
+   "Đổi chân luân phiên với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-rear-lunge",
+  "name": "Chùng chân lùi với tạ đơn",
+  "name_en": "Dumbbell Rear Lunge",
+  "description": "Bước lùi từng chân và hạ thấp người, ít áp lực lên khớp gối hơn chùng chân tiến.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "hamstrings",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "adductors",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0381",
+  "fedb_id": "Dumbbell_Rear_Lunge",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, mỗi tay cầm một tạ đơn.",
+   "Bước chân phải ra sau, hạ người xuống tư thế chùng chân.",
+   "Gập gối trái và hạ người xuống cho đến khi đùi trái song song với sàn.",
+   "Dừng lại một chút, sau đó đạp qua gót chân trái để trở về vị trí ban đầu.",
+   "Lặp lại ở bên còn lại, bước chân trái ra sau."
+  ]
+ },
+ {
+  "slug": "bodyweight-split-squat",
+  "name": "Split squat không tạ",
+  "name_en": "Bodyweight Split Squat",
+  "description": "Đứng tách hai chân trước sau và hạ thấp người, tập đùi trước và mông bằng trọng lượng cơ thể.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "hamstrings",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "adductors",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [],
+  "exds_id": "2368",
+  "fedb_id": "Split_Squats",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai.",
+   "Bước một chân về phía trước, đặt cách chân kia khoảng hai bước chân (khoảng 60 cm).",
+   "Hạ người xuống bằng cách gập gối và hông, giữ lưng thẳng.",
+   "Tiếp tục hạ cho đến khi đùi trước song song với sàn và gối sau lơ lửng ngay trên mặt sàn.",
+   "Dừng lại một chút, sau đó đạp qua gót chân trước để trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn, sau đó đổi chân và lặp lại."
+  ]
+ },
+ {
+  "slug": "sissy-squat",
+  "name": "Sissy squat",
+  "name_en": "Sissy Squat",
+  "description": "Ngả người ra sau khi gập gối để cô lập đùi trước, đòi hỏi sự linh hoạt và kiểm soát cao.",
+  "difficulty": "advanced",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "abs",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1489",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và mũi chân hơi hướng ra ngoài.",
+   "Nắm vào một vật vững chắc để giữ thăng bằng nếu cần.",
+   "Từ từ hạ người xuống bằng cách gập gối và ngả người ra sau, giữ thân người thẳng.",
+   "Tiếp tục hạ cho đến khi đùi song song với sàn hoặc xuống thấp nhất mà bạn thấy thoải mái.",
+   "Dừng lại một chút, sau đó đạp qua gót chân để trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "pistol-squat",
+  "name": "Squat một chân (pistol)",
+  "name_en": "Pistol Squat",
+  "description": "Squat sâu trên một chân với chân kia duỗi thẳng phía trước, đòi hỏi sức mạnh và thăng bằng cao.",
+  "difficulty": "advanced",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "hamstrings",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "adductors",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   },
+   {
+    "code": "abs",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1759",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và hai tay duỗi thẳng ra phía trước.",
+   "Nhấc chân phải khỏi sàn và duỗi thẳng ra phía trước.",
+   "Từ từ hạ người xuống bằng cách gập gối trái và đẩy hông ra sau.",
+   "Giữ ngực ưỡn và lưng thẳng khi hạ người xuống.",
+   "Hạ người cho đến khi đùi trái song song với sàn, hoặc xuống thấp nhất mà bạn thấy thoải mái.",
+   "Dừng lại một chút ở điểm thấp nhất, sau đó đạp qua gót chân trái để trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn, sau đó đổi chân."
+  ]
+ },
+ {
+  "slug": "barbell-overhead-squat",
+  "name": "Squat tạ đòn qua đầu",
+  "name_en": "Barbell Overhead Squat",
+  "description": "Squat khi giữ tạ đòn thẳng trên đầu, đòi hỏi độ linh hoạt vai, hông và sức mạnh core.",
+  "difficulty": "advanced",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   },
+   {
+    "code": "abs",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   },
+   {
+    "code": "traps",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   }
+  ],
+  "equipment": [
+   "barbell"
+  ],
+  "exds_id": "0069",
+  "fedb_id": "Overhead_Squat",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và mũi chân hơi hướng ra ngoài.",
+   "Cầm thanh tạ đòn bằng tay rộng, giữ thanh tạ trên đầu với hai tay duỗi thẳng hoàn toàn.",
+   "Siết cơ core và hạ người xuống tư thế squat, giữ ngực ưỡn và gối thẳng hướng với mũi chân.",
+   "Dừng lại một chút ở điểm thấp nhất, sau đó đạp qua gót chân để trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "kettlebell-front-squat",
+  "name": "Squat tạ ấm trước ngực",
+  "name_en": "Kettlebell Front Squat",
+  "description": "Giữ tạ ấm trước ngực khi squat, giúp thân người thẳng và tập đùi trước.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "abs",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "kettlebell"
+  ],
+  "exds_id": "0533",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, mũi chân hơi hướng ra ngoài.",
+   "Giữ tạ ấm bằng hai tay trước ngực, sát cơ thể.",
+   "Siết cơ core và giữ ngực ưỡn khi hạ hông xuống và ra sau, như đang ngồi xuống ghế.",
+   "Hạ người cho đến khi đùi song song với sàn, hoặc xuống thấp nhất mà bạn thấy thoải mái.",
+   "Đạp qua gót chân để đứng dậy, siết cơ mông ở điểm cao nhất.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-romanian-deadlift",
+  "name": "Romanian deadlift tạ đơn",
+  "name_en": "Dumbbell Romanian Deadlift",
+  "description": "Gập hông và hạ hai tạ đơn dọc theo chân, giữ lưng thẳng, để tập đùi sau và mông.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "hamstrings",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "lower_back",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "forearms",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "1459",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, mỗi tay cầm một tạ đơn bằng tay úp.",
+   "Giữ lưng thẳng và siết cơ core, gập người từ hông và hạ tạ đơn xuống phía sàn, để gối hơi khuỵu.",
+   "Hạ tạ đơn cho đến khi cảm thấy cơ đùi sau được kéo giãn, sau đó đạp qua gót chân và siết cơ mông để trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "stiff-leg-barbell-deadlift",
+  "name": "Deadlift chân thẳng với tạ đòn",
+  "name_en": "Stiff-Leg Barbell Deadlift",
+  "description": "Deadlift giữ chân gần như thẳng để kéo giãn và nhấn mạnh cơ đùi sau.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "hamstrings",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "lower_back",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "barbell"
+  ],
+  "exds_id": "0116",
+  "fedb_id": "Stiff-Legged_Barbell_Deadlift",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và mũi chân hướng thẳng ra trước.",
+   "Cầm thanh tạ đòn bằng tay úp, hai tay rộng hơn vai một chút.",
+   "Gập người từ hông và hạ thanh tạ xuống phía sàn, giữ lưng thẳng và gối hơi khuỵu.",
+   "Hạ thanh tạ cho đến khi cảm thấy cơ đùi sau được kéo giãn.",
+   "Siết cơ đùi sau và cơ mông để nâng thanh tạ trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "single-leg-dumbbell-deadlift",
+  "name": "Deadlift một chân với tạ đơn",
+  "name_en": "Single-Leg Dumbbell Deadlift",
+  "description": "Gập hông trên một chân với tạ đơn, chân kia nâng ra sau, rèn thăng bằng và đùi sau.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "hamstrings",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "lower_back",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "abs",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "1757",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng hông, tay phải cầm một tạ đơn.",
+   "Chuyển trọng lượng sang chân trái và nhấc nhẹ chân phải khỏi sàn.",
+   "Giữ lưng thẳng, gập người về trước từ hông và hạ tạ đơn xuống phía sàn.",
+   "Đồng thời, duỗi thẳng chân phải ra sau, giữ gối trái hơi gập.",
+   "Hạ tạ đơn cho đến khi thân người và chân phải song song với sàn.",
+   "Dừng lại một chút, sau đó siết cơ mông và đùi sau để trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn, sau đó đổi bên."
+  ]
+ },
+ {
+  "slug": "good-morning",
+  "name": "Good morning với tạ đòn",
+  "name_en": "Barbell Good Morning",
+  "description": "Đặt tạ đòn sau vai và gập hông về trước với lưng thẳng, tập đùi sau và lưng dưới.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "hamstrings",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "lower_back",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "glutes",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "barbell"
+  ],
+  "exds_id": "0044",
+  "fedb_id": "Good_Morning",
+  "instructions_vi": [
+   "Bắt đầu bằng cách đứng với hai chân rộng bằng vai và thanh tạ đòn đặt trên lưng trên.",
+   "Giữ lưng thẳng và siết cơ core, gập người về trước từ hông, đẩy mông ra sau như thể bạn đang cố chạm mông vào bức tường phía sau.",
+   "Hạ thân người cho đến khi song song với sàn, cảm nhận cơ đùi sau được kéo giãn.",
+   "Dừng lại một chút, sau đó trở về vị trí ban đầu bằng cách siết cơ mông và đẩy hông ra trước.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "seated-leg-curl",
+  "name": "Móc đùi sau ngồi trên máy",
+  "name_en": "Seated Leg Curl",
+  "description": "Ngồi trên máy và gập gối kéo thanh đệm xuống để tập đùi sau.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "hamstrings",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "calves",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "leg_curl_machine"
+  ],
+  "exds_id": "0599",
+  "fedb_id": "Seated_Leg_Curl",
+  "instructions_vi": [
+   "Điều chỉnh máy cho vừa với cơ thể và ngồi vào máy với lưng tựa vào tựa lưng.",
+   "Đặt cẳng chân dưới thanh đệm, ngay trên mắt cá chân.",
+   "Nắm tay cầm hai bên máy để giữ chắc.",
+   "Giữ cố định phần đùi, thở ra và gập chân lên cao nhất có thể.",
+   "Giữ tư thế co cơ một chút và siết chặt cơ đùi sau.",
+   "Hít vào và từ từ hạ thanh đệm về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "kneeling-leg-curl",
+  "name": "Móc đùi sau quỳ trên máy",
+  "name_en": "Kneeling Leg Curl",
+  "description": "Quỳ úp trên máy và gập gối kéo cẳng chân về phía mông để tập đùi sau.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "hamstrings",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "calves",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "leg_curl_machine"
+  ],
+  "exds_id": "0582",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Điều chỉnh máy cho vừa với cơ thể và chọn mức tạ mong muốn.",
+   "Quỳ trên máy, hướng người xuống, đầu gối đặt trên đệm và hai bàn chân được cố định dưới thanh đệm chân.",
+   "Nắm tay cầm hoặc hai bên thành máy để giữ ổn định.",
+   "Giữ cố định thân trên, thở ra và gập chân lên về phía mông bằng cách gập gối.",
+   "Dừng lại một chút ở điểm cao nhất của động tác, siết cơ đùi sau.",
+   "Hít vào và từ từ hạ chân về vị trí ban đầu, duỗi thẳng hoàn toàn gối.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "glute-ham-raise",
+  "name": "Glute-ham raise",
+  "name_en": "Glute-Ham Raise",
+  "description": "Cố định bàn chân, hạ thân người xuống rồi gập gối kéo lên bằng đùi sau, bài tập đùi sau nâng cao.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "hamstrings",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "calves",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   },
+   {
+    "code": "lower_back",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   }
+  ],
+  "equipment": [],
+  "exds_id": "3193",
+  "fedb_id": "Glute_Ham_Raise",
+  "instructions_vi": [
+   "Điều chỉnh máy glute-ham raise cho vừa với cơ thể.",
+   "Vào vị trí úp người trên máy với hai mắt cá chân được cố định.",
+   "Đặt hai tay lên ngực hoặc khoanh tay trước ngực.",
+   "Siết cơ đùi sau và cơ mông để nâng thân trên lên phía trần nhà.",
+   "Tiếp tục nâng cho đến khi cơ thể tạo thành một đường thẳng từ đầu đến gót chân.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ người về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-deadlift",
+  "name": "Deadlift tạ đơn",
+  "name_en": "Dumbbell Deadlift",
+  "description": "Nhấc hai tạ đơn từ sàn lên bằng cách duỗi hông và gối, phù hợp người mới học deadlift.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "hamstrings",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "lower_back",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "quads",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   },
+   {
+    "code": "forearms",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   },
+   {
+    "code": "traps",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0300",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, mũi chân hướng thẳng ra trước.",
+   "Mỗi tay cầm một tạ đơn, lòng bàn tay hướng vào thân, hai tay duỗi thẳng xuống dưới.",
+   "Gập hông và gối, hạ tạ đơn xuống phía sàn trong khi giữ lưng thẳng.",
+   "Đạp qua gót chân, duỗi hông và gối để nâng tạ đơn trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "barbell-glute-bridge",
+  "name": "Cầu mông với tạ đòn",
+  "name_en": "Barbell Glute Bridge",
+  "description": "Nằm sàn, đặt tạ đòn lên hông và đẩy hông lên để siết mông.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "hamstrings",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "quads",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "barbell"
+  ],
+  "exds_id": "1409",
+  "fedb_id": "Barbell_Glute_Bridge",
+  "instructions_vi": [
+   "Bắt đầu bằng cách nằm ngửa trên sàn, gối gập và hai bàn chân đặt phẳng trên sàn.",
+   "Đặt thanh tạ đòn ngang qua hông và giữ chắc bằng hai tay.",
+   "Siết cơ mông và cơ core, sau đó nâng hông khỏi sàn cho đến khi cơ thể tạo thành một đường thẳng từ đầu gối đến vai.",
+   "Dừng lại một chút ở điểm cao nhất và siết chặt cơ mông.",
+   "Từ từ hạ hông về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "single-leg-glute-bridge",
+  "name": "Cầu mông một chân",
+  "name_en": "Single-Leg Glute Bridge",
+  "description": "Cầu mông trên một chân với chân kia duỗi thẳng để tăng tải lên từng bên mông.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "hamstrings",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "abs",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [],
+  "exds_id": "3645",
+  "fedb_id": "Single_Leg_Glute_Bridge",
+  "instructions_vi": [
+   "Nằm ngửa, gối gập và hai bàn chân đặt phẳng trên sàn.",
+   "Duỗi thẳng một chân ra phía trước.",
+   "Siết cơ mông và nâng hông khỏi sàn, tạo thành một đường thẳng từ đầu gối đến vai.",
+   "Giữ một chút ở điểm cao nhất, sau đó từ từ hạ hông về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn, sau đó đổi chân."
+  ]
+ },
+ {
+  "slug": "cable-pull-through",
+  "name": "Kéo cáp qua chân",
+  "name_en": "Cable Pull-Through",
+  "description": "Quay lưng về máy cáp và gập duỗi hông để kéo dây thừng qua hai chân, tập mông và đùi sau.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "hamstrings",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "lower_back",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0196",
+  "fedb_id": "Pull_Through",
+  "instructions_vi": [
+   "Đứng quay lưng về phía máy cáp, hai chân rộng bằng vai.",
+   "Nắm dây thừng bằng hai tay và bước lên phía trước để tạo lực căng cho dây cáp.",
+   "Gập hông và hạ thân trên cho đến khi song song với sàn, giữ lưng thẳng.",
+   "Siết cơ mông và đùi sau để kéo cơ thể trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "cable-glute-kickback",
+  "name": "Đá mông về sau với cáp",
+  "name_en": "Cable Glute Kickback",
+  "description": "Buộc dây cáp vào cổ chân và đá chân ra sau để cô lập cơ mông.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "hamstrings",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0228",
+  "fedb_id": "One-Legged_Cable_Kickback",
+  "instructions_vi": [
+   "Gắn dây cáp vào ròng rọc thấp và đứng quay lưng về phía máy.",
+   "Quấn dây cáp quanh mắt cá chân và đứng với hai chân rộng bằng vai.",
+   "Siết cơ core và giữ lưng thẳng trong suốt bài tập.",
+   "Từ từ duỗi thẳng chân ra sau, siết cơ mông ở điểm cao nhất của động tác.",
+   "Dừng lại một chút, sau đó trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn.",
+   "Đổi bên và lặp lại với chân còn lại."
+  ]
+ },
+ {
+  "slug": "curtsy-squat",
+  "name": "Squat bắt chéo chân",
+  "name_en": "Curtsy Squat",
+  "description": "Squat và bắt chân sau chéo ra sau chân trước như động tác chào, nhấn mạnh mông và đùi ngoài.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "adductors",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "hamstrings",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [],
+  "exds_id": "3769",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai.",
+   "Bước chân phải chéo ra sau và qua phía sau chân trái, bắt chéo sau chân trái.",
+   "Gập cả hai gối như đang chào kiểu quý tộc (curtsy), hạ người xuống sàn.",
+   "Giữ thân người thẳng và dồn trọng lượng vào chân trước.",
+   "Đạp qua chân trước để trở về vị trí ban đầu.",
+   "Lặp lại ở bên còn lại, bước chân trái chéo ra sau và qua phía sau chân phải."
+  ]
+ },
+ {
+  "slug": "monster-walk",
+  "name": "Đi ngang mở hông có dây kháng lực",
+  "name_en": "Monster Walk",
+  "description": "Quấn dây kháng lực quanh cổ chân và bước ngang sang hai bên với gối hơi khuỵu để kích hoạt cơ mông.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "quads",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "adductors",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "resistance_band"
+  ],
+  "exds_id": "0628",
+  "fedb_id": "Monster_Walk",
+  "instructions_vi": [
+   "Quấn một dây kháng lực quanh hai mắt cá chân.",
+   "Đứng với hai chân rộng bằng vai và hơi khuỵu gối.",
+   "Bước chân phải sang ngang, giữ lực căng của dây kháng lực.",
+   "Bước tiếp chân trái sang ngang để trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn, sau đó đổi bên."
+  ]
+ },
+ {
+  "slug": "standing-hip-abduction",
+  "name": "Dang chân sang ngang khi đứng",
+  "name_en": "Standing Hip Abduction",
+  "description": "Đứng trên một chân và nâng chân kia sang ngang để tập cơ mông giữa.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0710",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và hai tay chống hông.",
+   "Chuyển trọng lượng sang một chân và nâng chân còn lại sang ngang, giữ chân thẳng.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ chân về vị trí ban đầu.",
+   "Lặp lại ở bên còn lại.",
+   "Tiếp tục đổi bên luân phiên với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "seated-calf-raise",
+  "name": "Nhón bắp chân ngồi trên máy",
+  "name_en": "Seated Calf Raise",
+  "description": "Ngồi trên máy, đặt mũi chân lên bệ và nhón gót lên để tập cơ bắp chân dưới (soleus).",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "calves",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0594",
+  "fedb_id": "Seated_Calf_Raise",
+  "instructions_vi": [
+   "Điều chỉnh độ cao ghế sao cho gối hơi gập và hai bàn chân đặt phẳng trên bệ chân.",
+   "Đặt các ngón chân lên bệ chân, gót chân thả ra ngoài mép bệ.",
+   "Nắm tay cầm hoặc hai bên ghế để giữ ổn định.",
+   "Đẩy qua phần trước bàn chân để nâng gót lên cao nhất có thể.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ gót về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-standing-calf-raise",
+  "name": "Nhón bắp chân đứng với tạ đơn",
+  "name_en": "Dumbbell Standing Calf Raise",
+  "description": "Nhón gót lên khi cầm tạ đơn hai bên người để tập bắp chân.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "calves",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0417",
+  "fedb_id": "Standing_Dumbbell_Calf_Raise",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, mỗi tay cầm một tạ đơn.",
+   "Nhón gót khỏi sàn cao nhất có thể bằng cơ bắp chân.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ gót về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "single-leg-dumbbell-calf-raise",
+  "name": "Nhón bắp chân một chân với tạ đơn",
+  "name_en": "Dumbbell Single Leg Calf Raise",
+  "description": "Đứng trên mép bậc và nhón gót một chân với tạ đơn để tập riêng từng bên bắp chân.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "calves",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0409",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng trên mép bậc hoặc bục, gót chân thả ra ngoài và các ngón chân đặt trên bậc.",
+   "Một tay cầm tạ đơn, tay còn lại đặt lên tường hoặc tay vịn để giữ thăng bằng.",
+   "Nhón gót lên cao nhất có thể, nâng cơ thể lên bằng các ngón chân.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ gót xuống thấp hơn mặt bậc.",
+   "Lặp lại với số lần mong muốn, sau đó đổi sang chân còn lại."
+  ]
+ },
+ {
+  "slug": "barbell-standing-calf-raise",
+  "name": "Nhón bắp chân đứng với tạ đòn",
+  "name_en": "Barbell Standing Calf Raise",
+  "description": "Đặt tạ đòn sau vai và nhón gót lên để tập bắp chân.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "calves",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "barbell"
+  ],
+  "exds_id": "1372",
+  "fedb_id": "Standing_Barbell_Calf_Raise",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và đặt thanh tạ đòn ngang trên lưng trên.",
+   "Nhón gót khỏi sàn cao nhất có thể, chỉ dùng các ngón chân.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ gót về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "smith-machine-calf-raise",
+  "name": "Nhón bắp chân máy Smith",
+  "name_en": "Smith Machine Calf Raise",
+  "description": "Đứng dưới thanh tạ Smith và nhón gót lên để tập bắp chân.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "calves",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "smith_machine"
+  ],
+  "exds_id": "0773",
+  "fedb_id": "Smith_Machine_Calf_Raise",
+  "instructions_vi": [
+   "Điều chỉnh thanh tạ máy Smith ở độ cao cho phép bạn đứng với hai bàn chân đặt phẳng trên sàn và vai nằm dưới thanh tạ.",
+   "Vào vị trí dưới thanh tạ, hai chân rộng bằng vai và mũi chân hướng thẳng ra trước.",
+   "Đặt hai tay lên thanh tạ để giữ ổn định.",
+   "Siết cơ bắp chân và từ từ nhón gót khỏi sàn, nâng cơ thể lên bằng các ngón chân.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ gót về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "donkey-calf-raise",
+  "name": "Nhón bắp chân kiểu Donkey",
+  "name_en": "Donkey Calf Raise",
+  "description": "Cúi người gập hông và nhón gót lên với tải đặt trên lưng dưới, kéo giãn bắp chân tốt hơn.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "calves",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0284",
+  "fedb_id": "Donkey_Calf_Raises",
+  "instructions_vi": [
+   "Đứng với các ngón chân đặt trên một bề mặt cao như bậc hoặc khối.",
+   "Đặt hai tay lên một điểm tựa vững chắc như tường hoặc tay vịn để giữ thăng bằng.",
+   "Nhón gót lên cao nhất có thể, nâng trọng lượng cơ thể lên phần trước bàn chân.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ gót về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "bodyweight-calf-raise",
+  "name": "Nhón bắp chân không tạ",
+  "name_en": "Bodyweight Calf Raise",
+  "description": "Nhón gót lên bằng trọng lượng cơ thể, bài bắp chân đơn giản có thể tập ở bất kỳ đâu.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "calves",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1373",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, mũi chân hướng thẳng ra trước.",
+   "Đặt hai tay lên tường hoặc một bề mặt vững chắc để giữ thăng bằng.",
+   "Từ từ nhón gót khỏi sàn, nâng trọng lượng cơ thể lên phần trước bàn chân.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ gót về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "calf-press-on-leg-press",
+  "name": "Đạp bắp chân trên máy đạp đùi",
+  "name_en": "Calf Press on Leg Press Machine",
+  "description": "Dùng máy đạp đùi, đặt mũi chân lên mép bệ và đẩy gót ra để tập bắp chân.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "calves",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "leg_press_machine"
+  ],
+  "exds_id": "1385",
+  "fedb_id": "Calf_Press_On_The_Leg_Press_Machine",
+  "instructions_vi": [
+   "Điều chỉnh ghế của máy đạp đùi sao cho gối hơi gập khi hai bàn chân đặt trên bệ đạp.",
+   "Ngồi vào máy với lưng tựa vào tựa lưng và hai bàn chân đặt phẳng trên bệ đạp, rộng bằng vai.",
+   "Đặt các ngón chân và phần trước bàn chân lên bệ đạp, để gót chân thả ra ngoài mép.",
+   "Mở tay gạt an toàn và đẩy bệ đạp ra xa bằng cách duỗi gối.",
+   "Khi gối đã duỗi thẳng hoàn toàn, từ từ hạ gót xuống bằng cách thả lỏng bắp chân.",
+   "Dừng lại một chút ở điểm thấp nhất, sau đó đẩy bệ đạp lên lại bằng cách duỗi bắp chân.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "cable-hip-adduction",
+  "name": "Khép hông với cáp",
+  "name_en": "Cable Hip Adduction",
+  "description": "Buộc dây cáp vào cổ chân và khép chân qua trước người để tập cơ đùi trong.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "adductors",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0168",
+  "fedb_id": "Cable_Hip_Adduction",
+  "instructions_vi": [
+   "Gắn đai cổ chân vào cổ chân và đứng đối diện máy cáp.",
+   "Đứng cách máy một khoảng đủ xa để dây cáp có lực căng.",
+   "Đặt hai tay lên máy để giữ thăng bằng.",
+   "Giữ chân thẳng, từ từ đưa chân ngang qua người về phía đường giữa cơ thể.",
+   "Dừng lại một chút ở cuối động tác, sau đó từ từ trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "side-lying-hip-adduction",
+  "name": "Khép hông nằm nghiêng",
+  "name_en": "Side Lying Hip Adduction",
+  "description": "Nằm nghiêng và nâng chân dưới lên để tập cơ đùi trong.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "adductors",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "3667",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Nằm nghiêng, hai chân duỗi thẳng và xếp chồng lên nhau.",
+   "Đặt cánh tay dưới dưới đầu để làm điểm tựa.",
+   "Siết cơ đùi trong và nâng chân trên lên cao nhất có thể mà không xoay hông hoặc ngả người ra sau.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ chân về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn, sau đó đổi bên."
+  ]
+ },
+ {
+  "slug": "butterfly-stretch",
+  "name": "Giãn đùi trong tư thế bướm",
+  "name_en": "Butterfly Stretch",
+  "description": "Ngồi chạm hai lòng bàn chân vào nhau và hạ đầu gối ra hai bên để giãn cơ đùi trong.",
+  "difficulty": "beginner",
+  "category": "stretching",
+  "mechanic": null,
+  "force_type": "static",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "adductors",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1494",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Ngồi trên sàn, hai chân duỗi thẳng về phía trước.",
+   "Gập gối và đưa hai lòng bàn chân vào nhau, để hai đầu gối hạ ra hai bên.",
+   "Dùng hai tay nắm lấy mắt cá chân hoặc bàn chân.",
+   "Ngồi thẳng lưng và kéo dài cột sống.",
+   "Nhẹ nhàng ấn đầu gối xuống phía sàn, cảm nhận cơ đùi trong được kéo giãn.",
+   "Giữ tư thế này trong vài nhịp thở.",
+   "Để thả lỏng, từ từ đưa đầu gối lên và duỗi thẳng hai chân."
+  ]
+ },
+ {
+  "slug": "reverse-crunch",
+  "name": "Gập bụng ngược",
+  "name_en": "Reverse Crunch",
+  "description": "Nằm ngửa và cuộn hông về phía ngực để tập phần bụng dưới.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "abs",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0872",
+  "fedb_id": "Reverse_Crunch",
+  "instructions_vi": [
+   "Nằm ngửa trên sàn, hai tay duỗi dọc hai bên người.",
+   "Gập gối và nhấc hai bàn chân khỏi sàn, đưa đùi vuông góc với sàn.",
+   "Siết cơ bụng và cuộn hông khỏi sàn, đưa đầu gối về phía ngực.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ hông về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "bicycle-crunch",
+  "name": "Gập bụng đạp xe",
+  "name_en": "Bicycle Crunch",
+  "description": "Nằm ngửa, đạp chân luân phiên và xoay khuỷu về phía gối đối diện để tập bụng và cơ liên sườn.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "abs",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "obliques",
+    "role": "primary",
+    "activation_ratio": 0.8
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0003",
+  "fedb_id": "Air_Bike",
+  "instructions_vi": [
+   "Nằm ngửa trên sàn, đặt hai tay sau đầu.",
+   "Nhấc hai chân khỏi sàn và gập gối ở góc 90 độ.",
+   "Đưa khuỷu tay phải về phía gối trái, đồng thời duỗi thẳng chân phải.",
+   "Trở về vị trí ban đầu và lặp lại động tác ở bên đối diện, đưa khuỷu tay trái về phía gối phải trong khi duỗi thẳng chân trái.",
+   "Tiếp tục đổi bên luân phiên theo động tác đạp xe với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "lying-leg-raise",
+  "name": "Nâng chân nằm trên ghế",
+  "name_en": "Lying Leg Raise",
+  "description": "Nằm trên ghế phẳng và nâng hai chân thẳng lên để tập bụng dưới.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "abs",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "flat_bench"
+  ],
+  "exds_id": "0620",
+  "fedb_id": "Flat_Bench_Lying_Leg_Raise",
+  "instructions_vi": [
+   "Nằm ngửa trên ghế phẳng, lưng ép sát vào ghế.",
+   "Đặt hai tay dưới mông để làm điểm tựa.",
+   "Giữ hai chân thẳng và khép lại, nâng chúng lên phía trần nhà.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ chân về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "flutter-kicks",
+  "name": "Đá chân luân phiên nằm ngửa",
+  "name_en": "Flutter Kicks",
+  "description": "Nằm ngửa, nhấc hai chân khỏi sàn và đá lên xuống luân phiên để tập bụng dưới.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "abs",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "quads",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0459",
+  "fedb_id": "Flutter_Kicks",
+  "instructions_vi": [
+   "Nằm ngửa trên sàn, hai chân duỗi thẳng và hai tay đặt dọc hai bên người.",
+   "Siết cơ core và nhấc hai chân khỏi sàn khoảng 6 inch (khoảng 15 cm).",
+   "Giữ hai chân thẳng, luân phiên nâng một chân cao hơn chân kia một chút.",
+   "Tiếp tục động tác đá luân phiên này với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "jackknife-sit-up",
+  "name": "Gập người chữ V",
+  "name_en": "Jackknife Sit-up",
+  "description": "Nâng đồng thời thân trên và hai chân để chạm tay vào mũi chân, tạo hình chữ V.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "abs",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "quads",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0507",
+  "fedb_id": "Jackknife_Sit-Up",
+  "instructions_vi": [
+   "Nằm ngửa trên sàn, hai chân duỗi thẳng và hai tay đưa lên trên đầu.",
+   "Siết cơ core và nâng đồng thời hai chân và thân trên, đưa hai tay về phía mũi chân.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ hai chân và thân trên về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "sit-up",
+  "name": "Gập bụng toàn phần",
+  "name_en": "Sit-up",
+  "description": "Nằm ngửa gập gối và nâng toàn bộ thân trên lên để tập cơ bụng.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "abs",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "quads",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0735",
+  "fedb_id": "Sit-Up",
+  "instructions_vi": [
+   "Nằm ngửa trên sàn, gối gập và hai bàn chân đặt phẳng trên sàn.",
+   "Đặt hai tay sau đầu, khuỷu tay hướng ra ngoài.",
+   "Siết cơ bụng và từ từ nâng thân trên khỏi sàn, cuộn người về trước cho đến khi thân người tạo góc 45 độ.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ thân trên về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "decline-sit-up",
+  "name": "Gập bụng ghế dốc xuống",
+  "name_en": "Decline Sit-up",
+  "description": "Gập bụng trên ghế dốc xuống để tăng độ khó so với gập bụng trên sàn.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "abs",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "quads",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "adjustable_bench"
+  ],
+  "exds_id": "0282",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Nằm trên ghế dốc xuống, hai chân được cố định và gối gập.",
+   "Đặt hai tay sau đầu hoặc bắt chéo trước ngực.",
+   "Siết cơ bụng và nâng thân trên khỏi ghế, cuộn người về phía đầu gối.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ thân trên về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "decline-crunch",
+  "name": "Crunch ghế dốc xuống",
+  "name_en": "Decline Crunch",
+  "description": "Crunch trên ghế dốc xuống để tăng biên độ và tải cho cơ bụng.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "abs",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [
+   "adjustable_bench"
+  ],
+  "exds_id": "0277",
+  "fedb_id": "Decline_Crunch",
+  "instructions_vi": [
+   "Nằm trên ghế dốc xuống, hai chân được cố định và gối gập góc 90 độ.",
+   "Đặt hai tay sau đầu hoặc bắt chéo trước ngực.",
+   "Siết cơ bụng và nâng thân trên về phía đầu gối, cuộn thân người.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ thân trên về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "hanging-oblique-knee-raise",
+  "name": "Nâng gối chéo khi treo xà",
+  "name_en": "Hanging Oblique Knee Raise",
+  "description": "Treo người trên xà và nâng gối chéo sang một bên để tập cơ liên sườn.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "obliques",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "abs",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "forearms",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "pull_up_bar"
+  ],
+  "exds_id": "1761",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Treo người trên xà đơn với hai tay duỗi thẳng hoàn toàn và lòng bàn tay hướng ra xa người.",
+   "Siết cơ core và nâng gối về phía ngực, đồng thời xoay thân sang một bên.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ chân về vị trí ban đầu.",
+   "Lặp lại ở bên còn lại, xoay thân theo hướng ngược lại.",
+   "Tiếp tục đổi bên luân phiên với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "cable-side-bend",
+  "name": "Nghiêng người với cáp",
+  "name_en": "Cable Side Bend",
+  "description": "Đứng cạnh máy cáp và nghiêng thân sang bên để tập cơ liên sườn.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "obliques",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "abs",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0222",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và nắm tay cầm cáp bằng một tay.",
+   "Giữ lưng thẳng và siết cơ core.",
+   "Từ từ nghiêng người sang bên từ eo, hạ tay cầm cáp xuống về phía đầu gối.",
+   "Dừng lại một chút, sau đó trở về vị trí ban đầu.",
+   "Lặp lại ở bên còn lại.",
+   "Đổi bên luân phiên với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-side-bend",
+  "name": "Nghiêng người với tạ đơn",
+  "name_en": "Dumbbell Side Bend",
+  "description": "Cầm tạ đơn một tay và nghiêng thân sang bên để tập cơ liên sườn.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "obliques",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "abs",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "0407",
+  "fedb_id": "Dumbbell_Side_Bend",
+  "instructions_vi": [
+   "Đứng thẳng, hai chân rộng bằng vai, cầm một tạ đơn bằng một tay và để tạ buông xuống bên người.",
+   "Giữ lưng thẳng và siết cơ core, từ từ nghiêng người từ eo sang phía đối diện với tạ đơn, hạ tạ xuống thấp nhất có thể mà vẫn thoải mái.",
+   "Dừng lại một chút, sau đó từ từ trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn, sau đó đổi bên và lặp lại."
+  ]
+ },
+ {
+  "slug": "heel-touch",
+  "name": "Chạm gót luân phiên",
+  "name_en": "Alternate Heel Touchers",
+  "description": "Nằm ngửa gập gối và nghiêng thân sang hai bên chạm tay vào gót chân.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "obliques",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "abs",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0006",
+  "fedb_id": "Alternate_Heel_Touchers",
+  "instructions_vi": [
+   "Nằm ngửa trên sàn, gối gập và hai bàn chân đặt phẳng trên sàn.",
+   "Duỗi thẳng hai tay ra hai bên, song song với mặt đất.",
+   "Siết cơ bụng, nâng vai khỏi sàn và đưa tay phải về phía gót chân phải.",
+   "Trở về vị trí ban đầu và lặp lại ở bên trái, đưa tay trái về phía gót chân trái.",
+   "Tiếp tục đổi bên luân phiên với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "oblique-crunch",
+  "name": "Gập bụng chéo trên sàn",
+  "name_en": "Floor Oblique Crunch",
+  "description": "Nằm nghiêng hoặc xoay thân khi gập bụng để nhấn vào cơ liên sườn.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "obliques",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "abs",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0635",
+  "fedb_id": "Oblique_Crunches",
+  "instructions_vi": [
+   "Nằm ngửa, gối gập và hai bàn chân đặt phẳng trên sàn.",
+   "Đặt hai tay sau đầu hoặc bắt chéo trước ngực.",
+   "Siết cơ bụng và nâng hai bả vai khỏi sàn, xoay thân người sang một bên.",
+   "Dừng lại một chút, sau đó hạ hai bả vai về lại sàn.",
+   "Lặp lại ở bên còn lại, đổi bên sau mỗi lần lặp."
+  ]
+ },
+ {
+  "slug": "captains-chair-leg-raise",
+  "name": "Nâng chân thẳng trên ghế Captain",
+  "name_en": "Captain's Chair Leg Raise",
+  "description": "Chống tay trên ghế Captain và nâng hai chân thẳng lên để tập bụng dưới.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "isolation",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "abs",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "2963",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Ngồi trên ghế Captain với lưng tựa vào tựa lưng và hai cẳng tay đặt trên đệm tay.",
+   "Giữ thân trên ổn định và lưng thẳng.",
+   "Siết cơ bụng và nâng hai chân lên phía trước, giữ chân thẳng.",
+   "Tiếp tục nâng cho đến khi chân song song với sàn hoặc cao nhất mà bạn thấy thoải mái.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ chân về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "cable-twist",
+  "name": "Xoay thân với cáp",
+  "name_en": "Cable Twist",
+  "description": "Xoay thân người kéo tay cầm cáp chéo qua cơ thể để tập cơ liên sườn.",
+  "difficulty": "beginner",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "obliques",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "abs",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [
+   "cable_crossover"
+  ],
+  "exds_id": "0243",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, đối diện máy cáp.",
+   "Cầm tay cầm cáp bằng hai tay trước ngực, giữ hai tay hơi gập.",
+   "Siết cơ core và xoay thân người sang phải, kéo dây cáp ngang qua cơ thể.",
+   "Dừng lại một chút ở cuối động tác, cảm nhận cơ bụng và cơ liên sườn co lại.",
+   "Từ từ trở về vị trí ban đầu, chống lại lực kéo của dây cáp.",
+   "Lặp lại động tác sang bên trái.",
+   "Tiếp tục đổi bên luân phiên với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "kettlebell-windmill",
+  "name": "Windmill tạ ấm",
+  "name_en": "Kettlebell Windmill",
+  "description": "Giữ tạ ấm thẳng trên đầu rồi gập thân sang bên, tập cơ liên sườn và tăng độ linh hoạt hông-vai.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "obliques",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "abs",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "glutes",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   },
+   {
+    "code": "hamstrings",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   },
+   {
+    "code": "side_delts",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   }
+  ],
+  "equipment": [
+   "kettlebell"
+  ],
+  "exds_id": "0554",
+  "fedb_id": "Kettlebell_Windmill",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, tay phải cầm tạ ấm giơ thẳng trên đầu.",
+   "Xoay bàn chân trái ra ngoài khoảng 45 độ và giữ bàn chân phải hướng thẳng ra trước.",
+   "Nghiêng thân người sang trái, giữ tay phải duỗi thẳng trên đầu và mắt nhìn vào tạ ấm.",
+   "Hạ thân người xuống thấp nhất có thể trong khi giữ tay phải thẳng và tay trái duỗi sang bên.",
+   "Dừng lại một chút, sau đó trở về vị trí ban đầu bằng cách đạp qua chân phải và siết cơ liên sườn.",
+   "Lặp lại với số lần mong muốn, sau đó đổi bên."
+  ]
+ },
+ {
+  "slug": "bear-crawl",
+  "name": "Bò gấu",
+  "name_en": "Bear Crawl",
+  "description": "Bò bằng tay và chân với gối cách sàn, bài tập cường độ cao toàn thân.",
+  "difficulty": "beginner",
+  "category": "cardio",
+  "mechanic": "compound",
+  "force_type": null,
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "front_delts",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "abs",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   },
+   {
+    "code": "glutes",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   }
+  ],
+  "equipment": [],
+  "exds_id": "3360",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Bắt đầu ở tư thế bò bốn chân, hai tay đặt ngay dưới vai và hai gối ngay dưới hông.",
+   "Nhấc nhẹ hai gối khỏi sàn, giữ lưng phẳng và siết cơ core.",
+   "Đưa tay phải và chân trái về phía trước cùng lúc, sau đó đến tay trái và chân phải.",
+   "Tiếp tục bò về phía trước, đổi luân phiên tay và chân.",
+   "Duy trì nhịp độ ổn định và giữ cơ core căng trong suốt bài tập.",
+   "Tiếp tục cho đến khi đủ quãng đường hoặc thời gian mong muốn."
+  ]
+ },
+ {
+  "slug": "jumping-jack",
+  "name": "Nhảy dang tay chân",
+  "name_en": "Jumping Jack",
+  "description": "Nhảy dang rộng hai chân đồng thời đưa tay lên cao rồi nhảy khép lại, bài khởi động tim mạch cơ bản.",
+  "difficulty": "beginner",
+  "category": "cardio",
+  "mechanic": "compound",
+  "force_type": null,
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "calves",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "side_delts",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "glutes",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [],
+  "exds_id": "3224",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng với hai chân khép lại và hai tay buông dọc hai bên người.",
+   "Bật nhảy lên, dang hai chân ra và đưa hai tay lên trên đầu.",
+   "Khi tiếp đất, nhanh chóng nhảy trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "star-jump",
+  "name": "Nhảy sao",
+  "name_en": "Star Jump",
+  "description": "Hạ thấp người rồi bật nhảy dang tay chân thành hình ngôi sao.",
+  "difficulty": "beginner",
+  "category": "plyometric",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "calves",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "side_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [],
+  "exds_id": "3223",
+  "fedb_id": "Star_Jump",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và hai tay buông dọc hai bên người.",
+   "Hơi khuỵu gối và bật nhảy mạnh lên cao.",
+   "Khi nhảy, dang hai chân và duỗi hai tay ra hai bên, tạo cơ thể thành hình ngôi sao.",
+   "Tiếp đất nhẹ nhàng bằng phần trước bàn chân và gối hơi khuỵu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "skater-hops",
+  "name": "Nhảy trượt băng",
+  "name_en": "Skater Hops",
+  "description": "Bật nhảy sang hai bên từ chân này sang chân kia như động tác trượt băng.",
+  "difficulty": "intermediate",
+  "category": "plyometric",
+  "mechanic": "compound",
+  "force_type": null,
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "calves",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "adductors",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [],
+  "exds_id": "3361",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai.",
+   "Hơi khuỵu gối và nhảy sang phải, tiếp đất bằng chân phải.",
+   "Khi tiếp đất, vung chân trái ra sau chân phải và chạm các ngón chân trái xuống sàn.",
+   "Ngay lập tức nhảy sang trái, tiếp đất bằng chân trái.",
+   "Khi tiếp đất, vung chân phải ra sau chân trái và chạm các ngón chân phải xuống sàn.",
+   "Tiếp tục đổi bên luân phiên, nhảy và chạm sàn bằng từng chân.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "jump-lunge",
+  "name": "Chùng chân bật nhảy",
+  "name_en": "Jump Lunge",
+  "description": "Từ tư thế chùng chân, bật nhảy lên và đổi chân trên không.",
+  "difficulty": "beginner",
+  "category": "plyometric",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "hamstrings",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "calves",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [],
+  "exds_id": "3582",
+  "fedb_id": "Split_Jump",
+  "instructions_vi": [
+   "Bắt đầu bằng cách đứng với hai chân rộng bằng vai.",
+   "Bước chân phải về phía trước, hạ người xuống tư thế chùng chân.",
+   "Đạp mạnh bằng chân phải và bật lên không trung, đổi vị trí hai chân khi đang ở trên không.",
+   "Tiếp đất nhẹ nhàng với chân trái ở phía trước và ngay lập tức hạ người xuống tư thế chùng chân.",
+   "Tiếp tục xen kẽ giữa chùng chân và bật nhảy với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "medicine-ball-chest-pass",
+  "name": "Ném bóng tạ trước ngực",
+  "name_en": "Medicine Ball Chest Pass",
+  "description": "Ném bóng tạ từ trước ngực ra phía trước bằng hai tay để rèn sức bật của thân trên.",
+  "difficulty": "beginner",
+  "category": "plyometric",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "medicine_ball"
+  ],
+  "exds_id": "1302",
+  "fedb_id": "Medicine_Ball_Chest_Pass",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, giữ bóng tạ ngang tầm ngực.",
+   "Duỗi hai tay ra phía trước, đẩy bóng tạ ra xa khỏi ngực với lực mạnh.",
+   "Khi thả bóng, tiếp tục đưa tay và thân người theo đà, chuyển trọng lượng từ chân sau sang chân trước.",
+   "Bắt bóng khi nó nảy lại từ tường hoặc từ người cùng tập, và ngay lập tức lặp lại động tác.",
+   "Tiếp tục với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "plyo-push-up",
+  "name": "Hít đất bật nhảy",
+  "name_en": "Plyo Push-up",
+  "description": "Hít đất và đẩy mạnh để hai tay rời khỏi sàn, rèn sức bật của thân trên.",
+  "difficulty": "beginner",
+  "category": "plyometric",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   },
+   {
+    "code": "abs",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1306",
+  "fedb_id": "Plyo_Push-up",
+  "instructions_vi": [
+   "Bắt đầu ở tư thế plank cao, hai tay đặt rộng hơn vai một chút.",
+   "Hạ ngực xuống sàn bằng cách gập khuỷu tay, giữ cơ thể thành một đường thẳng.",
+   "Đẩy mạnh khỏi sàn, dùng cơ ngực để đẩy thân trên bật lên khỏi mặt đất.",
+   "Tiếp đất nhẹ nhàng với hai tay trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dumbbell-burpee",
+  "name": "Burpee với tạ đơn",
+  "name_en": "Dumbbell Burpee",
+  "description": "Burpee kết hợp cầm tạ đơn, tăng cường độ cho bài tập tim mạch toàn thân.",
+  "difficulty": "advanced",
+  "category": "cardio",
+  "mechanic": "compound",
+  "force_type": null,
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "glutes",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   },
+   {
+    "code": "triceps",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   },
+   {
+    "code": "abs",
+    "role": "secondary",
+    "activation_ratio": 0.3
+   }
+  ],
+  "equipment": [
+   "dumbbell"
+  ],
+  "exds_id": "1201",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Bắt đầu ở tư thế đứng, hai chân rộng bằng vai, mỗi tay cầm một tạ đơn.",
+   "Hạ người xuống tư thế squat, đặt tạ đơn xuống sàn trước mặt.",
+   "Đá hai chân ra sau vào tư thế hít đất, giữ cơ thể thành một đường thẳng.",
+   "Thực hiện một cái hít đất, gập khuỷu tay và hạ ngực xuống sàn.",
+   "Nhảy hai chân về phía hai tay, tiếp đất ở tư thế squat.",
+   "Đứng dậy mạnh mẽ, nhấc tạ đơn khỏi sàn và đưa lên vai.",
+   "Đẩy tạ đơn lên qua đầu, duỗi thẳng hoàn toàn hai tay.",
+   "Hạ tạ đơn về lại vai và lặp lại toàn bộ chuỗi động tác với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "scissor-jump",
+  "name": "Nhảy kéo",
+  "name_en": "Scissor Jump",
+  "description": "Bật nhảy và đổi chân trước sau luân phiên trên không như động tác kéo.",
+  "difficulty": "beginner",
+  "category": "plyometric",
+  "mechanic": "compound",
+  "force_type": "push",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "calves",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "hamstrings",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [],
+  "exds_id": "3219",
+  "fedb_id": "Scissors_Jump",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai.",
+   "Bật nhảy khỏi mặt đất và đồng thời bắt chéo chân phải ra trước chân trái.",
+   "Khi tiếp đất, nhanh chóng đổi chân, bắt chéo chân trái ra trước chân phải.",
+   "Tiếp tục đổi chân luân phiên và nhảy nhanh nhất có thể.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "all-fours-quad-stretch",
+  "name": "Giãn đùi trước tư thế bò",
+  "name_en": "All-Fours Quad Stretch",
+  "description": "Ở tư thế bò bốn chân, kéo gót chân về phía mông để giãn cơ đùi trước.",
+  "difficulty": "intermediate",
+  "category": "stretching",
+  "mechanic": null,
+  "force_type": "static",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "quads",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1512",
+  "fedb_id": "All_Fours_Quad_Stretch",
+  "instructions_vi": [
+   "Bắt đầu ở tư thế bò bốn chân, hai tay đặt ngay dưới vai và hai gối ngay dưới hông.",
+   "Duỗi một chân ra sau, giữ gối gập và bàn chân gập về phía cẳng chân.",
+   "Từ từ hạ hông xuống phía sàn, cảm nhận cơ đùi trước được kéo giãn.",
+   "Giữ tư thế này trong 20-30 giây.",
+   "Đổi chân và lặp lại động tác giãn cơ ở bên còn lại."
+  ]
+ },
+ {
+  "slug": "calf-stretch-wall",
+  "name": "Giãn bắp chân tựa tường",
+  "name_en": "Wall Calf Stretch",
+  "description": "Chống tay lên tường, duỗi một chân ra sau và ép gót xuống để giãn bắp chân.",
+  "difficulty": "beginner",
+  "category": "stretching",
+  "mechanic": null,
+  "force_type": "static",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "calves",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1377",
+  "fedb_id": "Calf_Stretch_Hands_Against_Wall",
+  "instructions_vi": [
+   "Đứng đối diện tường, hai chân rộng bằng hông.",
+   "Đặt hai tay lên tường ở độ cao ngang vai.",
+   "Bước chân phải ra sau, giữ gót chân chạm sàn và chân thẳng.",
+   "Gập gối trái và nghiêng người về trước, giữ chân sau thẳng và gót chân chạm sàn.",
+   "Giữ tư thế giãn cơ trong 20-30 giây.",
+   "Đổi chân và lặp lại động tác giãn cơ."
+  ]
+ },
+ {
+  "slug": "seated-glute-stretch",
+  "name": "Giãn cơ mông khi ngồi",
+  "name_en": "Seated Glute Stretch",
+  "description": "Ngồi, gác mắt cá chân lên đùi đối diện và nghiêng người về trước để giãn cơ mông.",
+  "difficulty": "advanced",
+  "category": "stretching",
+  "mechanic": null,
+  "force_type": "static",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "glutes",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1424",
+  "fedb_id": "Seated_Glute",
+  "instructions_vi": [
+   "Ngồi trên sàn, hai chân duỗi thẳng về phía trước.",
+   "Gập gối phải và bắt chéo mắt cá chân phải lên đùi trái.",
+   "Đặt tay phải xuống sàn phía sau để làm điểm tựa.",
+   "Dùng tay trái nhẹ nhàng ấn xuống gối phải để tăng độ giãn.",
+   "Giữ tư thế giãn cơ từ 30 giây đến 1 phút.",
+   "Đổi bên và lặp lại."
+  ]
+ },
+ {
+  "slug": "neck-side-stretch",
+  "name": "Giãn cổ sang bên",
+  "name_en": "Neck Side Stretch",
+  "description": "Nghiêng đầu sang một bên để giãn cơ bên cổ và cơ cầu vai.",
+  "difficulty": "beginner",
+  "category": "stretching",
+  "mechanic": null,
+  "force_type": "static",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "traps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1403",
+  "fedb_id": "Side_Neck_Stretch",
+  "instructions_vi": [
+   "Đứng hoặc ngồi thẳng lưng, vai thả lỏng.",
+   "Nghiêng đầu sang một bên, đưa tai về phía vai.",
+   "Giữ tư thế giãn cơ trong 15-30 giây.",
+   "Lặp lại ở bên còn lại.",
+   "Thực hiện 2-4 hiệp ở mỗi bên."
+  ]
+ },
+ {
+  "slug": "overhead-triceps-stretch",
+  "name": "Giãn tay sau qua đầu",
+  "name_en": "Overhead Triceps Stretch",
+  "description": "Gập khuỷu tay sau đầu và kéo nhẹ khuỷu để giãn cơ tay sau.",
+  "difficulty": "advanced",
+  "category": "stretching",
+  "mechanic": null,
+  "force_type": "static",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "triceps",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0643",
+  "fedb_id": "Overhead_Triceps",
+  "instructions_vi": [
+   "Đứng hoặc ngồi thẳng lưng, hai chân rộng bằng vai.",
+   "Giơ một tay lên trên đầu, gập khuỷu tay sao cho bàn tay hướng về phía xương bả vai đối diện.",
+   "Dùng tay còn lại nhẹ nhàng kéo khuỷu tay của tay đang giơ về phía bên đối diện của đầu, cảm nhận cơ tay sau được kéo giãn.",
+   "Giữ tư thế giãn cơ trong 15-30 giây, sau đó thả lỏng.",
+   "Lặp lại ở bên còn lại."
+  ]
+ },
+ {
+  "slug": "rear-deltoid-stretch",
+  "name": "Giãn vai sau",
+  "name_en": "Rear Deltoid Stretch",
+  "description": "Kéo một tay ngang qua ngực để giãn cơ vai sau.",
+  "difficulty": "beginner",
+  "category": "stretching",
+  "mechanic": null,
+  "force_type": "static",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "rear_delts",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0669",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Đứng thẳng, hai chân rộng bằng vai.",
+   "Đưa tay phải ngang qua ngực, đặt tay trái lên khuỷu tay phải.",
+   "Nhẹ nhàng kéo tay phải về phía vai trái, cảm nhận vai phải được kéo giãn.",
+   "Giữ tư thế giãn cơ trong 15-30 giây, sau đó thả lỏng.",
+   "Lặp lại ở bên còn lại."
+  ]
+ },
+ {
+  "slug": "kneeling-lat-stretch",
+  "name": "Giãn cơ xô khi quỳ",
+  "name_en": "Kneeling Lat Stretch",
+  "description": "Quỳ, đan hai tay trên đầu và nghiêng người sang bên để giãn cơ xô.",
+  "difficulty": "beginner",
+  "category": "stretching",
+  "mechanic": null,
+  "force_type": "static",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "lats",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1346",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Quỳ trên sàn, hai gối rộng bằng hông và các ngón chân hướng ra sau.",
+   "Giơ hai tay lên trên đầu và đan các ngón tay vào nhau.",
+   "Giữ lưng thẳng, từ từ nghiêng người sang phải, cảm nhận cơ xô bên trái được kéo giãn.",
+   "Giữ tư thế giãn cơ trong 20-30 giây, sau đó trở về vị trí ban đầu.",
+   "Lặp lại động tác giãn cơ ở bên trái, nghiêng người sang trái và cảm nhận cơ xô bên phải được kéo giãn.",
+   "Tiếp tục đổi bên luân phiên với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "standing-side-bend-stretch",
+  "name": "Giãn thân nghiêng khi đứng",
+  "name_en": "Standing Side Bend Stretch",
+  "description": "Đứng, đưa một tay qua đầu và nghiêng thân sang bên để giãn cơ liên sườn.",
+  "difficulty": "beginner",
+  "category": "stretching",
+  "mechanic": null,
+  "force_type": "static",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "obliques",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "lats",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0794",
+  "fedb_id": "Standing_Lateral_Stretch",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và gối hơi khuỵu.",
+   "Duỗi thẳng hai tay ra hai bên, song song với mặt đất.",
+   "Từ từ nghiêng thân trên sang một bên, cảm nhận cơ bên hông và cơ xô được kéo giãn.",
+   "Giữ tư thế giãn cơ trong 15-30 giây.",
+   "Trở về vị trí ban đầu và lặp lại ở bên còn lại.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "sphinx-stretch",
+  "name": "Giãn bụng tư thế Sphinx",
+  "name_en": "Sphinx Stretch",
+  "description": "Nằm sấp, chống cẳng tay và nâng ngực để giãn cơ bụng và cột sống.",
+  "difficulty": "beginner",
+  "category": "stretching",
+  "mechanic": null,
+  "force_type": "static",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "abs",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "lower_back",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1362",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Nằm sấp trên sàn, hai cẳng tay đặt phẳng trên sàn, khuỷu tay ngay dưới vai.",
+   "Siết cơ core và nâng ngực khỏi sàn, giữ cẳng tay và các ngón chân chạm sàn.",
+   "Giữ tư thế này trong vài giây, đảm bảo giữ cổ ở tư thế trung tính.",
+   "Từ từ hạ ngực về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "upward-facing-dog",
+  "name": "Tư thế chó ngửa mặt lên",
+  "name_en": "Upward Facing Dog",
+  "description": "Nằm sấp, chống tay duỗi thẳng nâng ngực và hông khỏi sàn để giãn bụng và ngực.",
+  "difficulty": "intermediate",
+  "category": "stretching",
+  "mechanic": null,
+  "force_type": "static",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "abs",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "lower_back",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "chest",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1366",
+  "fedb_id": null,
+  "instructions_vi": [
+   "Nằm sấp trên sàn, hai chân duỗi thẳng ra sau.",
+   "Đặt hai tay xuống sàn cạnh phần xương sườn dưới, các ngón tay hướng về phía trước.",
+   "Ấn chặt hai tay xuống sàn và duỗi thẳng hai tay, nâng thân người và đùi khỏi mặt đất.",
+   "Xoay vai ra sau và xuống dưới, mở rộng lồng ngực và hướng mắt nhìn lên trần nhà.",
+   "Giữ tư thế này trong vài nhịp thở, sau đó từ từ hạ cơ thể về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "leg-up-hamstring-stretch",
+  "name": "Giãn đùi sau nâng chân",
+  "name_en": "Leg-Up Hamstring Stretch",
+  "description": "Nằm ngửa, nâng một chân thẳng và kéo về phía mình để giãn đùi sau.",
+  "difficulty": "beginner",
+  "category": "stretching",
+  "mechanic": null,
+  "force_type": "static",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "hamstrings",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1576",
+  "fedb_id": "Leg-Up_Hamstring_Stretch",
+  "instructions_vi": [
+   "Nằm ngửa trên sàn, hai chân duỗi thẳng.",
+   "Gập một gối và đưa về phía ngực, hai tay nắm lấy đùi hoặc cẳng chân.",
+   "Duỗi thẳng chân hết mức có thể trong khi giữ chân ở trên cao.",
+   "Giữ tư thế giãn cơ trong 20-30 giây.",
+   "Lặp lại với chân còn lại."
+  ]
+ },
+ {
+  "slug": "wrist-flexor-stretch",
+  "name": "Giãn cổ tay và cẳng tay",
+  "name_en": "Wrist Flexor Stretch",
+  "description": "Dùng tay kia kéo nhẹ bàn tay để giãn cơ cẳng tay và cổ tay.",
+  "difficulty": "beginner",
+  "category": "stretching",
+  "mechanic": null,
+  "force_type": "static",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "forearms",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0721",
+  "fedb_id": "Side_Wrist_Pull",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai và hai tay duỗi ra phía trước.",
+   "Duỗi tay phải sang bên, song song với mặt đất, lòng bàn tay hướng xuống.",
+   "Dùng tay trái nắm lấy bàn tay phải và nhẹ nhàng kéo về phía cơ thể, cảm nhận cẳng tay phải được kéo giãn.",
+   "Giữ tư thế giãn cơ trong 15-30 giây, sau đó thả lỏng.",
+   "Lặp lại ở bên còn lại."
+  ]
+ },
+ {
+  "slug": "inchworm",
+  "name": "Bò sâu",
+  "name_en": "Inchworm",
+  "description": "Từ tư thế đứng, cúi xuống chống tay rồi bò tay ra tư thế plank và quay lại; bài khởi động động.",
+  "difficulty": "beginner",
+  "category": "mobility",
+  "mechanic": null,
+  "force_type": null,
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "hamstrings",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "abs",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "calves",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1471",
+  "fedb_id": "Inchworm",
+  "instructions_vi": [
+   "Bắt đầu ở tư thế đứng, hai chân rộng bằng hông.",
+   "Gập người về trước từ eo và đặt hai tay xuống sàn trước mặt.",
+   "Bò hai tay về phía trước cho đến khi vào tư thế plank cao, cơ thể thành một đường thẳng từ đầu đến chân.",
+   "Dừng lại một chút, sau đó bò hai tay trở về phía hai bàn chân, giữ chân thẳng nhất có thể.",
+   "Khi hai tay chạm tới bàn chân, đứng dậy trở về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "ankle-circles",
+  "name": "Xoay cổ chân",
+  "name_en": "Ankle Circles",
+  "description": "Xoay cổ chân theo vòng tròn để làm nóng khớp cổ chân.",
+  "difficulty": "beginner",
+  "category": "mobility",
+  "mechanic": null,
+  "force_type": null,
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "calves",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1368",
+  "fedb_id": "Ankle_Circles",
+  "instructions_vi": [
+   "Ngồi trên sàn, hai chân duỗi thẳng về phía trước.",
+   "Nhấc một chân khỏi sàn và xoay cổ chân theo chuyển động tròn.",
+   "Thực hiện số vòng xoay mong muốn theo một hướng, sau đó đổi sang hướng ngược lại.",
+   "Lặp lại với chân còn lại."
+  ]
+ },
+ {
+  "slug": "wrist-circles",
+  "name": "Xoay cổ tay",
+  "name_en": "Wrist Circles",
+  "description": "Xoay cổ tay theo vòng tròn để làm nóng khớp cổ tay.",
+  "difficulty": "beginner",
+  "category": "mobility",
+  "mechanic": null,
+  "force_type": null,
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "forearms",
+    "role": "primary",
+    "activation_ratio": 1.0
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1428",
+  "fedb_id": "Wrist_Circles",
+  "instructions_vi": [
+   "Duỗi thẳng hai tay ra phía trước.",
+   "Nắm chặt hai bàn tay thành nắm đấm.",
+   "Xoay cổ tay theo chuyển động tròn, giữ cánh tay đứng yên.",
+   "Tiếp tục xoay cổ tay với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "dynamic-chest-stretch",
+  "name": "Giãn ngực động",
+  "name_en": "Dynamic Chest Stretch",
+  "description": "Dang tay rộng rồi khép lại trước ngực theo nhịp để làm nóng và giãn cơ ngực.",
+  "difficulty": "beginner",
+  "category": "stretching",
+  "mechanic": null,
+  "force_type": "static",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "chest",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "front_delts",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [],
+  "exds_id": "1167",
+  "fedb_id": "Dynamic_Chest_Stretch",
+  "instructions_vi": [
+   "Đứng thẳng, hai chân rộng bằng vai.",
+   "Duỗi thẳng hai tay ra hai bên, song song với mặt đất.",
+   "Từ từ đưa hai tay về phía trước, bắt chéo trước người.",
+   "Cảm nhận cơ ngực được kéo giãn.",
+   "Giữ tư thế giãn cơ trong 10-30 giây.",
+   "Trở về vị trí ban đầu và lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "seated-lower-back-stretch",
+  "name": "Giãn lưng dưới khi ngồi",
+  "name_en": "Seated Lower Back Stretch",
+  "description": "Ngồi, cúi người về trước để giãn cơ lưng dưới.",
+  "difficulty": "beginner",
+  "category": "stretching",
+  "mechanic": null,
+  "force_type": "static",
+  "is_unilateral": false,
+  "muscles": [
+   {
+    "code": "lower_back",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "lats",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   }
+  ],
+  "equipment": [],
+  "exds_id": "0690",
+  "fedb_id": "Chair_Lower_Back_Stretch",
+  "instructions_vi": [
+   "Ngồi ở mép ghế, hai bàn chân đặt phẳng trên sàn.",
+   "Đặt hai tay lên đùi hoặc hai bên ghế để làm điểm tựa.",
+   "Từ từ nghiêng người về trước từ hông, giữ lưng thẳng.",
+   "Cảm nhận cơ lưng dưới được kéo giãn và giữ trong 20-30 giây.",
+   "Từ từ trở về vị trí ban đầu và lặp lại với số lần mong muốn."
+  ]
+ },
+ {
+  "slug": "kettlebell-one-arm-row",
+  "name": "Chèo tạ ấm một tay",
+  "name_en": "One-Arm Kettlebell Row",
+  "description": "Cúi người và chèo tạ ấm một tay về hông để tập lưng giữa và cơ xô.",
+  "difficulty": "intermediate",
+  "category": "strength",
+  "mechanic": "compound",
+  "force_type": "pull",
+  "is_unilateral": true,
+  "muscles": [
+   {
+    "code": "upper_back",
+    "role": "primary",
+    "activation_ratio": 1.0
+   },
+   {
+    "code": "lats",
+    "role": "primary",
+    "activation_ratio": 0.8
+   },
+   {
+    "code": "biceps",
+    "role": "secondary",
+    "activation_ratio": 0.5
+   },
+   {
+    "code": "rear_delts",
+    "role": "secondary",
+    "activation_ratio": 0.4
+   }
+  ],
+  "equipment": [
+   "kettlebell"
+  ],
+  "exds_id": "0541",
+  "fedb_id": "One-Arm_Kettlebell_Row",
+  "instructions_vi": [
+   "Đứng với hai chân rộng bằng vai, một tay cầm tạ ấm bằng tay úp.",
+   "Hơi khuỵu gối và gập người về trước từ hông, giữ lưng thẳng và siết cơ core.",
+   "Kéo tạ ấm lên về phía ngực, giữ khuỷu tay sát thân và siết hai bả vai lại với nhau.",
+   "Dừng lại một chút ở điểm cao nhất, sau đó từ từ hạ tạ ấm về vị trí ban đầu.",
+   "Lặp lại với số lần mong muốn, sau đó đổi bên và lặp lại với tay còn lại."
+  ]
+ }
+]

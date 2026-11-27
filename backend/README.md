@@ -37,6 +37,26 @@ python scripts/seed_exercises.py
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+### Hai database: test và app/demo
+
+Trên Postgres của VM (cùng server) có hai DB:
+
+| DB | Dùng cho | Nội dung |
+|---|---|---|
+| `smart_workout_db` (`POSTGRES_DB` trong `backend/.env`) | pytest, agent flow, CI | Chỉ schema + seed (71 bài); test khẳng định đúng dữ liệu seed, **không nhập thêm dữ liệu vào đây** |
+| `smart_workout_app` | chạy app thật, demo | Schema + seed + nội dung bài tập đầy đủ (GIF, ảnh trên S3, hướng dẫn tiếng Việt) |
+
+Chạy backend cho app/demo bằng cách ghi đè biến môi trường, không sửa `backend/.env`:
+
+```powershell
+$env:POSTGRES_DB = "smart_workout_app"; uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Nạp lại nội dung bài tập (sau khi dựng lại `smart_workout_app`): clone dataset theo `AGENT_RESOURCES.md` §0 vào
+`resources/`, rồi `python scripts\import_exercise_content.py --database smart_workout_app` (thử trước với
+`--dry-run`). Dữ liệu đã ghép và dịch nằm trong `data/` (`exercise_map.json`, `new_exercises.json`, `muscle_map.json`,
+`i18n/vi/`). Script chạy lại không tạo bản trùng và từ chối chạy trên DB test.
+
 ### API Documentation
 Sau khi chạy server, truy cập:
 - **Swagger UI**: http://localhost:8000/docs
