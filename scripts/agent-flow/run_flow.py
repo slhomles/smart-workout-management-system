@@ -9,14 +9,18 @@ Mỗi iteration là một phiên `claude -p --agent orchestrator` mới (context
 trí nhớ nằm trong thư mục state. Runner tự chạy check_done.py trên HEAD và chỉ
 dừng "xong" khi: orchestrator đã duyệt đúng commit HEAD VÀ mọi cổng đạt.
 
-Exit code: 0 xong · 1 lỗi · 2 bị chặn (cần người trả lời) · 3 kẹt (không tiến triển)
-           4 hết số iteration · 5 kiểm tra môi trường thất bại.
+Khi xong, runner tự đưa module vào main (integrate.py): gộp main, giải xung đột, chạy lại cổng,
+push, mở PR, chờ CI xanh rồi merge (ngoại lệ agent flow, doc 05 §9.3). Tắt bằng --no-merge.
+
+Exit code: 0 xong (đã vào main) · 1 lỗi · 2 bị chặn (cần người trả lời) · 3 kẹt (không tiến triển)
+           4 hết số iteration · 5 kiểm tra môi trường thất bại · 6 xong nhưng chưa merge được vào main.
 Chi tiết: scripts/agent-flow/README.md
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import ctypes
 import datetime as dt
 import hashlib
@@ -33,6 +37,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 sys.path.insert(0, str(HERE))
 import check_done  # noqa: E402
+import integrate as integration  # noqa: E402
 import notify  # noqa: E402
 import team  # noqa: E402
 import timeline  # noqa: E402
@@ -41,7 +46,7 @@ import usage  # noqa: E402
 from notify import esc  # noqa: E402
 
 AGENT_FILES = [".claude/agents/orchestrator.md", ".claude/agents/implementer.md",
-               ".claude/agents/spec-writer.md"]
+               ".claude/agents/spec-writer.md", ".claude/agents/integrator.md"]
 SETTINGS = HERE / "flow-settings.json"
 MANDATORY_GATES = ["spec", "protected", "clean", "pytest", "tc", "standards"]
 # Tài liệu nguồn của bản tóm tắt quy tắc dùng chung; một trong số này đổi thì phải lập lại bản tóm tắt.
@@ -57,6 +62,7 @@ DIGEST_SOURCES = [
 ]
 
 EXIT_DONE, EXIT_ERROR, EXIT_BLOCKED, EXIT_STALLED, EXIT_BUDGET, EXIT_PREFLIGHT = 0, 1, 2, 3, 4, 5
+EXIT_MERGE = 6  # module xong nhưng chưa đưa được vào main (xung đột, cổng trượt sau khi gộp, CI đỏ)
 
 LIMIT_RE = re.compile(
     r"usage limit|rate.?limit|hit your limit|limit reached|overloaded|\b529\b|quota", re.I
@@ -314,10 +320,10 @@ def perm_mcp_config(state_dir: Path, module: str, owner: str | None, timeout_s: 
 
 
 def call_claude(args, prompt: str, cwd: Path, add_dirs: list[Path], log_prefix: Path | None,
-                perm_config: Path | None = None):
+                perm_config: Path | None = None, agent: str = "orchestrator"):
     cmd = [
         find_claude(), "-p",
-        "--agent", "orchestrator",
+        "--agent", agent,
         "--permission-mode", args.permission_mode,
         "--settings", str(SETTINGS),
         "--output-format", "stream-json", "--verbose",  # stream-json mới có rate_limit_event (hạn mức)
@@ -599,12 +605,14 @@ class Flow:
         log.file = self.mod_dir / "flow.log"
         run_info = read_json(self.run_file, {})
         branch = self.spec["branch"]
+        self.reused_worktree = False
 
         if (self.wt / ".git").exists():
             current = git(self.wt, "rev-parse", "--abbrev-ref", "HEAD")
             if current != branch:
                 raise FlowError(f"worktree {self.wt} đang ở nhánh {current}, spec yêu cầu {branch}")
             log(f"dùng lại worktree {self.wt} ({branch})")
+            self.reused_worktree = True
         else:
             if run(["git", "fetch", "origin", "main"], cwd=REPO, timeout=300).returncode != 0:
                 log("CẢNH BÁO: git fetch origin main lỗi, dùng main cục bộ")
@@ -828,7 +836,9 @@ class Flow:
         return path
 
     # ----------------------------------------------------------- loop
-    def loop(self) -> int:
+    @contextlib.contextmanager
+    def runner_lock(self):
+        """Mỗi module chỉ một runner (vòng lặp hoặc --merge-only) chạy cùng lúc."""
         lock = self.state_dir / "runner.lock"
         if lock.exists():  # khoá mồ côi (runner bị kill) thì gỡ
             try:
@@ -846,10 +856,54 @@ class Flow:
         os.close(fd)
         keep_awake(True)
         try:
-            return self._loop()
+            yield
         finally:
             keep_awake(False)
             lock.unlink(missing_ok=True)
+
+    def loop(self) -> int:
+        with self.runner_lock():
+            return self._loop()
+
+    def merge_only(self) -> int:
+        """`--merge-only`: chỉ đưa module đã được duyệt vào main (thử lại sau exit 6, hoặc /merge)."""
+        with self.runner_lock():
+            if read_json(self.state_file, {}).get("status") != "approved":
+                raise FlowError("module chưa được orchestrator duyệt (state.json status khác approved)")
+            gate = self.run_gate()
+            if not gate.get("ok"):
+                return self.finish(EXIT_ERROR, "Cổng chưa đạt trên HEAD, không merge", gate)
+            return self.finish_done(gate)
+
+    def finish_done(self, gate: dict) -> int:
+        """Module xong: đưa vào main (trừ khi --no-merge), rồi báo kết quả."""
+        if self.args.no_merge:
+            return self.finish(EXIT_DONE, "XONG: orchestrator đã duyệt và mọi cổng đạt (--no-merge: chưa merge)", gate)
+        self.notify(f"🔀 {self.tag()} module xong, đang đưa vào main (gộp main, chạy lại cổng, PR, chờ CI)…")
+        try:
+            detail = integration.integrate(self, log, dry_run=self.args.dry_run)
+        except integration.IntegrationError as exc:
+            return self.finish(EXIT_MERGE, f"XONG nhưng CHƯA vào main: {exc}", read_json(self.gate_file, gate))
+        except Exception as exc:  # noqa: BLE001 - lỗi bất ngờ khi tích hợp không được làm mất kết quả module
+            log(f"LỖI tích hợp: {exc!r}")
+            return self.finish(EXIT_MERGE, f"XONG nhưng CHƯA vào main (lỗi runner: {exc})", gate)
+        return self.finish(EXIT_DONE, f"XONG và đã vào main: {detail}", read_json(self.gate_file, gate))
+
+    def call_integrator(self, prompt: str, name: str) -> dict:
+        """Gọi agent integrator (giải xung đột / sửa lỗi sau khi gộp main), dùng cho integrate.py."""
+        self.sync_files()
+        res = call_claude(self.args, prompt, self.wt, [self.state_dir], self.logs / name, agent="integrator")
+        self.track_usage(res)
+        return res
+
+    def sync_on_start(self) -> None:
+        """Chạy lại module trên worktree cũ: gộp main mới nhất trước, để dùng được code của module đã merge."""
+        try:
+            if integration.sync_main(self, log):
+                self.notify(f"🔀 {self.tag()} đã gộp main mới nhất vào nhánh trước khi chạy tiếp")
+        except integration.IntegrationError as exc:
+            log(f"CẢNH BÁO: chưa gộp được main: {exc}")
+            self.notify(f"⚠️ {self.tag()} chưa gộp được main mới nhất ({esc(exc)}); flow chạy tiếp trên nền cũ")
 
     def _loop(self) -> int:
         args = self.args
@@ -890,7 +944,7 @@ class Flow:
 
             if state.get("status") == "approved":
                 if state.get("approved_sha") == head and gate["ok"]:
-                    return self.finish(EXIT_DONE, "XONG: orchestrator đã duyệt và mọi cổng đạt", gate)
+                    return self.finish_done(gate)
                 state["status"] = "in_progress"
                 write_json(self.state_file, state)
                 notes.append("Trạng thái approved bị runner huỷ: approved_sha khác HEAD hoặc cổng trượt.")
@@ -1059,12 +1113,16 @@ class Flow:
         timeline_file = self.write_timeline()
         if timeline_file:
             lines += ["", f"Thời gian đi đâu (từng iteration, từng task, bước chậm nhất): `{timeline_file}`"]
-        lines += ["", "Runner KHÔNG push/merge. Xem lại nhánh rồi tự push/mở PR theo Claude_git.md."]
+        if self.run_info.get("merged_pr"):
+            lines += ["", f"Đã merge vào main: PR #{self.run_info['merged_pr']} ({self.run_info.get('merged_url', '')})"]
+        elif code in (EXIT_DONE, EXIT_MERGE):
+            lines += ["", f"Chưa vào main. Thử lại: `/merge {self.module}` hoặc `run_flow.py {self.spec_rel} --merge-only`."]
         report = self.mod_dir / "RUN-REPORT.md"
         report.write_text("\n".join(lines) + "\n", encoding="utf-8")
         log(f"{message}. Báo cáo: {report}")
 
-        icon = {EXIT_DONE: "✅", EXIT_BLOCKED: "⛔", EXIT_STALLED: "🧱", EXIT_BUDGET: "⌛"}.get(code, "❌")
+        icon = {EXIT_DONE: "✅", EXIT_BLOCKED: "⛔", EXIT_STALLED: "🧱", EXIT_BUDGET: "⌛",
+                EXIT_MERGE: "⚠️"}.get(code, "❌")
         gate_line = check_done.format_summary(gate).splitlines() if "head" in gate and "gates" in gate else []
         tc_line = gate.get("gates", {}).get("tc", {}).get("summary", "?")
         msg = [f"{icon} {self.tag()} {esc(message)}",
@@ -1081,8 +1139,10 @@ class Flow:
             for q in questions[:5]:
                 text = q.get("question", q) if isinstance(q, dict) else q
                 msg.append(f"• {esc(str(text)[:300])}")
-        if code == EXIT_DONE:
-            msg.append("Runner không push. Hãy review nhánh rồi tự push/mở PR.")
+        if self.run_info.get("merged_url"):
+            msg.append(f"🔀 Đã merge vào main: {esc(self.run_info['merged_url'])}")
+        elif code == EXIT_MERGE:
+            msg.append(f"Thử lại sau khi xử lý: <code>/merge {esc(self.module)}</code>")
         msg.append(f"Báo cáo: <code>{esc(report)}</code>")
         self.notify("\n".join(msg))
         return code
@@ -1125,6 +1185,14 @@ def main() -> int:
                     help="hỏi quyền qua Telegram (nút Cho phép/Từ chối) thay vì tự từ chối; bot.py bật cờ này")
     ap.add_argument("--perm-timeout", type=int, default=1800,
                     help="giây chờ người duyệt quyền trước khi tự từ chối (mặc định 30 phút)")
+    ap.add_argument("--no-merge", action="store_true",
+                    help="xong thì dừng, KHÔNG tự đưa module vào main (mặc định: gộp main, PR, chờ CI, merge)")
+    ap.add_argument("--merge-only", action="store_true",
+                    help="chỉ đưa module ĐÃ được duyệt vào main (thử lại sau exit 6)")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="khi tích hợp: chỉ gộp main + chạy cổng, không push/PR/merge")
+    ap.add_argument("--no-sync", action="store_true",
+                    help="chạy lại module trên worktree cũ mà KHÔNG gộp main mới nhất trước")
     ap.add_argument("--preflight-only", action="store_true")
     ap.add_argument("--smoke", action="store_true", help="kiểm tra agent/quyền rồi thoát")
     args = ap.parse_args()
@@ -1151,6 +1219,10 @@ def main() -> int:
                 log(f"CẢNH BÁO thông báo: {problem}")
             return EXIT_DONE
         flow.setup_worktree()
+        if args.merge_only:
+            return flow.merge_only()
+        if flow.reused_worktree and not args.no_sync:
+            flow.sync_on_start()
         return flow.loop()
     except FlowError as exc:
         log(f"LỖI: {exc}")
