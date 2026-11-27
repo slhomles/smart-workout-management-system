@@ -3,7 +3,8 @@ module: ten-module                      # kebab-case, dùng làm tên thư mục
 branch: feat/add-ten-module-api         # Claude_git.md §1: <type>/<dong-tu-doi-tuong>, 2-5 từ
 commit_scope: ten-module                # scope trong commit message (Claude_git.md §2)
 owner: phuc                             # key thành viên trong scripts/agent-flow/team.json (nhận Telegram)
-gates: spec, protected, clean, pytest, tc, coverage, ruff, mypy
+target: backend                         # backend | ai-services | frontend (scripts/agent-flow/targets.py)
+gates: spec, protected, clean, pytest, tc, coverage, ruff, mypy   # frontend: spec, protected, clean, tsc, eslint, jest, tc, coverage, standards
 coverage_min: 70                        # doc 05 §10
 allow_core_changes: no                  # yes nếu module được sửa file core (doc 05 §7.2)
 allow_new_dependencies: no              # yes nếu được thêm thư viện vào requirements.txt
@@ -39,7 +40,8 @@ allow_new_dependencies: no              # yes nếu được thêm thư viện v
 ## 5. Test cases
 
 Mỗi dòng là một tiêu chí nghiệm thu. Flow chỉ xong khi **mọi** dòng có ít nhất một test gắn
-`@pytest.mark.tc("<ID>")` và tất cả các test đó pass. ID dạng `ABC-01` (chữ hoa, gạch ngang, số).
+`@pytest.mark.tc("<ID>")` (backend, ai-services) hoặc có ID ở đầu tên test jest (frontend: `it('MOD-01 …')`),
+và tất cả các test đó pass. ID dạng `ABC-01` (chữ hoa, gạch ngang, số).
 
 | ID | Đối tượng | Tình huống | Kết quả mong đợi |
 |---|---|---|---|

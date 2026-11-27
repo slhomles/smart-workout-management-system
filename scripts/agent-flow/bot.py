@@ -83,6 +83,18 @@ def is_done(entry: dict) -> bool:
     return entry.get("status") == "done"
 
 
+def missing_deps(entry: dict, modules: dict, root: Path) -> list[str]:
+    """Phụ thuộc (`depends_on`) chưa vào main: không `status: done` và run.json chưa có `merged_pr`."""
+    missing = []
+    for dep in entry.get("depends_on") or []:
+        if dep in modules and is_done(modules[dep]):
+            continue
+        if rf.read_json(root / dep / "state" / "run.json", {}).get("merged_pr"):
+            continue
+        missing.append(dep)
+    return missing
+
+
 def save_modules(data: dict) -> None:
     MODULES_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -127,7 +139,8 @@ class Bot:
         self.state = rf.read_json(self.state_file, {"queue": [], "current": None, "last": {}})
         self.state.setdefault("auto", True)          # tự xếp hàng module chưa chạy
         self.state.setdefault("auto_skip", [])       # module bị /stop khỏi hàng: không tự thêm lại
-        self.state.setdefault("auto_no_owner", [])   # đã báo thiếu owner cho các module này
+        self.state.setdefault("auto_no_owner", [])
+        self.state.setdefault("auto_waiting", {})    # module chưa xếp vì phụ thuộc chưa vào main   # đã báo thiếu owner cho các module này
         self.proc: subprocess.Popen | None = None
         self.spec_proc: subprocess.Popen | None = None
         self.started = time.time()
@@ -305,6 +318,9 @@ class Bot:
         lines.append("Hàng đợi: " + (", ".join(j["module"] + (" (tự động)" if j.get("by") == "auto" else "")
                                               for j in q) if q else "trống"))
         lines.append(f"Tự xếp hàng: {'bật' if self.state.get('auto') else 'tắt'}")
+        waiting = self.state.get("auto_waiting") or {}
+        if waiting:
+            lines.append("Chờ phụ thuộc vào main: " + "; ".join(f"{k} ← {', '.join(v)}" for k, v in waiting.items()))
         if last:
             lines.append("Gần nhất:")
             lines += [f"• {k}: {EXIT_TEXT.get(v['code'], v['code'])} ({v['at']})" for k, v in last.items()]
@@ -439,10 +455,12 @@ class Bot:
         """Thêm vào CUỐI hàng đợi các module chưa xong, có owner, chưa từng chạy (theo thứ tự modules.json).
 
         Module đã chạy mà lỗi/kẹt/bị chặn không tự chạy lại (tránh vòng lặp tốn hạn mức): cần /run hoặc /answer.
+        Module có `depends_on` chỉ được xếp khi mọi phụ thuộc đã vào main (missing_deps); module phụ thuộc vào
+        một module bị chặn thì cứ chờ, hàng đợi vẫn chạy các module khác.
         """
         modules = load_modules()["modules"]
         members = self.cfg.get("members") or {}
-        added, no_owner = [], []
+        added, no_owner, waiting = [], [], {}
         with self.lock:
             if not self.state["auto"]:
                 return
@@ -455,11 +473,17 @@ class Bot:
                 if not entry.get("owner") or entry["owner"] not in members:
                     no_owner.append(key)
                     continue
+                missing = missing_deps(entry, modules, self.root)
+                if missing:
+                    waiting[key] = missing
+                    continue
                 self.state["queue"].append({"module": key, "by": "auto", "respec": False, "resume": False})
                 added.append(key)
             new_no_owner = sorted(no_owner) != sorted(self.state["auto_no_owner"])
             self.state["auto_no_owner"] = no_owner
-            if added or new_no_owner:
+            waiting_changed = waiting != self.state["auto_waiting"]
+            self.state["auto_waiting"] = waiting
+            if added or new_no_owner or waiting_changed:
                 self.save()
         if added:
             self.announce(None, "🤖 Tự xếp hàng: " + ", ".join(f"<b>[{k}]</b>" for k in added)

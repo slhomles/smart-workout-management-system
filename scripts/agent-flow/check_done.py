@@ -10,7 +10,9 @@ Cách dùng (chạy từ thư mục gốc của worktree):
         --base <sha> [--gates spec,pytest,tc] [--json-out gate.json]
     python scripts/agent-flow/check_done.py --spec ... --meta   # chỉ đọc spec
 
-`python` phải là python của venv backend (có pytest, pytest-cov, ruff, mypy).
+Spec chọn target (`backend` mặc định, `ai-services`, `frontend`) theo targets.py: target python chạy
+pytest/ruff/mypy trong thư mục của target bằng `--python` (venv của target, có pytest, pytest-cov, ruff,
+mypy); target frontend chạy tsc/eslint/jest qua check_frontend.py.
 Chỉ dùng thư viện chuẩn để run_flow.py có thể import.
 
 Exit code: 0 = mọi cổng đạt · 1 = có cổng trượt · 2 = lỗi cấu hình/spec.
@@ -28,12 +30,13 @@ import tempfile
 import time
 from pathlib import Path
 
+import check_frontend
 import standards
+import targets
 
 HERE = Path(__file__).resolve().parent
 
-ALL_GATES = ["spec", "protected", "clean", "pytest", "tc", "coverage", "ruff", "mypy", "standards"]
-DEFAULT_GATES = ALL_GATES
+ALL_GATES = targets.ALL_GATES
 MAX_SHOWN_WARNINGS = 10
 TC_RE = re.compile(r"^[A-Z][A-Z0-9_]*(?:-[A-Z0-9_]+)*-\d+$")
 MODULE_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -53,19 +56,8 @@ PROTECTED_ALWAYS = [
     "database/postgresql/schemas/",
     "database/postgresql/views/",
 ]
-# File core (doc 05 §7.2, §8.1): chỉ sửa khi spec cho `allow_core_changes: yes`.
-# router.py và enums.py không nằm đây vì module được phép thêm dòng của mình (§9.4);
-# orchestrator review các file đó bằng tay.
-PROTECTED_CORE = [
-    "backend/app/core/",
-    "backend/app/middleware/",
-    "backend/app/schemas/base.py",
-    "backend/app/main.py",
-    "backend/tests/conftest.py",
-    "backend/alembic/env.py",
-    "backend/alembic.ini",
-]
-PROTECTED_DEPS = ["backend/requirements.txt"]
+# File core và file thư viện theo target nằm ở targets.py (backend: doc 05 §7.2, §8.1; router.py và
+# enums.py không là core vì module được phép thêm dòng của mình, §9.4).
 # File tooling được run_flow.py chép vào worktree (untracked) -> bỏ qua khi xét "clean".
 SYNCED_UNTRACKED = [".claude/agents/", "scripts/agent-flow/"]
 
@@ -134,11 +126,15 @@ def parse_spec(path: Path) -> dict:
     if not tcs:
         errors.append("không tìm thấy test case nào trong mục 'Test cases' (cột đầu dạng ABC-01)")
 
+    target = targets.get(meta.get("target"))
+    if target is None:
+        errors.append(f"target '{meta.get('target')}' không hợp lệ (có: {', '.join(targets.TARGETS)})")
+        target = targets.get(None)
     gates_raw = meta.get("gates", "")
-    gates = [g.strip() for g in gates_raw.split(",") if g.strip()] or list(DEFAULT_GATES)
-    unknown = [g for g in gates if g not in ALL_GATES]
+    gates = [g.strip() for g in gates_raw.split(",") if g.strip()] or list(target.gates)
+    unknown = [g for g in gates if g not in target.gates]
     if unknown:
-        errors.append(f"gate không hợp lệ: {unknown} (cho phép: {ALL_GATES})")
+        errors.append(f"gate không hợp lệ cho target {target.name}: {unknown} (cho phép: {target.gates})")
     try:
         coverage_min = float(meta.get("coverage_min", "70"))
     except ValueError:
@@ -150,6 +146,7 @@ def parse_spec(path: Path) -> dict:
         "module": module,
         "branch": branch,
         "owner": meta.get("owner", ""),
+        "target": target.name,
         "gates": gates,
         "coverage_min": coverage_min,
         "allow_core_changes": meta.get("allow_core_changes", "no").lower() in ("yes", "true"),
@@ -215,16 +212,16 @@ def porcelain(root: Path) -> list[tuple[str, str]]:
 def gate_protected(root: Path, base: str | None, spec_rel: str, spec: dict) -> dict:
     if not base:
         return {"ok": False, "summary": "thiếu --base, không kiểm tra được"}
+    target = targets.TARGETS[spec["target"]]
     protected = PROTECTED_ALWAYS + [spec_rel]
     if not spec["allow_core_changes"]:
-        protected += PROTECTED_CORE
+        protected += target.core
     if not spec["allow_new_dependencies"]:
-        protected += PROTECTED_DEPS
+        protected += target.deps
 
     committed = git(root, "diff", "--name-only", f"{base}...HEAD").splitlines()
-    deleted_tests = git(
-        root, "diff", "--name-only", "--diff-filter=D", f"{base}...HEAD", "--", "backend/tests"
-    ).splitlines()
+    deleted = git(root, "diff", "--name-only", "--diff-filter=D", f"{base}...HEAD").splitlines()
+    deleted_tests = [p for p in deleted if target.is_test(p)]
     violations = [f"commit sửa file bảo vệ: {p}" for p in committed if matches(p, protected)]
     violations += [f"commit xoá test: {p}" for p in deleted_tests]
     for status, path in porcelain(root):
@@ -234,7 +231,7 @@ def gate_protected(root: Path, base: str | None, spec_rel: str, spec: dict) -> d
             continue
         if matches(path, protected):
             violations.append(f"thay đổi chưa commit ở file bảo vệ: {path}")
-        if "D" in status and path.startswith("backend/tests/"):
+        if "D" in status and target.is_test(path):
             violations.append(f"xoá test (chưa commit): {path}")
     return {
         "ok": not violations,
@@ -256,17 +253,18 @@ def gate_clean(root: Path, spec_rel: str) -> dict:
     }
 
 
-def backend_test_paths(tests: list[str] | None) -> list[str]:
-    """Đường dẫn test tính từ `backend/` (agent hay viết `backend/tests/...`)."""
-    return [t.removeprefix("backend/") for t in tests] if tests else ["tests"]
+def test_paths(target_root: str, tests: list[str] | None) -> list[str]:
+    """Đường dẫn test tính từ thư mục target (agent hay viết `backend/tests/...`)."""
+    return [t.removeprefix(target_root + "/") for t in tests] if tests else ["tests"]
 
 
-def run_pytest(root: Path, python: str, want_cov: bool, tmp: Path, tests: list[str] | None = None) -> dict:
-    backend = root / "backend"
+def run_pytest(root: Path, python: str, want_cov: bool, tmp: Path, tests: list[str] | None = None,
+               target_root: str = "backend") -> dict:
+    backend = root / target_root
     tc_json = tmp / "tc.json"
     cov_json = tmp / "cov.json"
     cmd = [
-        python, "-m", "pytest", *backend_test_paths(tests), "-q", "-rfEs", "--no-header",
+        python, "-m", "pytest", *test_paths(target_root, tests), "-q", "-rfEs", "--no-header",
         "-p", "tc_plugin", f"--tc-report={tc_json}",
     ]
     if want_cov:
@@ -289,11 +287,12 @@ def run_pytest(root: Path, python: str, want_cov: bool, tmp: Path, tests: list[s
     return {"rc": proc.returncode, "output": proc.stdout + proc.stderr, "tc": tc, "cov": cov}
 
 
-def timed_pytest(root: Path, python: str, want_cov: bool, tests: list[str] | None) -> dict:
+def timed_pytest(root: Path, python: str, want_cov: bool, tests: list[str] | None,
+                 target_root: str = "backend") -> dict:
     """Chạy pytest một lần cho các cổng pytest/tc/coverage và ghi số giây đã mất vào kết quả."""
     began = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="flowgate-") as tmp:
-        res = run_pytest(root, python, want_cov, Path(tmp), tests)
+        res = run_pytest(root, python, want_cov, Path(tmp), tests, target_root)
     res["seconds"] = round(time.monotonic() - began, 1)
     return res
 
@@ -362,9 +361,9 @@ def gate_standards(root: Path, base: str | None) -> dict:
     return standards.evaluate(root, changed_files(root, base))
 
 
-def gate_tool(root: Path, cmd: list[str], name: str) -> dict:
+def gate_tool(root: Path, cmd: list[str], name: str, target_root: str = "backend") -> dict:
     try:
-        proc = run(cmd, cwd=root / "backend", timeout=900)
+        proc = run(cmd, cwd=root / target_root, timeout=900)
     except subprocess.TimeoutExpired:
         return {"ok": False, "summary": f"{name} quá thời gian"}
     return {
@@ -372,6 +371,59 @@ def gate_tool(root: Path, cmd: list[str], name: str) -> dict:
         "summary": f"{name} sạch" if proc.returncode == 0 else f"{name} báo lỗi",
         "details": tail(proc.stdout + proc.stderr, 40),
     }
+
+
+def test_results(spec: dict, res: dict, gates: list[str], run_gate: dict) -> dict:
+    """Các cổng dựa trên một lần chạy test: cổng chạy test (pytest/jest), tc, coverage."""
+    results: dict[str, dict] = {}
+    for name in ("pytest", "jest"):
+        if name in gates:
+            results[name] = run_gate
+    if "tc" in gates:
+        results["tc"] = gate_tc(spec, res)
+    if "coverage" in gates:
+        results["coverage"] = gate_coverage(spec, res)
+    return results
+
+
+def python_gates(root: Path, spec: dict, base: str | None, gates: list[str], run_opts: tuple) -> dict:
+    """Cổng của target python (backend, ai-services); `run_opts` = (python, tests)."""
+    python, tests = run_opts
+    tdir = targets.TARGETS[spec["target"]].root
+    results: dict[str, dict] = {}
+    if {"pytest", "tc", "coverage"} & set(gates):
+        res = timed_pytest(root, python, "coverage" in gates, tests, tdir)
+        run_gate = {**gate_pytest(res, is_subset=bool(tests)), "seconds": res["seconds"]}
+        results.update(test_results(spec, res, gates, run_gate))
+    if "ruff" in gates:
+        results["ruff"] = timed(gate_tool, root, [python, "-m", "ruff", "check", ".", "--no-cache"], "ruff", tdir)
+    if "mypy" in gates:
+        results["mypy"] = timed(gate_tool, root, [python, "-m", "mypy", "app/"], "mypy", tdir)
+    if "standards" in gates:
+        results["standards"] = timed(gate_standards, root, base)
+    return results
+
+
+def node_gates(root: Path, spec: dict, base: str | None, gates: list[str], tests: list[str] | None) -> dict:
+    """Cổng của target frontend (check_frontend.py)."""
+    froot = root / targets.TARGETS[spec["target"]].root
+    problem = check_frontend.ensure_node_modules(froot)
+    if problem:
+        return {"node_modules": {"ok": False, "summary": "không cài được thư viện frontend", "details": problem}}
+    results: dict[str, dict] = {}
+    if "tsc" in gates:
+        results["tsc"] = timed(check_frontend.gate_tsc, froot)
+    if {"eslint", "standards"} & set(gates):
+        lint = check_frontend.run_eslint(froot)
+        if "eslint" in gates:
+            results["eslint"] = check_frontend.gate_eslint(lint)
+        if "standards" in gates:
+            changed = changed_files(root, base) if base else []
+            results["standards"] = check_frontend.gate_standards(lint, froot, changed)
+    if {"jest", "tc", "coverage"} & set(gates):
+        res = check_frontend.run_jest(froot, "coverage" in gates, tests)
+        results.update(test_results(spec, res, gates, check_frontend.gate_jest(res, bool(tests))))
+    return results
 
 
 # --------------------------------------------------------------------------- main
@@ -392,20 +444,11 @@ def evaluate(root: Path, spec_path: Path, base: str | None, gates: list[str], py
         results["protected"] = timed(gate_protected, root, base, spec_rel, spec)
     if "clean" in gates:
         results["clean"] = gate_clean(root, spec_rel)
-    if {"pytest", "tc", "coverage"} & set(gates):
-        res = timed_pytest(root, python, "coverage" in gates, tests)
-        if "pytest" in gates:
-            results["pytest"] = {**gate_pytest(res, is_subset=bool(tests)), "seconds": res["seconds"]}
-        if "tc" in gates:
-            results["tc"] = gate_tc(spec, res)
-        if "coverage" in gates:
-            results["coverage"] = gate_coverage(spec, res)
-    if "ruff" in gates:
-        results["ruff"] = timed(gate_tool, root, [python, "-m", "ruff", "check", ".", "--no-cache"], "ruff")
-    if "mypy" in gates:
-        results["mypy"] = timed(gate_tool, root, [python, "-m", "mypy", "app/"], "mypy")
-    if "standards" in gates:
-        results["standards"] = timed(gate_standards, root, base)
+    target = targets.TARGETS[spec["target"]]
+    if target.kind == "node":
+        results.update(node_gates(root, spec, base, gates, tests))
+    else:
+        results.update(python_gates(root, spec, base, gates, (python, tests)))
 
     head = git(root, "rev-parse", "HEAD").strip()
     return {
