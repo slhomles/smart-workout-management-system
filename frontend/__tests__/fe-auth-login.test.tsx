@@ -23,6 +23,10 @@ jest.mock('expo-router', () => ({
   Redirect: () => null,
 }));
 
+// Lần render đầu của suite nạp lười module React Native; khi cổng chạy cả suite song song với --coverage,
+// test đầu có thể vượt timeout 5s mặc định. jest.config.js là file core nên nâng timeout tại đây.
+jest.setTimeout(20_000);
+
 const mockedLogin = jest.mocked(login);
 const mockedSearchParams = jest.mocked(useLocalSearchParams);
 
