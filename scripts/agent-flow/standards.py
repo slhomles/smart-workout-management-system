@@ -17,8 +17,9 @@ MAX_COMPLEXITY = 10
 
 # FastAPI tiêm các tham số này vào route handler, không phải đầu vào do người gọi chọn.
 INJECTED_MARKERS = {"Depends", "Security"}
-SKIPPED_PREFIXES = ("backend/alembic/versions/",)
-TEST_PREFIX = "backend/tests/"
+CHECKED_PREFIXES = ("backend/", "ai-services/")  # code Python của các target python (targets.py)
+SKIPPED_PREFIXES = ("backend/alembic/versions/", "ai-services/notebooks/")
+TEST_PREFIX = ("backend/tests/", "ai-services/tests/")
 
 FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 NESTING_NODES = (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try, ast.With, ast.AsyncWith, ast.Match)
@@ -27,7 +28,7 @@ BRANCH_NODES = (ast.If, ast.IfExp, ast.For, ast.AsyncFor, ast.While, ast.ExceptH
 
 
 def is_checked(path: str) -> bool:
-    return path.endswith(".py") and path.startswith("backend/") and not path.startswith(SKIPPED_PREFIXES)
+    return path.endswith(".py") and path.startswith(CHECKED_PREFIXES) and not path.startswith(SKIPPED_PREFIXES)
 
 
 def _calls_injector(node: ast.AST | None) -> bool:
