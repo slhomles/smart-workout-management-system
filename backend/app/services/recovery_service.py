@@ -1,23 +1,36 @@
-"""Nghiệp vụ /recovery (chức năng 2): Heatmap phục hồi và lịch sử dự đoán phục hồi.
+"""Nghiệp vụ phục hồi cơ (chức năng 2): Heatmap, lịch sử dự đoán và chạy dự đoán AI cho một buổi tập.
 
 Giá trị phục hồi (%, giờ còn lại, trạng thái) lấy nguyên từ view, không tính lại (doc 05 §2.2).
 """
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import DataValidationError
+from app.core.exceptions import ConflictError, DataValidationError, NotFoundError, ServiceUnavailableError
 from app.crud import recovery as crud
+from app.crud import workout as workout_crud
+from app.models.enums import SessionStatus
+from app.models.training import WorkoutSession
 from app.schemas.base import ErrorDetail, Page, build_page, decode_cursor
 from app.schemas.recovery import (
+    MuscleLoadSchema,
     MuscleRecoveryListQuery,
     MuscleRecoveryStatusResponse,
+    PredictRecoveryResponse,
+    RecoveryPredictionInput,
     RecoveryPredictionListQuery,
+    RecoveryPredictionOutput,
     RecoveryPredictionResponse,
 )
+
+# Gọi qua thuộc tính module (không `from … import predict_recovery`) để test monkeypatch được (spec §6 ý 9).
+from app.services import recovery_ai_client
+
+logger = logging.getLogger("app.recovery")
 
 _INVALID_CURSOR = ErrorDetail(field="cursor", message="Cursor không hợp lệ", code="invalid_cursor")
 # Khoảng giá trị của catalog.muscle_groups.id (smallint); ngoài khoảng này cursor chắc chắn bị sửa tay.
@@ -86,4 +99,63 @@ async def list_predictions(
             "session_id": str(row["session_id"]),
             "muscle_group_id": row["muscle_group_id"],
         },
+    )
+
+
+async def _owned_finished_session(db: AsyncSession, user_id: uuid.UUID, session_id: uuid.UUID) -> WorkoutSession:
+    """Buổi của chính user, chưa xoá và đã kết thúc (buổi đang tập chưa có tải cuối cùng để dự đoán)."""
+    session = await workout_crud.get_session(db, user_id, session_id)
+    if session is None:
+        raise NotFoundError("workout_session_not_found", "Không tìm thấy buổi tập")
+    if session.status == SessionStatus.IN_PROGRESS:
+        raise ConflictError("conflict", "Buổi tập chưa kết thúc, chưa thể dự đoán phục hồi")
+    return session
+
+
+def _ensure_known_muscles(output: RecoveryPredictionOutput, loaded_ids: set[int]) -> None:
+    """AI chỉ được trả nhóm cơ có trong tải đã gửi, mỗi nhóm một lần; sai thì coi là trả sai hợp đồng."""
+    returned_ids = [prediction.muscle_group_id for prediction in output.predictions]
+    if len(set(returned_ids)) != len(returned_ids) or not set(returned_ids) <= loaded_ids:
+        raise recovery_ai_client.RecoveryServiceError("invalid_response")
+
+
+async def _request_predictions(payload: RecoveryPredictionInput) -> RecoveryPredictionOutput:
+    """Gọi AI và kiểm tra kết quả; mọi lỗi AI thành 503 `service_unavailable` (chi tiết chỉ ghi log server)."""
+    try:
+        output = await recovery_ai_client.predict_recovery(payload)
+        _ensure_known_muscles(output, {load.muscle_group_id for load in payload.muscle_loads})
+    except recovery_ai_client.RecoveryServiceError as err:
+        logger.warning("recovery prediction failed: reason=%s session_id=%s", err.reason, payload.session_id)
+        raise ServiceUnavailableError(
+            "Không thể dự đoán phục hồi lúc này, vui lòng thử lại sau",
+            [ErrorDetail(field="ai_service", message="Dịch vụ dự đoán phục hồi tạm thời không khả dụng", code=err.reason)],
+        ) from None
+    return output
+
+
+async def predict_for_session(
+    db: AsyncSession, user_id: uuid.UUID, session_id: uuid.UUID
+) -> PredictRecoveryResponse:
+    """Dự đoán phục hồi cho một buổi đã kết thúc của user rồi upsert vào training.recovery_predictions.
+
+    Buổi không có hiệp tính tải thì trả danh sách rỗng và không gọi AI. Lỗi AI → 503, không ghi gì.
+    """
+    session = await _owned_finished_session(db, user_id, session_id)
+    loads = await crud.list_session_muscle_loads(db, session_id)
+    if not loads:
+        return PredictRecoveryResponse(session_id=session_id, model_version=None, predictions=[])
+    payload = RecoveryPredictionInput(
+        session_id=session_id,
+        user_id=user_id,
+        trained_at=session.ended_at or session.started_at,
+        muscle_loads=[MuscleLoadSchema.model_validate(dict(row)) for row in loads],
+    )
+    output = await _request_predictions(payload)
+    await crud.upsert_predictions(db, session_id, output)
+    await db.commit()
+    rows = await crud.list_session_predictions(db, session_id, output.model_version)
+    return PredictRecoveryResponse(
+        session_id=session_id,
+        model_version=output.model_version,
+        predictions=[RecoveryPredictionResponse.model_validate(dict(row)) for row in rows],
     )

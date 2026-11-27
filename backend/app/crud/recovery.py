@@ -1,17 +1,20 @@
 """Truy vấn phục hồi cơ: view training.v_muscle_recovery_status và bảng training.recovery_predictions.
 
 Đọc bằng `text()`: view tính sẵn % hồi phục và trạng thái (doc 05 §2.2: không tự tính lại), còn
-catalog.muscle_groups là bảng danh mục chỉ đọc của module khác. Không commit (chỉ đọc).
+catalog.muscle_groups là bảng danh mục chỉ đọc của module khác. Ghi dự đoán bằng upsert; không commit
+(ranh giới transaction ở service).
 """
 
 import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import func, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.recovery import MuscleRecoveryListQuery, RecoveryPredictionListQuery
+from app.models.training import RecoveryPrediction
+from app.schemas.recovery import MuscleRecoveryListQuery, RecoveryPredictionListQuery, RecoveryPredictionOutput
 
 # Vị trí sau phần tử cuối của trang trước, theo thứ tự `trained_at DESC, session_id DESC, muscle_group_id ASC`.
 PredictionPosition = tuple[datetime, uuid.UUID, int]
@@ -88,3 +91,69 @@ async def list_prediction_history(
         params["c_at"], params["c_session"], params["c_muscle"] = after
     sql += " ORDER BY trained_at DESC, session_id DESC, muscle_group_id ASC LIMIT :limit"
     return list((await db.execute(text(sql), params)).mappings().all())
+
+
+# Tải của buổi kèm thời gian phục hồi tham chiếu của nhóm cơ (đầu vào model phục hồi, spec §6 ý 9).
+_SESSION_LOADS_SELECT = """
+SELECT l.muscle_group_id, l.direct_sets, l.effective_sets, l.total_reps, l.weighted_volume_kg, l.avg_rpe,
+       mg.base_recovery_hours
+FROM training.v_session_muscle_load l
+JOIN catalog.muscle_groups mg ON mg.id = l.muscle_group_id
+WHERE l.session_id = :session_id
+ORDER BY l.muscle_group_id
+"""
+
+_SESSION_PREDICTIONS_SELECT = """
+SELECT rp.session_id, s.name AS session_name, coalesce(s.ended_at, s.started_at) AS trained_at,
+       rp.muscle_group_id, mg.code AS muscle_code, mg.name AS muscle_name,
+       rp.model_version, rp.fatigue_score, rp.recovered_at, rp.predicted_at
+FROM training.recovery_predictions rp
+JOIN training.workout_sessions s ON s.id = rp.session_id
+JOIN catalog.muscle_groups mg ON mg.id = rp.muscle_group_id
+WHERE rp.session_id = :session_id AND rp.model_version = :model_version
+ORDER BY rp.muscle_group_id
+"""
+
+
+async def list_session_muscle_loads(db: AsyncSession, session_id: uuid.UUID) -> list[Any]:
+    """Tải theo nhóm cơ của một buổi (view training.v_session_muscle_load), sắp `muscle_group_id ASC`."""
+    rows = await db.execute(text(_SESSION_LOADS_SELECT), {"session_id": session_id})
+    return list(rows.mappings().all())
+
+
+async def upsert_predictions(db: AsyncSession, session_id: uuid.UUID, output: RecoveryPredictionOutput) -> None:
+    """Ghi các dự đoán của một buổi cho `output.model_version`; chạy lại cùng phiên bản thì ghi đè. Không commit.
+
+    `muscle_group_id` trong `output` phải không trùng (service kiểm tra): một câu INSERT nhiều dòng
+    không được cập nhật cùng một khoá hai lần.
+    """
+    if not output.predictions:
+        return
+    stmt = pg_insert(RecoveryPrediction).values(
+        [
+            {
+                "session_id": session_id,
+                "muscle_group_id": prediction.muscle_group_id,
+                "model_version": output.model_version,
+                "fatigue_score": prediction.fatigue_score,
+                "recovered_at": prediction.recovered_at,
+            }
+            for prediction in output.predictions
+        ]
+    )
+    await db.execute(
+        stmt.on_conflict_do_update(
+            index_elements=["session_id", "muscle_group_id", "model_version"],
+            set_={
+                "fatigue_score": stmt.excluded.fatigue_score,
+                "recovered_at": stmt.excluded.recovered_at,
+                "predicted_at": func.now(),
+            },
+        )
+    )
+
+
+async def list_session_predictions(db: AsyncSession, session_id: uuid.UUID, model_version: str) -> list[Any]:
+    """Các dự đoán của một buổi theo một `model_version`, sắp `muscle_group_id ASC` (khung KEYS-PRED)."""
+    params = {"session_id": session_id, "model_version": model_version}
+    return list((await db.execute(text(_SESSION_PREDICTIONS_SELECT), params)).mappings().all())

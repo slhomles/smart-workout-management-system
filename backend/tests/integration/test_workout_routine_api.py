@@ -5,13 +5,17 @@ Test case theo spec docs/features/workout-routine.md §5 (mã WRT-xx).
 """
 
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 import pytest
 from httpx import AsyncClient, Response
 from sqlalchemy import text
 
+from app.core.config import get_settings
 from app.schemas.base import encode_cursor
+from app.schemas.recovery import RecoveryPredictionInput, RecoveryPredictionOutput
+from app.services import recovery_ai_client
 
 PLANS = "/api/v1/workout-plans"
 
@@ -1107,3 +1111,263 @@ async def test_list_predictions_without_token_or_permission_is_rejected(client: 
     _err(res, 401, "token_invalid")
     assert res.headers["WWW-Authenticate"] == "Bearer"
     _err(await client.get(PREDICTIONS, headers=await auth_headers("editor")), 403, "permission_denied")
+
+
+# --- POST /workout-sessions/{session_id}/predict-recovery ---
+SESSIONS = "/api/v1/workout-sessions"
+KEYS_PREDICT = {"session_id", "model_version", "predictions"}
+ZERO_UUID = "00000000-0000-4000-8000-000000000000"
+LATEST_COMPLETED_SQL = (
+    "SELECT id::text FROM training.workout_sessions WHERE user_id = :uid AND status = 'completed'"
+    " AND deleted_at IS NULL ORDER BY started_at DESC LIMIT 1"
+)
+
+
+class _FakeRecoveryAi:
+    """Thay `recovery_ai_client.predict_recovery`: ghi lại payload, trả `output` hoặc ném `error`."""
+
+    def __init__(self) -> None:
+        self.calls: list[RecoveryPredictionInput] = []
+        self.output: dict | None = None
+        self.error: Exception | None = None
+
+    async def __call__(self, payload: RecoveryPredictionInput) -> RecoveryPredictionOutput:
+        self.calls.append(payload)
+        if self.error is not None:
+            raise self.error
+        return RecoveryPredictionOutput.model_validate(self.output)
+
+
+@pytest.fixture
+def fake_ai(monkeypatch) -> _FakeRecoveryAi:
+    fake = _FakeRecoveryAi()
+    monkeypatch.setattr(recovery_ai_client, "predict_recovery", fake)
+    return fake
+
+
+async def _finish(client: AsyncClient, headers: dict, session_id: str) -> datetime:
+    res = await client.post(f"{SESSIONS}/{session_id}/finish", json={}, headers=headers)
+    assert res.status_code == 200, res.text
+    return _parse_ts(res.json()["ended_at"])
+
+
+async def _start(client: AsyncClient, headers: dict, name: str) -> str:
+    res = await client.post(SESSIONS, json={"name": name}, headers=headers)
+    assert res.status_code == 201, res.text
+    return res.json()["id"]
+
+
+async def _bench_session(client: AsyncClient, db, headers: dict) -> tuple[str, datetime]:
+    """BENCH-SESSION: barbell-bench-press 3 hiệp 8 × 60 kg rồi kết thúc; trả (id, ended_at)."""
+    session_id = await _start(client, headers, "Ngực test")
+    bench = await db.scalar(text("SELECT id FROM catalog.exercises WHERE slug = 'barbell-bench-press'"))
+    res = await client.post(
+        f"{SESSIONS}/{session_id}/exercises", json={"exercise_id": bench, "added_via": "wiki"}, headers=headers
+    )
+    assert res.status_code == 201, res.text
+    sets_url = f"{SESSIONS}/{session_id}/exercises/{res.json()['id']}/sets"
+    for _ in range(3):
+        res = await client.post(sets_url, json={"reps": 8, "weight_kg": 60}, headers=headers)
+        assert res.status_code == 201, res.text
+    return session_id, await _finish(client, headers, session_id)
+
+
+def _ai_output(ids: dict[str, int], ended_at: datetime, chest_fatigue: float = 72.5) -> dict:
+    """Kết quả AI giả của WRT-19: chest, triceps, front_delts, mốc hồi phục tính từ lúc kết thúc buổi."""
+    rows = (("chest", chest_fatigue, 60), ("triceps", 40.0, 36), ("front_delts", 35.0, 30))
+    return {
+        "model_version": "recovery-test-1",
+        "predictions": [
+            {"muscle_group_id": ids[code], "fatigue_score": fatigue, "recovered_at": ended_at + timedelta(hours=hours)}
+            for code, fatigue, hours in rows
+        ],
+    }
+
+
+async def _predict_recovery(client: AsyncClient, headers: dict, session_id: str) -> Response:
+    return await client.post(f"{SESSIONS}/{session_id}/predict-recovery", headers=headers)
+
+
+async def _prediction_rows(db, session_id: str) -> dict[int, float]:
+    rows = await db.execute(
+        text("SELECT muscle_group_id, fatigue_score FROM training.recovery_predictions WHERE session_id = :sid"),
+        {"sid": session_id},
+    )
+    return {row.muscle_group_id: float(row.fatigue_score) for row in rows}
+
+
+async def _prediction_count(db) -> int:
+    return await db.scalar(text("SELECT count(*) FROM training.recovery_predictions"))
+
+
+async def _view_loads(db, session_id: str) -> dict[int, dict]:
+    """Tải theo nhóm cơ của buổi, đọc thẳng view + base_recovery_hours (đối chiếu payload gửi AI)."""
+    rows = await db.execute(
+        text(
+            "SELECT l.muscle_group_id, l.direct_sets, l.effective_sets, l.total_reps, l.weighted_volume_kg,"
+            " l.avg_rpe, mg.base_recovery_hours FROM training.v_session_muscle_load l"
+            " JOIN catalog.muscle_groups mg ON mg.id = l.muscle_group_id WHERE l.session_id = :sid"
+        ),
+        {"sid": session_id},
+    )
+    loads: dict[int, dict] = {}
+    for row in rows.mappings():
+        load = {key: (float(value) if isinstance(value, Decimal) else value) for key, value in row.items()}
+        loads[load["muscle_group_id"]] = load
+    return loads
+
+
+async def _check_ai_payload(db, payload: RecoveryPredictionInput, session_id: str, ended_at: datetime) -> None:
+    """Payload gửi AI: đúng buổi, đúng user, `trained_at` = ended_at, tải khớp từng dòng của view."""
+    assert (str(payload.session_id), str(payload.user_id), payload.trained_at) == (session_id, DEMO_ID, ended_at)
+    sent = {load.muscle_group_id: load.model_dump() for load in payload.muscle_loads}
+    assert len(sent) == len(payload.muscle_loads)
+    assert sent == await _view_loads(db, session_id)
+    chest = sent[(await _muscle_ids(db))["chest"]]
+    assert _pick(chest, ("direct_sets", "total_reps", "weighted_volume_kg", "base_recovery_hours")) == {
+        "direct_sets": 3, "total_reps": 24, "weighted_volume_kg": 1440.0, "base_recovery_hours": 60,
+    }
+
+
+def _check_predict_body(body: dict, session_id: str, ids: dict[str, int], ended_at: datetime) -> None:
+    """(a) Đúng 3 key, 3 dự đoán đúng KEYS-PRED của buổi, sắp muscle_group_id tăng dần."""
+    _keys(body, KEYS_PREDICT)
+    assert (body["session_id"], body["model_version"]) == (session_id, "recovery-test-1")
+    items = body["predictions"]
+    _assert_prediction_shape(items, ids)
+    assert [item["muscle_group_id"] for item in items] == sorted(ids[c] for c in ("chest", "triceps", "front_delts"))
+    assert {(item["session_id"], item["model_version"]) for item in items} == {(session_id, "recovery-test-1")}
+    chest = _by_code(items)["chest"]
+    assert chest["fatigue_score"] == 72.5
+    assert _parse_ts(chest["recovered_at"]) == ended_at + timedelta(hours=60)
+
+
+@pytest.mark.tc("WRT-19")
+async def test_predict_recovery_completed_session_calls_ai_and_upserts(
+    client: AsyncClient, db, auth_headers, fake_ai: _FakeRecoveryAi
+):
+    demo = await auth_headers("demo")
+    ids = await _muscle_ids(db)
+    session_id, ended_at = await _bench_session(client, db, demo)
+    fake_ai.output = _ai_output(ids, ended_at)
+    res = await _predict_recovery(client, demo, session_id)
+    assert res.status_code == 200, res.text
+    _check_predict_body(res.json(), session_id, ids, ended_at)
+    assert len(fake_ai.calls) == 1
+    await _check_ai_payload(db, fake_ai.calls[0], session_id, ended_at)
+    assert len(await _prediction_rows(db, session_id)) == 3
+
+    fake_ai.output = _ai_output(ids, ended_at, chest_fatigue=65.0)
+    res = await _predict_recovery(client, demo, session_id)
+    assert res.status_code == 200, res.text
+    assert _by_code(res.json()["predictions"])["chest"]["fatigue_score"] == 65.0
+    stored = await _prediction_rows(db, session_id)
+    assert len(stored) == 3 and stored[ids["chest"]] == 65.0
+
+    chest = _by_code((await _get_page(client, MUSCLES, demo))["data"])["chest"]
+    assert _pick(chest, ("recovery_status", "last_session_id", "model_version")) == {
+        "recovery_status": "fatigued", "last_session_id": session_id, "model_version": "recovery-test-1",
+    }
+
+
+async def _session_id_of(db, sql: str, user_id: str) -> str:
+    session_id = await db.scalar(text(sql), {"uid": user_id})
+    assert session_id is not None, sql
+    return session_id
+
+
+async def _not_found_cases(db) -> list[tuple[str, str]]:
+    """(c) buổi completed mới nhất của power, (d) buổi đã xoá mềm của inprogress, (e) UUID không tồn tại."""
+    power_latest = await _session_id_of(db, LATEST_COMPLETED_SQL, POWER_ID)
+    deleted = await _session_id_of(
+        db,
+        "SELECT id::text FROM training.workout_sessions WHERE user_id = :uid AND name = 'Buổi nhập nhầm'"
+        " AND deleted_at IS NOT NULL",
+        INPROGRESS_ID,
+    )
+    return [("demo", power_latest), ("inprogress", deleted), ("demo", ZERO_UUID)]
+
+
+@pytest.mark.tc("WRT-20")
+async def test_predict_recovery_without_load_wrong_status_or_owner_skips_ai(
+    client: AsyncClient, db, auth_headers, fake_ai: _FakeRecoveryAi
+):
+    before = await _prediction_count(db)
+    headers = {"demo": await auth_headers("demo"), "inprogress": await auth_headers("inprogress")}
+    empty = await _start(client, headers["demo"], "Trống")
+    await _finish(client, headers["demo"], empty)
+    res = await _predict_recovery(client, headers["demo"], empty)
+    assert res.status_code == 200, res.text
+    assert res.json() == {"session_id": empty, "model_version": None, "predictions": []}
+
+    running = await _session_id_of(
+        db,
+        "SELECT id::text FROM training.workout_sessions WHERE user_id = :uid AND status = 'in_progress'"
+        " AND deleted_at IS NULL",
+        INPROGRESS_ID,
+    )
+    _err(await _predict_recovery(client, headers["inprogress"], running), 409, "conflict")
+    for persona, session_id in await _not_found_cases(db):
+        _err(await _predict_recovery(client, headers[persona], session_id), 404, "workout_session_not_found")
+    error = _err(await _predict_recovery(client, headers["demo"], "abc"), 422, "validation_error")
+    assert _fields(error) == ["session_id"]
+    assert fake_ai.calls == []
+    assert await _prediction_count(db) == before
+
+
+def _assert_ai_unavailable(res: Response, reason: str) -> None:
+    """503 service_unavailable, đúng một detail `ai_service` với `code` = reason, không lộ chi tiết kỹ thuật."""
+    error = _err(res, 503, "service_unavailable")
+    assert len(error["details"]) == 1
+    detail = error["details"][0]
+    _keys(detail, {"field", "message", "code"})
+    assert (detail["field"], detail["code"]) == ("ai_service", reason)
+    assert isinstance(detail["message"], str) and detail["message"]
+    for shown in (error["message"], detail["message"]):
+        for leak in ("RecoveryServiceError", "Exception", "http", get_settings().AI_SERVICE_URL):
+            assert leak not in shown, shown
+
+
+@pytest.mark.tc("WRT-21")
+async def test_predict_recovery_ai_failure_returns_503_without_writing(
+    client: AsyncClient, db, auth_headers, fake_ai: _FakeRecoveryAi
+):
+    demo = await auth_headers("demo")
+    ids = await _muscle_ids(db)
+    session_id, ended_at = await _bench_session(client, db, demo)
+    for reason in ("down", "invalid_response"):
+        fake_ai.error = recovery_ai_client.RecoveryServiceError(reason)
+        _assert_ai_unavailable(await _predict_recovery(client, demo, session_id), reason)
+    fake_ai.error = None
+    output = _ai_output(ids, ended_at)
+    output["predictions"].append(
+        {"muscle_group_id": ids["quads"], "fatigue_score": 50.0, "recovered_at": ended_at + timedelta(hours=48)}
+    )
+    fake_ai.output = output
+    _assert_ai_unavailable(await _predict_recovery(client, demo, session_id), "invalid_response")
+    assert len(fake_ai.calls) == 3
+    assert await _prediction_rows(db, session_id) == {}
+
+
+async def test_predict_recovery_duplicate_muscle_in_ai_output_returns_503(
+    client: AsyncClient, db, auth_headers, fake_ai: _FakeRecoveryAi
+):
+    demo = await auth_headers("demo")
+    ids = await _muscle_ids(db)
+    session_id, ended_at = await _bench_session(client, db, demo)
+    output = _ai_output(ids, ended_at)
+    output["predictions"].append({**output["predictions"][0], "fatigue_score": 10.0})
+    fake_ai.output = output
+    _assert_ai_unavailable(await _predict_recovery(client, demo, session_id), "invalid_response")
+    assert await _prediction_rows(db, session_id) == {}
+
+
+async def test_predict_recovery_without_token_or_permission_is_rejected(
+    client: AsyncClient, db, auth_headers, fake_ai: _FakeRecoveryAi
+):
+    session_id = await _session_id_of(db, LATEST_COMPLETED_SQL, DEMO_ID)
+    res = await client.post(f"{SESSIONS}/{session_id}/predict-recovery")
+    _err(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+    _err(await _predict_recovery(client, await auth_headers("editor"), session_id), 403, "permission_denied")
+    assert fake_ai.calls == []

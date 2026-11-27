@@ -1,4 +1,4 @@
-"""Schema Pydantic cho /recovery (chức năng 2: Heatmap phục hồi, lịch sử dự đoán phục hồi).
+"""Schema Pydantic cho /recovery (Heatmap, lịch sử dự đoán) và dự đoán phục hồi của buổi tập (chức năng 2).
 
 Heatmap lấy nguyên cột của view training.v_muscle_recovery_status (02_training.sql); lịch sử dự đoán
 lấy từ training.recovery_predictions (06_training.sql) kèm buổi tập và nhóm cơ.
@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from pydantic.json_schema import JsonDict
 
 # View trả `text` chứ không phải enum DB, nên kiểu nằm ở đây thay vì models/enums.py (spec §6 ý 7).
@@ -99,4 +99,63 @@ class RecoveryPredictionResponse(BaseModel):
 
     model_config = ConfigDict(
         from_attributes=True, protected_namespaces=(), json_schema_extra={"example": _EXAMPLE_PREDICTION}
+    )
+
+
+# --- POST /workout-sessions/{session_id}/predict-recovery ---
+# Hợp đồng tạm với AI service (spec §6 ý 10, Q5): payload gửi đi và kết quả nhận về.
+class MuscleLoadSchema(BaseModel):
+    """Tải của một nhóm cơ trong buổi (một dòng training.v_session_muscle_load + `base_recovery_hours`)."""
+
+    muscle_group_id: int
+    direct_sets: int
+    effective_sets: float
+    total_reps: int
+    weighted_volume_kg: float
+    avg_rpe: float | None
+    base_recovery_hours: int
+
+
+class RecoveryPredictionInput(BaseModel):
+    """Payload gửi AI service để dự đoán phục hồi cho một buổi tập."""
+
+    session_id: uuid.UUID
+    user_id: uuid.UUID
+    trained_at: datetime
+    muscle_loads: list[MuscleLoadSchema]
+
+
+class PredictedRecoverySchema(BaseModel):
+    """Một dự đoán AI trả về; ràng buộc khớp CHECK `ck_recovery_predictions_fatigue`."""
+
+    muscle_group_id: int
+    fatigue_score: float = Field(..., ge=0, le=100)
+    recovered_at: AwareDatetime
+
+
+class RecoveryPredictionOutput(BaseModel):
+    """Kết quả AI service; `model_version` khớp cột varchar(50) của training.recovery_predictions."""
+
+    model_version: str = Field(..., min_length=1, max_length=50)
+    predictions: list[PredictedRecoverySchema]
+
+    model_config = ConfigDict(protected_namespaces=())
+
+
+class PredictRecoveryResponse(BaseModel):
+    """Kết quả dự đoán phục hồi của một buổi tập; buổi không có tải thì `model_version` null, danh sách rỗng."""
+
+    session_id: uuid.UUID
+    model_version: str | None
+    predictions: list[RecoveryPredictionResponse]
+
+    model_config = ConfigDict(
+        protected_namespaces=(),
+        json_schema_extra={
+            "example": {
+                "session_id": _EXAMPLE_PREDICTION["session_id"],
+                "model_version": _EXAMPLE_PREDICTION["model_version"],
+                "predictions": [_EXAMPLE_PREDICTION],
+            }
+        },
     )
