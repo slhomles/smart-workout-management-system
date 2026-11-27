@@ -1,0 +1,139 @@
+{
+ "dataset_to_catalog": {
+  "abdominals": "abs",
+  "abductors": "glutes",
+  "abs": "abs",
+  "adductors": "adductors",
+  "ankle stabilizers": "calves",
+  "ankles": "calves",
+  "back": "back",
+  "biceps": "biceps",
+  "brachialis": "biceps",
+  "calves": "calves",
+  "cardiovascular system": null,
+  "chest": "chest",
+  "core": "core",
+  "deltoids": "shoulders",
+  "delts": "shoulders",
+  "feet": "calves",
+  "forearms": "forearms",
+  "glutes": "glutes",
+  "grip muscles": "forearms",
+  "groin": "adductors",
+  "hamstrings": "hamstrings",
+  "hands": "forearms",
+  "hip flexors": "quads",
+  "inner thighs": "adductors",
+  "latissimus dorsi": "lats",
+  "lats": "lats",
+  "levator scapulae": "traps",
+  "lower abs": "abs",
+  "lower back": "lower_back",
+  "middle back": "upper_back",
+  "neck": null,
+  "obliques": "obliques",
+  "pectorals": "chest",
+  "quadriceps": "quads",
+  "quads": "quads",
+  "rear deltoids": "rear_delts",
+  "rhomboids": "upper_back",
+  "rotator cuff": "shoulders",
+  "serratus anterior": "chest",
+  "shins": "calves",
+  "shoulders": "shoulders",
+  "soleus": "calves",
+  "spine": "lower_back",
+  "sternocleidomastoid": null,
+  "trapezius": "traps",
+  "traps": "traps",
+  "triceps": "triceps",
+  "upper back": "upper_back",
+  "upper chest": "chest",
+  "wrist extensors": "forearms",
+  "wrist flexors": "forearms",
+  "wrists": "forearms"
+ },
+ "catalog_to_body_highlighter": {
+  "arms": [
+   "biceps",
+   "triceps",
+   "forearm"
+  ],
+  "shoulders": [
+   "front-deltoids",
+   "back-deltoids"
+  ],
+  "back": [
+   "upper-back",
+   "lower-back",
+   "trapezius"
+  ],
+  "chest": [
+   "chest"
+  ],
+  "core": [
+   "abs",
+   "obliques"
+  ],
+  "legs": [
+   "quadriceps",
+   "hamstring",
+   "calves",
+   "gluteal",
+   "adductor",
+   "abductors"
+  ],
+  "forearms": [
+   "forearm"
+  ],
+  "triceps": [
+   "triceps"
+  ],
+  "biceps": [
+   "biceps"
+  ],
+  "rear_delts": [
+   "back-deltoids"
+  ],
+  "side_delts": [
+   "front-deltoids",
+   "back-deltoids"
+  ],
+  "front_delts": [
+   "front-deltoids"
+  ],
+  "lower_back": [
+   "lower-back"
+  ],
+  "upper_back": [
+   "upper-back"
+  ],
+  "traps": [
+   "trapezius"
+  ],
+  "lats": [
+   "upper-back"
+  ],
+  "obliques": [
+   "obliques"
+  ],
+  "abs": [
+   "abs"
+  ],
+  "adductors": [
+   "adductor"
+  ],
+  "calves": [
+   "calves"
+  ],
+  "glutes": [
+   "gluteal"
+  ],
+  "hamstrings": [
+   "hamstring"
+  ],
+  "quads": [
+   "quadriceps"
+  ]
+ }
+}
