@@ -1,5 +1,6 @@
 /**
  * Cờ tính năng của khung app.
- * AUTH_REQUIRED: bật khi module `fe-auth` xong màn đăng nhập; lúc đó tab chỉ mở được sau khi đăng nhập.
+ * AUTH_REQUIRED: bật từ module `fe-auth` (đã có màn đăng nhập); tab chỉ mở được sau khi đăng nhập,
+ * chưa đăng nhập thì `(tabs)/_layout.tsx` chuyển về `/login`.
  */
-export const AUTH_REQUIRED = false;
+export const AUTH_REQUIRED = true;

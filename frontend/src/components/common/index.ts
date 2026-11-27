@@ -17,4 +17,5 @@ export { SectionHeader } from './SectionHeader';
 export { SettingsRow } from './SettingsRow';
 export { StatCard, type Stat } from './StatCard';
 export { EmptyState, ErrorState, LoadingState } from './StateViews';
+export { TextField } from './TextField';
 export { buildWeek, startOfWeek, WeekStrip, type WeekDay } from './WeekStrip';

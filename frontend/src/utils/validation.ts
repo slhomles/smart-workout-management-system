@@ -5,6 +5,8 @@
 
 export const PASSWORD_POLICY_MESSAGE = 'Mật khẩu cần 8–72 byte, có ít nhất 1 chữ cái và 1 chữ số';
 export const DISPLAY_NAME_MESSAGE = 'Tên hiển thị cần 1–50 ký tự';
+export const EMAIL_MESSAGE = 'Email không hợp lệ';
+export const PASSWORD_REQUIRED_MESSAGE = 'Vui lòng nhập mật khẩu';
 
 // Chính sách mật khẩu doc 04 §6.1: bcrypt bỏ qua phần sau byte thứ 72 nên đếm byte UTF-8, không đếm ký tự.
 const PASSWORD_MIN_BYTES = 8;
