@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ai import PoseAnalysis, VideoAnalysisJob
@@ -59,6 +59,19 @@ async def create_job(
     db.add(job)
     await db.flush()
     return job
+
+
+async def lock_job(db: AsyncSession, job_id: uuid.UUID) -> VideoAnalysisJob | None:
+    """Khoá dòng job (`SELECT … FOR UPDATE`) cho worker chuyển trạng thái; None nếu không có."""
+    # populate_existing: object job có thể còn trong identity map với giá trị cũ (expire_on_commit=False),
+    # phải nạp lại đúng dòng vừa khoá thì kiểm tra trạng thái/attempt mới đúng.
+    stmt = (
+        select(VideoAnalysisJob)
+        .where(VideoAnalysisJob.id == job_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return await db.scalar(stmt)
 
 
 async def get_job(db: AsyncSession, user_id: uuid.UUID, job_id: uuid.UUID) -> Any | None:

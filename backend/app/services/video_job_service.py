@@ -11,15 +11,27 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import DataValidationError
+from app.core.exceptions import ConflictError, DataValidationError, NotFoundError
+from app.crud import body as body_crud
 from app.crud import video_job as crud
+from app.models.ai import VideoAnalysisJob
+from app.models.enums import JobStatus
 from app.schemas.base import ErrorDetail, Page, build_page, decode_keyset_cursor
-from app.schemas.video_job import CreateVideoJobRequest, VideoJobListQuery, VideoJobResponse
+from app.schemas.video_job import (
+    CreateVideoJobRequest,
+    VideoJobFailureRequest,
+    VideoJobListQuery,
+    VideoJobResponse,
+)
 from app.services import workout_ai_service
 
 # Cột model_* NOT NULL nên cần giá trị khi job còn chờ; worker ghi đè khi báo kết quả (spec §6 ý 6, Q8).
 DEFAULT_MODEL_NAME = "yolov8_pose"
 DEFAULT_MODEL_VERSION = "8.2.0"
+
+# Khớp cột ai.video_analysis_jobs.worker_id varchar(100).
+WORKER_ID_MAX_LENGTH = 100
+_PENDING_STATUSES = frozenset({JobStatus.QUEUED, JobStatus.PROCESSING})
 
 
 def _job_response(row: Any) -> VideoJobResponse:
@@ -74,3 +86,56 @@ async def list_jobs(db: AsyncSession, user_id: uuid.UUID, query: VideoJobListQue
     after = decode_keyset_cursor(query.cursor, "created_at")
     rows = await crud.list_jobs(db, user_id, query, after)
     return build_page(rows, query.limit, _job_response, _job_cursor)
+
+
+# --- Service cho worker (chưa có route HTTP, spec §2.2, Q1) ---
+async def _lock_existing_job(db: AsyncSession, job_id: uuid.UUID) -> VideoAnalysisJob:
+    job = await crud.lock_job(db, job_id)
+    if job is None:
+        raise NotFoundError()
+    return job
+
+
+async def _lock_pending_job(db: AsyncSession, job_id: uuid.UUID) -> VideoAnalysisJob:
+    """Khoá job còn chờ kết quả (`queued`/`processing`); không có → 404, đã kết thúc → 409."""
+    job = await _lock_existing_job(db, job_id)
+    if job.status not in _PENDING_STATUSES:
+        raise ConflictError()
+    return job
+
+
+def _ensure_valid_worker_id(worker_id: str) -> None:
+    if not 1 <= len(worker_id) <= WORKER_ID_MAX_LENGTH:
+        raise DataValidationError(
+            [ErrorDetail(
+                field="worker_id",
+                message=f"worker_id phải dài 1..{WORKER_ID_MAX_LENGTH} ký tự",
+                code="invalid_length",
+            )]
+        )
+
+
+async def start_job(db: AsyncSession, job_id: uuid.UUID, worker_id: str) -> None:
+    """Worker nhận job: `queued` → `processing`, tăng attempt_count, ghi worker_id và started_at."""
+    _ensure_valid_worker_id(worker_id)
+    job = await _lock_existing_job(db, job_id)
+    # Hết lượt thử thì không cho chạy lại, nếu không sẽ vi phạm ck_video_analysis_jobs_attempts.
+    if job.status != JobStatus.QUEUED or job.attempt_count >= job.max_attempts:
+        raise ConflictError()
+    job.status = JobStatus.PROCESSING
+    job.started_at = await body_crud.db_now(db)
+    job.attempt_count += 1
+    job.worker_id = worker_id
+    await db.commit()
+
+
+async def record_failure(db: AsyncSession, job_id: uuid.UUID, req: VideoJobFailureRequest) -> None:
+    """Worker báo lỗi: job còn chờ → `failed` kèm error_message; không đụng pose_analyses và hiệp."""
+    job = await _lock_pending_job(db, job_id)
+    now = await body_crud.db_now(db)
+    job.status = JobStatus.FAILED
+    job.error_message = req.error_message
+    # Job lỗi trước khi worker start vẫn cần started_at để thoả ck_video_analysis_jobs_times.
+    job.started_at = job.started_at or now
+    job.finished_at = now
+    await db.commit()

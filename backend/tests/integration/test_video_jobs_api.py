@@ -16,7 +16,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.exceptions import ConflictError, DataValidationError, NotFoundError
 from app.schemas.base import encode_cursor
+from app.schemas.video_job import VideoJobFailureRequest
+from app.services import video_job_service
 
 BASE = "/api/v1/ai/video-jobs"
 SQUAT_SLUG = "barbell-back-squat"
@@ -517,3 +520,124 @@ async def test_jobs_endpoints_make_no_outbound_http_call(
     listed = {item["id"]: item for item in body["data"]}
     assert listed[job["id"]]["status"] == "queued"
     assert len(outbound_calls) == 0
+
+
+# --- Helper cho service worker (start/result/failure) ---
+async def job_state(db: AsyncSession, job_id: uuid.UUID) -> dict[str, Any]:
+    """Trạng thái dòng ai.video_analysis_jobs đọc thẳng qua db (không qua ORM/identity map)."""
+    sql = """
+    SELECT status::text AS status, queued_at, started_at, finished_at, attempt_count, max_attempts,
+           worker_id, error_message
+    FROM ai.video_analysis_jobs WHERE id = :id
+    """
+    return dict((await db.execute(text(sql), {"id": job_id})).mappings().one())
+
+
+async def set_attempt_count(db: AsyncSession, job_id: uuid.UUID, value_sql: str) -> None:
+    """Đặt attempt_count bằng biểu thức SQL cố định của test (vd `max_attempts`, `0`)."""
+    await db.execute(
+        text(f"UPDATE ai.video_analysis_jobs SET attempt_count = {value_sql} WHERE id = :id"), {"id": job_id}
+    )
+    await db.commit()
+
+
+# --- SRT-07 ---
+@pytest.mark.tc("SRT-07")
+async def test_list_jobs_status_and_set_filters_return_matching_jobs(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    headers, sets, (job_a, job_b, job_c) = await _demo_jobs(client, auth_headers, db, (0, 1, 0))
+    s1, s2 = sets[0]["set_id"], sets[1]["set_id"]
+    await video_job_service.record_failure(db, uuid.UUID(job_c["id"]), VideoJobFailureRequest(error_message="x"))
+    cases: list[tuple[dict[str, Any], set[str]]] = [
+        ({"set_id": s1}, {job_a["id"], job_c["id"]}),
+        ({"status": "queued"}, {job_a["id"], job_b["id"]}),
+        ({"status": "failed"}, {job_c["id"]}),
+        ({"status": "failed", "set_id": s2}, set()),
+        ({"set_id": await power_set(db)}, set()),
+        ({"status": "completed"}, set()),
+    ]
+    for params, expected in cases:
+        body = assert_page(await get_jobs(client, headers, params))
+        assert _ids(body["data"]) == expected, params
+
+    (failed,) = assert_page(await get_jobs(client, headers, {"status": "failed"}))["data"]
+    assert failed["status"] == "failed"
+    assert failed["finished_at"] is not None
+    state = await job_state(db, uuid.UUID(job_c["id"]))
+    assert (state["status"], state["error_message"]) == ("failed", "x")
+    assert state["started_at"] is not None and state["finished_at"] >= state["started_at"]
+
+
+# --- SRT-14 ---
+@pytest.mark.tc("SRT-14")
+async def test_start_job_queued_job_marks_processing(client: AsyncClient, auth_headers, db: AsyncSession):
+    headers, _, (job,) = await _demo_jobs(client, auth_headers, db, (0,))
+    job_id = uuid.UUID(job["id"])
+
+    await video_job_service.start_job(db, job_id, "worker-01")
+
+    state = await job_state(db, job_id)
+    assert state["status"] == "processing"
+    assert state["started_at"] is not None and state["started_at"] >= state["queued_at"]
+    assert (state["attempt_count"], state["worker_id"]) == (1, "worker-01")
+    listed = {item["id"]: item for item in assert_page(await get_jobs(client, headers))["data"]}
+    item = listed[job["id"]]
+    assert item["status"] == "processing"
+    assert item["started_at"] is not None
+    assert item["finished_at"] is None and item["analyzed_at"] is None
+
+
+# --- SRT-15 ---
+@pytest.mark.tc("SRT-15")
+async def test_start_job_missing_or_exhausted_job_raises_not_found_or_conflict(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    _, _, (job,) = await _demo_jobs(client, auth_headers, db, (0,))
+    job_id = uuid.UUID(job["id"])
+
+    with pytest.raises(NotFoundError) as missing:
+        await video_job_service.start_job(db, uuid.uuid4(), "w")
+    assert (missing.value.status_code, missing.value.code) == (404, "not_found")
+
+    await set_attempt_count(db, job_id, "max_attempts")
+    with pytest.raises(ConflictError) as exhausted:
+        await video_job_service.start_job(db, job_id, "w")
+    assert (exhausted.value.status_code, exhausted.value.code) == (409, "conflict")
+    state = await job_state(db, job_id)
+    assert state["status"] == "queued"
+    assert state["attempt_count"] == state["max_attempts"]
+    assert state["started_at"] is None and state["worker_id"] is None
+    await set_attempt_count(db, job_id, "0")
+
+
+@pytest.mark.tc("SRT-15")
+async def test_start_job_invalid_worker_id_raises_validation_error(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    _, _, (job,) = await _demo_jobs(client, auth_headers, db, (0,))
+    job_id = uuid.UUID(job["id"])
+
+    for worker_id in ("", "w" * 101):
+        with pytest.raises(DataValidationError) as invalid:
+            await video_job_service.start_job(db, job_id, worker_id)
+        assert (invalid.value.status_code, invalid.value.code) == (422, "validation_error")
+        assert invalid.value.details[0].field == "worker_id"
+
+    state = await job_state(db, job_id)
+    assert (state["status"], state["attempt_count"], state["worker_id"]) == ("queued", 0, None)
+    assert state["started_at"] is None
+
+
+@pytest.mark.tc("SRT-15")
+async def test_start_job_already_started_raises_conflict(client: AsyncClient, auth_headers, db: AsyncSession):
+    _, _, (job,) = await _demo_jobs(client, auth_headers, db, (0,))
+    job_id = uuid.UUID(job["id"])
+    await video_job_service.start_job(db, job_id, "w")
+
+    with pytest.raises(ConflictError) as again:
+        await video_job_service.start_job(db, job_id, "w")
+
+    assert (again.value.status_code, again.value.code) == (409, "conflict")
+    state = await job_state(db, job_id)
+    assert (state["status"], state["attempt_count"]) == ("processing", 1)
