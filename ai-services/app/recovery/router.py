@@ -1,10 +1,14 @@
 """`POST /recovery/predict` (06-ai-contracts.md §2.3): API nội bộ, không tiền tố `/api/v1`, không xác thực (06 §2)."""
 
+import logging
+
 from fastapi import APIRouter
 
 from app.contracts import RecoveryPredictionOutput
 from app.recovery.heuristic import predict_recovery, register_recovery_model
 from app.recovery.schemas import RecoveryPredictRequest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Recovery"])
 
@@ -29,4 +33,8 @@ register_recovery_model()
 )
 async def predict(request: RecoveryPredictRequest) -> RecoveryPredictionOutput:
     """Trả mức mệt và thời điểm hồi phục của từng nhóm cơ trong buổi tập."""
-    return predict_recovery(request)
+    result = predict_recovery(request)
+    # Chỉ ghi số phần tử và phiên bản model: `user_id`, `session_id`, `trained_at` hay payload là dữ liệu người dùng,
+    # không được vào log (spec ai-recovery-predict §6 ý 9; 06-ai-contracts §5).
+    logger.debug("recovery predicted for %d muscle groups with %s", len(request.muscle_loads), result.model_version)
+    return result

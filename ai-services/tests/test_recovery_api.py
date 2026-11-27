@@ -1,5 +1,6 @@
-"""Test HTTP cho `POST /recovery/predict` (AIRP-01, 02, 03, 04, 06, 07, 08, 09, 12) qua fixture `client`.
+"""Test HTTP cho `POST /recovery/predict` (AIRP-01–09, 12, 13, 14) qua fixture `client`.
 
+AIRP-05(b) và AIRP-13(a) gọi thẳng `predict_recovery` và các model Pydantic để đối chiếu với kết quả HTTP/hợp đồng.
 Quy ước theo spec docs/features/ai-recovery-predict.md §5: `T0`, `BODY` (= `_body`), `L` (= `_muscle_load`),
 `DOC`, `MULTI`, OK-BODY (= `_assert_ok_body`) và ERR (= `_assert_err_body`). UUID trong body là dữ liệu giả lập
 lấy từ ví dụ 06-ai-contracts.md §2.3.
@@ -7,17 +8,22 @@ lấy từ ví dụ 06-ai-contracts.md §2.3.
 
 import copy
 import json
+import logging
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, NamedTuple
 
 import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
+from pydantic import BaseModel
 
-from app.contracts import RecoveryPredictionOutput
+from app.contracts import MuscleLoad, RecoveryPredictionInput, RecoveryPredictionOutput
 from app.core.models import registry
+from app.recovery.heuristic import predict_recovery
+from app.recovery.schemas import MuscleLoadRequest, RecoveryPredictRequest
 
 PREDICT_PATH = "/recovery/predict"
 T0 = "2026-11-27T01:00:00Z"
@@ -348,3 +354,122 @@ def test_predict_duplicate_muscle_group_or_time_overflow_returns_validation_erro
 
     assert res.status_code != 500
     assert expected_field in _validation_error_fields(res, "req_airp0009")
+
+
+@pytest.mark.tc("AIRP-05")
+def test_predict_same_body_twice_returns_identical_bytes(client: TestClient) -> None:
+    first = client.post(PREDICT_PATH, json=MULTI)
+    second = client.post(PREDICT_PATH, json=MULTI)
+
+    assert (first.status_code, second.status_code) == (200, 200)
+    assert first.content == second.content
+
+
+@pytest.mark.tc("AIRP-05")
+def test_predict_recovery_same_request_twice_returns_equal_output_matching_http_body(client: TestClient) -> None:
+    http_body = client.post(PREDICT_PATH, json=MULTI).json()
+
+    # Validate lại mỗi lần để hai lần gọi không dùng chung một object đầu vào.
+    first = predict_recovery(RecoveryPredictRequest.model_validate(MULTI))
+    second = predict_recovery(RecoveryPredictRequest.model_validate(MULTI))
+
+    assert isinstance(first, RecoveryPredictionOutput)
+    assert isinstance(second, RecoveryPredictionOutput)
+    assert first == second
+    assert first.model_dump(mode="json") == http_body
+
+
+def _required_by_field(model: type[BaseModel]) -> dict[str, bool]:
+    """Tên field → field có bắt buộc hay không, để so tính bắt buộc giữa model module và model hợp đồng."""
+    return {name: field.is_required() for name, field in model.model_fields.items()}
+
+
+@pytest.mark.tc("AIRP-13")
+@pytest.mark.parametrize(("module_model", "contract_model"), [
+    pytest.param(MuscleLoadRequest, MuscleLoad, id="muscle-load"),
+    pytest.param(RecoveryPredictRequest, RecoveryPredictionInput, id="recovery-prediction-input"),
+])
+def test_compare_module_model_with_contract_model_has_same_fields_and_required(
+        module_model: type[BaseModel], contract_model: type[BaseModel]) -> None:
+    assert set(module_model.model_fields) == set(contract_model.model_fields)
+    # Spec §6 ý 4: tên field và tính bắt buộc giống hệt hợp đồng (vd `avg_rpe` bắt buộc dù được phép null).
+    assert _required_by_field(module_model) == _required_by_field(contract_model)
+
+
+@pytest.mark.tc("AIRP-13")
+@pytest.mark.parametrize("model", [
+    pytest.param(RecoveryPredictRequest, id="module-request"),
+    pytest.param(RecoveryPredictionInput, id="contract-input"),
+])
+@pytest.mark.parametrize("body", [pytest.param(DOC, id="doc"), pytest.param(MULTI, id="multi")])
+def test_validate_contract_body_with_module_or_contract_model_keeps_all_values(
+        model: type[RecoveryPredictRequest] | type[RecoveryPredictionInput], body: dict[str, Any]) -> None:
+    validated = model.model_validate(body)
+
+    assert str(validated.user_id) == body["user_id"]
+    assert [load.model_dump() for load in validated.muscle_loads] == body["muscle_loads"]
+
+
+@pytest.mark.tc("AIRP-13")
+def test_get_openapi_schema_returns_predict_post_without_api_prefix(client: TestClient) -> None:
+    res = client.get("/openapi.json")
+
+    assert res.status_code == 200
+    paths = res.json()["paths"]
+    assert "post" in paths[PREDICT_PATH]
+    # 06-ai-contracts §2: API nội bộ của ai-services không có tiền tố `/api/v1`.
+    assert not any(path.startswith("/api/v1") for path in paths)
+
+
+# Body thành công của AIRP-01, 02, 03, 04, 06(a), 08(b), dựng lại bằng đúng helper của các TC đó.
+AIRP13_SUCCESS_BODIES = [
+    pytest.param(DOC, id="airp01-doc"),
+    pytest.param(MULTI, id="airp02-multi"),
+    pytest.param(_body([_muscle_load(LoadCase(13, 4.0, 0.0, 6.0, 60))]), id="airp03a-rpe-6"),
+    pytest.param(_body([_muscle_load(LoadCase(13, 4.0, 0.0, 10.0, 60))]), id="airp03b-rpe-10"),
+    pytest.param(_body([_muscle_load(LoadCase(13, 4.0, 0.0, None, 60))]), id="airp03c-rpe-null"),
+    pytest.param(_body([_muscle_load(CHEST_LOAD, direct_sets=1, total_reps=0)]), id="airp03d-few-direct-sets-reps"),
+    pytest.param(_body([_muscle_load(CHEST_LOAD, direct_sets=30, total_reps=500)]),
+                 id="airp03e-many-direct-sets-reps"),
+    pytest.param(_body([_muscle_load(CHEST_LOAD)], "2026-11-27T08:00:00+07:00"), id="airp04a-plus-07"),
+    pytest.param(_body([_muscle_load(CHEST_LOAD)], "2026-11-27T01:00:00-05:00"), id="airp04b-minus-05"),
+    pytest.param(_body([_muscle_load(CHEST_LOAD)], "2020-01-01T00:00:00Z"), id="airp04c-past-not-now"),
+    pytest.param(_body([]), id="airp06a-empty-muscle-loads"),
+    pytest.param(_body(BOUNDARY_LOADS), id="airp08b-boundary-loads"),
+]
+
+
+@pytest.mark.tc("AIRP-13")
+@pytest.mark.parametrize("sent", AIRP13_SUCCESS_BODIES)
+def test_predict_success_case_returns_contract_body_for_exactly_sent_muscle_groups(
+        client: TestClient, sent: dict[str, Any]) -> None:
+    res = client.post(PREDICT_PATH, json=sent)
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    _assert_ok_body(body)
+    returned_ids = [prediction["muscle_group_id"] for prediction in body["predictions"]]
+    # 06 §2.3: một phần tử cho mỗi `muscle_group_id` đã gửi, không trùng, không thêm nhóm khác.
+    assert len(returned_ids) == len(set(returned_ids))
+    assert set(returned_ids) == {load["muscle_group_id"] for load in sent["muscle_loads"]}
+    # 06 §2.3: `recovered_at >= trained_at`.
+    trained_at = datetime.fromisoformat(sent["trained_at"])
+    assert all(datetime.fromisoformat(prediction["recovered_at"]) >= trained_at
+               for prediction in body["predictions"])
+
+
+@pytest.mark.tc("AIRP-14")
+def test_predict_success_then_validation_error_with_debug_logging_never_logs_user_id(
+        client: TestClient, caplog: pytest.LogCaptureFixture) -> None:
+    user_id = MULTI["user_id"]
+    caplog.set_level(logging.DEBUG)
+
+    assert client.post(PREDICT_PATH, json=MULTI).status_code == 200
+    assert client.post(PREDICT_PATH, json=_doc_with(load={"avg_rpe": 10.5})).status_code == 422
+
+    # Log của module phải thực sự có, nếu không phép kiểm "không lộ user_id" bên dưới đúng một cách vô nghĩa.
+    assert caplog.records
+    assert any(record.name == "app.recovery.router" for record in caplog.records)
+    leaking_records = [record.name for record in caplog.records
+                       if user_id in record.getMessage() or user_id in str(record.args)]
+    assert leaking_records == []
