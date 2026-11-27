@@ -9,11 +9,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import httpx
 import pytest
 from httpx import AsyncClient, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.schemas.base import encode_cursor
 
 BASE = "/api/v1/ai/pose-analyses"
@@ -572,3 +574,62 @@ FORGED_CURSORS: list[dict[str, Any]] = [
 async def test_list_analyses_forged_cursor_returns_422(api: Api, values: dict[str, Any]):
     error = _error(await api.get("demo", {"cursor": encode_cursor(values)}), 422, "validation_error")
     assert _fields(error) == ["cursor"], error
+
+
+# --- POSE-11: không đăng nhập / token sai ---
+NO_AUTH_HEADERS: list[dict[str, str]] = [{}, {"Authorization": "Bearer khong-phai-jwt"}]
+
+
+async def _send(api: Api, method: str, headers: dict[str, str]) -> Response:
+    if method == "POST":
+        return await api.client.post(BASE, json=_v(api.seed["S1"]), headers=headers)
+    return await api.client.get(BASE, headers=headers)
+
+
+@pytest.mark.tc("POSE-11")
+@pytest.mark.parametrize("method", ["POST", "GET"])
+@pytest.mark.parametrize("headers", NO_AUTH_HEADERS, ids=["no-header", "bad-token"])
+async def test_endpoints_without_valid_token_return_401(api: Api, method: str, headers: dict[str, str]):
+    counts_before = await _ai_counts(api.db)
+    res = await _send(api, method, headers)
+    _error(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+    assert await _ai_counts(api.db) == counts_before
+
+
+# --- POSE-12: thiếu permission, đối chứng có quyền ---
+@pytest.mark.tc("POSE-12")
+async def test_endpoints_without_ai_use_permission_return_403(api: Api):
+    counts_before = await _ai_counts(api.db)
+    _error(await api.post("editor", _v(api.seed["S1"])), 403, "permission_denied")
+    _error(await api.get("editor"), 403, "permission_denied")
+    assert await _ai_counts(api.db) == counts_before
+
+
+@pytest.mark.tc("POSE-12")
+async def test_endpoints_trainer_with_active_user_role_succeed(api: Api):
+    created = _created(await api.post("trainer", _v(api.seed["TRAINER_SET"])))
+    assert created["set_id"] == api.seed["TRAINER_SET"]
+    assert _ids(_page(await api.get("trainer"))) == {created["id"]}
+
+
+# --- POSE-13: không phụ thuộc AI service ---
+@pytest.mark.tc("POSE-13")
+async def test_endpoints_work_without_outbound_http_calls(api: Api, monkeypatch: pytest.MonkeyPatch):
+    outbound_calls: list[str] = []
+
+    async def _blocked_async(self: httpx.AsyncHTTPTransport, request: httpx.Request) -> httpx.Response:
+        outbound_calls.append(str(request.url))
+        raise httpx.ConnectError("blocked", request=request)
+
+    def _blocked_sync(self: httpx.HTTPTransport, request: httpx.Request) -> httpx.Response:
+        outbound_calls.append(str(request.url))
+        raise httpx.ConnectError("blocked", request=request)
+
+    monkeypatch.setattr(get_settings(), "AI_SERVICE_URL", "http://127.0.0.1:9")
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", _blocked_async)
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", _blocked_sync)
+
+    created = _created(await api.post("demo", _pose01_body(api.seed)))
+    assert created["id"] in _ids(_page(await api.get("demo")))
+    assert outbound_calls == []
