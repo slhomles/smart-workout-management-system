@@ -8,21 +8,32 @@ import uuid
 from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.exceptions import AppException, UnauthorizedError
-from app.core.security import create_access_token, generate_refresh_token, hash_token, verify_password
+from app.core.exceptions import AppException, ConflictError, DataValidationError, NotFoundError, UnauthorizedError
+from app.core.security import (
+    create_access_token,
+    generate_refresh_token,
+    hash_password,
+    hash_token,
+    verify_password,
+)
 from app.crud import auth as crud
-from app.models.auth import RefreshToken, User, UserDevice
-from app.models.enums import LoginFailureReason, TokenRevokeReason, UserStatus
+from app.models.auth import RefreshToken, User, UserDevice, UserProfile, UserRole
+from app.models.enums import LoginFailureReason, RoleCode, TokenRevokeReason, UserStatus
 from app.schemas.auth import (
     AuthUserSchema,
+    ChangePasswordRequest,
     DeviceInfoSchema,
     LoginRequest,
     LoginResponse,
     MeResponse,
+    RegisterRequest,
+    RegisterResponse,
     TokenPairResponse,
+    UpdateMeRequest,
 )
 from app.schemas.base import ErrorDetail
 from app.services import permission_service
@@ -86,6 +97,61 @@ async def _issue_refresh_token(
     )
     await db.flush()
     return raw
+
+
+def _email_taken() -> ConflictError:
+    return ConflictError("email_already_exists", "Email đã được sử dụng")
+
+
+async def _insert_user(db: AsyncSession, req: RegisterRequest) -> User:
+    """Tạo dòng auth.users; INSERT vướng trùng email do request đồng thời → email_already_exists."""
+    # Chỉ cài nhánh REQUIRE_EMAIL_VERIFICATION=false (doc 04 §4.2). Nhánh true (pending_verification,
+    # verification_tokens, gửi email) nằm ngoài phạm vi: chờ hạ tầng email (spec auth-users Q1).
+    user = User(
+        email=req.email,
+        password_hash=hash_password(req.password),
+        status=UserStatus.ACTIVE,
+        email_verified_at=await _db_now(db),
+    )
+    try:
+        # Hai request cùng email có thể cùng qua bước kiểm tra email trong register; request sau vướng uq_users_email_alive.
+        # Savepoint giữ session dùng được để vẫn trả email_already_exists thay cho 409 conflict chung.
+        async with db.begin_nested():
+            db.add(user)
+            await db.flush()
+    except IntegrityError:
+        if await crud.get_user_by_email(db, req.email) is not None:
+            raise _email_taken() from None
+        raise
+    return user
+
+
+async def register(db: AsyncSession, req: RegisterRequest) -> RegisterResponse:
+    """
+    Đăng ký (doc 04 §4.2): auth.users + auth.user_profiles + auth.user_roles(user) trong một transaction.
+    Email trùng tài khoản chưa xoá → 409 email_already_exists; email của tài khoản đã xoá mềm đăng ký lại được.
+    """
+    if await crud.get_user_by_email(db, req.email) is not None:
+        raise _email_taken()
+    role_id = await crud.get_role_id(db, RoleCode.USER)
+    if role_id is None:
+        raise RuntimeError("auth.roles thiếu role 'user' (database/postgresql/seeds/01_rbac.sql)")
+
+    user = await _insert_user(db, req)
+    profile = UserProfile(user_id=user.id, display_name=req.display_name, full_name=req.full_name)
+    db.add(profile)
+    db.add(UserRole(user_id=user.id, role_id=role_id, granted_by=None, expires_at=None))
+    await db.flush()
+    result = RegisterResponse(
+        id=user.id,
+        email=user.email,
+        display_name=profile.display_name,
+        full_name=profile.full_name,
+        roles=await permission_service.get_role_codes(db, user.id),
+        status=user.status,
+    )
+    await db.commit()
+    return result
 
 
 async def login(db: AsyncSession, req: LoginRequest, ip: str | None, user_agent: str | None) -> LoginResponse:
@@ -212,6 +278,32 @@ async def logout(db: AsyncSession, user_id: uuid.UUID, raw_token: str) -> bool:
     return True
 
 
+async def logout_all(db: AsyncSession, user_id: uuid.UUID) -> int:
+    """Thu hồi mọi refresh token chưa thu hồi trên mọi thiết bị của user (`logout`, doc 04 §4.5); trả số token."""
+    revoked = await crud.revoke_user_tokens(db, user_id, TokenRevokeReason.LOGOUT)
+    await db.commit()
+    return revoked
+
+
+async def change_password(db: AsyncSession, user: User, req: ChangePasswordRequest) -> MeResponse:
+    """
+    Đổi mật khẩu (doc 04 §4.7). Sai mật khẩu hiện tại, kể cả tài khoản chỉ OAuth → 401 invalid_credentials.
+    Thành công: băm mật khẩu mới, `password_changed_at = now()` (giờ DB), thu hồi mọi refresh token
+    (`password_changed`), xoá cache permission. Client phải đăng nhập lại.
+    """
+    if not verify_password(req.current_password, user.password_hash):
+        raise UnauthorizedError("invalid_credentials", "Mật khẩu hiện tại không đúng")
+
+    user_id = user.id
+    user.password_hash = hash_password(req.new_password)
+    user.password_changed_at = await _db_now(db)
+    await crud.revoke_user_tokens(db, user_id, TokenRevokeReason.PASSWORD_CHANGED)
+    result = await get_me(db, user)
+    await db.commit()
+    await permission_service.invalidate_permissions(user_id)
+    return result
+
+
 async def get_me(db: AsyncSession, user: User) -> MeResponse:
     profile = await crud.get_profile(db, user.id)
     roles = await permission_service.get_role_codes(db, user.id)
@@ -230,3 +322,25 @@ async def get_me(db: AsyncSession, user: User) -> MeResponse:
         roles=roles,
         permissions=sorted(perms),
     )
+
+
+async def update_me(db: AsyncSession, user: User, req: UpdateMeRequest) -> MeResponse:
+    """
+    Sửa một phần hồ sơ hiển thị của user hiện tại (`PATCH /auth/me`, spec auth-users quyết định 5).
+    Chỉ ghi field có trong request; `timezone` phải có trong `pg_catalog.pg_timezone_names`, kiểm tra trước khi ghi.
+    `updated_at` do trigger DB gán. Trả hồ sơ sau cập nhật, cùng dạng `GET /auth/me`.
+    """
+    changes = req.model_dump(exclude_unset=True)
+    profile = await crud.get_profile(db, user.id)
+    if profile is None:
+        raise NotFoundError("user_not_found", "Người dùng không tồn tại")
+    if "timezone" in changes and not await crud.timezone_exists(db, changes["timezone"]):
+        raise DataValidationError([ErrorDetail(field="timezone", message="Múi giờ không hợp lệ", code="value_error")])
+
+    for field, value in changes.items():
+        setattr(profile, field, value)
+    await db.flush()
+    # get_me đọc lại profile cùng session (identity map) nên thấy giá trị vừa ghi.
+    result = await get_me(db, user)
+    await db.commit()
+    return result
