@@ -43,6 +43,9 @@ def _image_bytes(image_format: str) -> bytes:
 
 PNG = _image_bytes("PNG")
 JPG = _image_bytes("JPEG")
+GIF = _image_bytes("GIF")
+# Dự đoán hợp lệ cho các ca lỗi: nếu backend lỡ gọi AI thì AI vẫn "thành công", test phải bắt được.
+VALID_PREDICTIONS = [{"label": "dumbbell", "confidence": 0.8}]
 
 
 def _upload(data: bytes = PNG, name: str = "scan.png", content_type: str = "image/png") -> dict[str, Any]:
@@ -444,6 +447,112 @@ async def test_create_scan_without_predictions_stores_scan_without_top1(
     assert await _persisted_scans(db, body["id"]) == [
         {"user_id": DEMO_ID, "image_media_id": None, "latency_ms": 180, "feedback": None, "prediction_count": 0}
     ]
+
+
+def _invalid_image_requests() -> dict[str, dict[str, Any]]:
+    """6 ca của EQS-04 theo thứ tự spec: tham số truyền cho `client.post`.
+
+    Dựng trong hàm thay vì hằng module để ảnh hơn 10 MiB chỉ tồn tại khi test này chạy.
+    """
+    return {
+        "missing-image": {"data": {"foo": "bar"}},
+        "json-body": {"json": {"image": "abc"}},
+        "gif": {"files": _upload(GIF, "a.gif", "image/gif")},
+        "empty": {"files": _upload(b"", "a.jpg", "image/jpeg")},
+        "over-10-mib": {"files": _upload(b"\xff" * (10 * 1024 * 1024 + 1), "big.jpg", "image/jpeg")},
+        "not-an-image": {"files": _upload(b"khong-phai-anh", "a.png", "image/png")},
+    }
+
+
+def _broken_ai_replies() -> dict[str, httpx.Response | Exception]:
+    """8 ca AI service lỗi của EQS-05 theo thứ tự spec: exception để ném hoặc response để trả."""
+    request = httpx.Request("POST", "http://ai.invalid" + CLASSIFY_PATH)
+    contract = _ai_ok(VALID_PREDICTIONS).json()
+    without_model_name = {key: value for key, value in contract.items() if key != "model_name"}
+    return {
+        "connect-error": httpx.ConnectError("connection refused", request=request),
+        "read-timeout": httpx.ReadTimeout("read timed out", request=request),
+        "http-500": httpx.Response(500, json={"detail": "boom"}),
+        "http-400": httpx.Response(400, json={"detail": "bad image"}),
+        "not-json": httpx.Response(200, text="khong-phai-json"),
+        "missing-model-name": httpx.Response(200, json=without_model_name),
+        "confidence-above-1": _ai_ok([{"label": "dumbbell", "confidence": 1.5}]),
+        "predictions-not-list": httpx.Response(200, json={**contract, "predictions": "dumbbell"}),
+    }
+
+
+@pytest.mark.tc("EQS-04")
+async def test_create_scan_invalid_image_returns_422_without_calling_ai(
+    client: AsyncClient, db: AsyncSession, auth_headers, fake_ai: FakeAi
+):
+    fake_ai.reply = _ai_ok(VALID_PREDICTIONS)
+    headers = await auth_headers("demo")
+    before = await _count_scan_rows(db)
+
+    # Chạy lần lượt trong cùng một test để kiểm được "AI không bị gọi sau tất cả các ca" trên một fake_ai.
+    for case, request_kwargs in _invalid_image_requests().items():
+        res = await client.post(URL, headers=headers, **request_kwargs)
+        error = _assert_error(res, 422, "validation_error")
+        assert "image" in [detail["field"] for detail in error["details"]], case
+
+    assert len(fake_ai.calls) == 0
+    assert await _count_scan_rows(db) == before
+
+
+@pytest.mark.tc("EQS-05")
+async def test_create_scan_ai_service_failure_returns_503_with_generic_message(
+    post_scan, db: AsyncSession, fake_ai: FakeAi
+):
+    before = await _count_scan_rows(db)
+    messages: set[str] = set()
+
+    for case, reply in _broken_ai_replies().items():
+        fake_ai.reply = reply
+        error = _assert_error(await post_scan(), 503, "service_unavailable")
+        assert error["details"] == [], case
+        messages.add(error["message"])
+
+    # Mỗi ca đều thật sự tới AI (8 lần gọi), nên 503 đến từ xử lý lỗi AI chứ không từ bước khác.
+    assert len(fake_ai.calls) == 8
+    # Một message chung cho mọi loại lỗi: client không suy ra được chi tiết hạ tầng phía sau.
+    assert len(messages) == 1
+    message = messages.pop()
+    assert not any(secret in message for secret in (get_settings().AI_SERVICE_URL, "boom", "httpx")), message
+    assert await _count_scan_rows(db) == before
+
+
+@pytest.mark.tc("EQS-10")
+@pytest.mark.parametrize(
+    "headers",
+    [{}, {"Authorization": "Bearer khong-phai-jwt"}],
+    ids=["no-authorization", "malformed-token"],
+)
+async def test_create_scan_without_valid_token_returns_401_without_calling_ai(
+    client: AsyncClient, db: AsyncSession, fake_ai: FakeAi, headers: dict
+):
+    fake_ai.reply = _ai_ok(VALID_PREDICTIONS)
+    before = await _count_scan_rows(db)
+
+    res = await client.post(URL, files=_upload(), headers=headers)
+
+    _assert_error(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+    assert len(fake_ai.calls) == 0
+    assert await _count_scan_rows(db) == before
+
+
+@pytest.mark.tc("EQS-11")
+async def test_create_scan_without_ai_use_permission_returns_403_without_calling_ai(
+    post_scan, db: AsyncSession, fake_ai: FakeAi
+):
+    fake_ai.reply = _ai_ok(VALID_PREDICTIONS)
+    before = await _count_scan_rows(db)
+
+    res = await post_scan(persona="editor")
+
+    _assert_error(res, 403, "permission_denied")
+    assert len(fake_ai.calls) == 0
+    assert await _count_scan_rows(db) == before
 
 
 @pytest.mark.tc("EQS-12")
