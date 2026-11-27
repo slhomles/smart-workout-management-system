@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Smart Workout",
+    "slug": "smart-workout",
+    "version": "0.1.0",
+    "scheme": "smartworkout",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "vn.smartworkout.app"
+    },
+    "android": {
+      "package": "vn.smartworkout.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#1E5EFF",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-image",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "backgroundColor": "#1E5EFF",
+          "imageWidth": 160
+        }
+      ],
+      "expo-asset"
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

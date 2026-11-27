@@ -119,7 +119,7 @@ Mẫu là app "Home Workout", ảnh và ghi chú ở `docs/ui-refs/home-workout/
 | Thanh tab | 4 tab, nền `surface`, icon đặc; tab đang chọn icon và chữ `primary`, tab khác `textMuted` |
 | Chế độ tối | `background #0F1115`, `surface #1A1D23`, `surfaceMuted #242832`, `text #F3F4F6`; giữ nguyên `primary` và gradient |
 
-### 8.2. Component dùng chung (`src/components/`, dựng sẵn trong `fe-core`)
+### 8.2. Component dùng chung (`src/components/common/`, dựng sẵn trong `fe-core`; `LineChartCard`, `BmiScale` do `fe-dashboard` dựng, `MuscleHeatmap` do `fe-workout` dựng, cùng thư mục)
 
 | Component | Theo ảnh mẫu | Mô tả |
 |---|---|---|
