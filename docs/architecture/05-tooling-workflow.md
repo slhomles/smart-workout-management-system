@@ -61,7 +61,7 @@ Từ tuần 2, mỗi endpoint/nhóm endpoint:
 | File core (mục 7) | Core owner |
 | Bảng/migration | Owner module cần thay đổi, được Core owner + 1 người khác duyệt (mục 8) |
 | Màn hình, gọi API, xử lý token | Frontend; chỉ gọi endpoint đã có trong Swagger |
-| Model AI, worker | AI team; giao tiếp với backend qua hợp đồng riêng (ngoài phạm vi doc này) |
+| Model AI, worker | AI team (hoặc agent flow, `target: ai-services`); giao tiếp với backend theo `06-ai-contracts.md` |
 
 ---
 
