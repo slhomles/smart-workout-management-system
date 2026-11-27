@@ -524,10 +524,11 @@ Ví dụ: `feat(exercise): thêm API tìm kiếm bài tập theo nhóm cơ` · `
 
 ### 9.3. Pull Request
 
-- PR vào `develop`. Dùng template `.github/PULL_REQUEST_TEMPLATE/pull_request_template.md`.
+- PR vào `main` (repo không dùng nhánh `develop`). Dùng template `.github/PULL_REQUEST_TEMPLATE/pull_request_template.md`.
 - Yêu cầu: ≥ **1 reviewer** (người khác tác giả), **không tự merge**, CI xanh, không conflict, mô tả rõ thay đổi + cách kiểm tra.
 - PR chỉ làm **một việc**, NÊN < 400 dòng thay đổi (ngoại trừ dữ liệu sinh tự động/seed).
-- Merge bằng **squash merge** để lịch sử `develop` gọn; tiêu đề squash theo định dạng commit ở 9.2.
+- Merge bằng **squash merge** để lịch sử `main` gọn; tiêu đề squash theo định dạng commit ở 9.2.
+- **Ngoại lệ: module do agent flow làm** (`scripts/agent-flow/`, nhóm đồng ý ngày 2026-11-27). Khi orchestrator đã duyệt và mọi cổng `check_done` đạt, runner tự gộp `main` mới nhất vào nhánh module, giải xung đột, chạy lại cổng đầy đủ, push nhánh, mở PR vào `main` và **tự merge khi CI xanh, không cần reviewer**. Dùng **merge commit** (không squash) để giữ tác giả từng commit theo `team.json` (`Claude_git.md` §2.8). Xung đột không giải được, cổng trượt hoặc CI đỏ thì runner KHÔNG merge mà báo nhóm. Chỉ runner được push/merge; agent LLM vẫn bị chặn mọi lệnh git ghi và `gh`. PR của người vẫn theo các quy tắc ở trên.
 
 ### 9.4. File dễ xung đột — cách xử lý
 
