@@ -12,7 +12,7 @@ type Props = { icon: IconName; iconColor: string; label: string; sublabel?: stri
 export function SettingsRow({ icon, iconColor, label, sublabel, hasDot = false, onPress }: Props) {
   const theme = useTheme();
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" style={[styles.row, { borderBottomColor: theme.divider }]}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={[styles.row, { borderBottomColor: theme.divider }]}>
       <View style={[styles.icon, { backgroundColor: iconColor }]}>
         <Ionicons name={icon} size={24} color={theme.onPrimary} />
       </View>
