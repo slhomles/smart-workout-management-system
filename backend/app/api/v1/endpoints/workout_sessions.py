@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.core.dependencies import CurrentUser, require_permission
 from app.models.enums import SessionStatus
 from app.schemas.base import ERROR_RESPONSES, Page
+from app.schemas.recovery import PredictRecoveryResponse
 from app.schemas.workout import (
     AddSessionExerciseRequest,
     CreateExerciseSetRequest,
@@ -20,7 +21,7 @@ from app.schemas.workout import (
     WorkoutSessionResponse,
     WorkoutSessionSummaryResponse,
 )
-from app.services import workout_service
+from app.services import recovery_service, workout_service
 
 router = APIRouter(prefix="/workout-sessions", tags=["Workouts"])
 
@@ -94,6 +95,24 @@ async def finish_session(
     db: AsyncSession = Depends(get_db),
 ) -> WorkoutSessionResponse:
     return await workout_service.finish_session(db, current.id, session_id, body)
+
+
+@router.post(
+    "/{session_id}/predict-recovery",
+    response_model=PredictRecoveryResponse,
+    status_code=200,
+    responses=ERROR_RESPONSES,
+    summary="Dự đoán phục hồi cơ sau buổi tập",
+    description=(
+        PERM + " Lấy tải theo nhóm cơ (`training.v_session_muscle_load`), gọi AI dự đoán rồi ghi/ghi đè "
+        "`training.recovery_predictions` theo `model_version`. Buổi không có hiệp tính tải → `predictions: []`, "
+        "`model_version: null`. Buổi còn `in_progress` → 409 `conflict`; AI lỗi → 503 `service_unavailable`."
+    ),
+)
+async def predict_recovery(
+    session_id: uuid.UUID, current: CurrentUser = Depends(OWN), db: AsyncSession = Depends(get_db)
+) -> PredictRecoveryResponse:
+    return await recovery_service.predict_for_session(db, current.id, session_id)
 
 
 # --- Bài trong buổi ---

@@ -1,15 +1,15 @@
 """Model buổi tập & set/rep — khớp database/postgresql/schemas/06_training.sql."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, Numeric, SmallInteger, String, Text, text
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Integer, Numeric, SmallInteger, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 from app.models.common import pg_enum
-from app.models.enums import AddedVia, LogSource, SessionStatus, SetType
+from app.models.enums import AddedVia, LogSource, PlanStatus, ScheduleStatus, SessionStatus, SetType
 
 SCHEMA = "training"
 NOW = text("now()")
@@ -89,3 +89,106 @@ class SetRepEvent(Base):
     max_joint_angle_deg: Mapped[float | None] = mapped_column(Numeric(5, 2, asdecimal=False))
     is_full_rom: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class WorkoutPlan(Base):
+    __tablename__ = "workout_plans"
+    __table_args__ = {"schema": SCHEMA}
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    # NULL = giáo án mẫu của hệ thống.
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id", ondelete="CASCADE")
+    )
+    source_plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("training.workout_plans.id", ondelete="SET NULL")
+    )
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    goal_type_id: Mapped[int | None] = mapped_column(SmallInteger, ForeignKey("body.fitness_goal_types.id"))
+    difficulty_level_id: Mapped[int | None] = mapped_column(SmallInteger)
+    duration_weeks: Mapped[int | None] = mapped_column(SmallInteger)
+    status: Mapped[PlanStatus] = mapped_column(
+        pg_enum(PlanStatus, "plan_status", SCHEMA), nullable=False, server_default=text("'draft'")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class WorkoutPlanDay(Base):
+    __tablename__ = "workout_plan_days"
+    __table_args__ = {"schema": SCHEMA}
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("training.workout_plans.id", ondelete="CASCADE"), nullable=False
+    )
+    day_no: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class WorkoutPlanExercise(Base):
+    __tablename__ = "workout_plan_exercises"
+    __table_args__ = {"schema": SCHEMA}
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    plan_day_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("training.workout_plan_days.id", ondelete="CASCADE"), nullable=False
+    )
+    exercise_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    order_no: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    target_sets: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    target_reps_min: Mapped[int | None] = mapped_column(SmallInteger)
+    target_reps_max: Mapped[int | None] = mapped_column(SmallInteger)
+    target_duration_seconds: Mapped[int | None] = mapped_column(SmallInteger)
+    target_weight_kg: Mapped[float | None] = mapped_column(Numeric(6, 2, asdecimal=False))
+    target_rpe: Mapped[float | None] = mapped_column(Numeric(3, 1, asdecimal=False))
+    rest_seconds: Mapped[int | None] = mapped_column(SmallInteger)
+    tempo_eccentric_s: Mapped[int | None] = mapped_column(SmallInteger)
+    tempo_pause_bottom_s: Mapped[int | None] = mapped_column(SmallInteger)
+    tempo_concentric_s: Mapped[int | None] = mapped_column(SmallInteger)
+    tempo_pause_top_s: Mapped[int | None] = mapped_column(SmallInteger)
+    notes: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class ScheduledWorkout(Base):
+    __tablename__ = "scheduled_workouts"
+    __table_args__ = {"schema": SCHEMA}
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id", ondelete="CASCADE"), nullable=False
+    )
+    # NULL = buổi tự do (chỉ có title).
+    plan_day_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("training.workout_plan_days.id", ondelete="CASCADE")
+    )
+    scheduled_date: Mapped[date] = mapped_column(Date, nullable=False)
+    title: Mapped[str | None] = mapped_column(String(150))
+    status: Mapped[ScheduleStatus] = mapped_column(
+        pg_enum(ScheduleStatus, "schedule_status", SCHEMA), nullable=False, server_default=text("'planned'")
+    )
+    recovery_warning_ack_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class RecoveryPrediction(Base):
+    __tablename__ = "recovery_predictions"
+    __table_args__ = {"schema": SCHEMA}
+
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("training.workout_sessions.id", ondelete="CASCADE"), primary_key=True
+    )
+    muscle_group_id: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    model_version: Mapped[str] = mapped_column(String(50), primary_key=True)
+    fatigue_score: Mapped[float] = mapped_column(Numeric(5, 2, asdecimal=False), nullable=False)
+    recovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    predicted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
