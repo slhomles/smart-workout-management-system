@@ -12,12 +12,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements-ml.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-ml.txt
 
 # Application code
 COPY . .
 
 EXPOSE 8001
 
-CMD ["python", "src/app.py"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
