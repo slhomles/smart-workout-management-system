@@ -11,6 +11,7 @@ Lệnh (gửi trong group cho bot chung, hoặc nhắn riêng bot của bạn):
   /status                   flow đang chạy, hàng đợi, kết quả gần nhất
   /timeline [module]        thời gian đi đâu: từng iteration, từng task, bước chậm nhất, việc đang làm
   /stop <module>            dừng flow đang chạy hoặc bỏ khỏi hàng đợi
+  /merge <module>           đưa module ĐÃ duyệt vào main (gộp main, PR, chờ CI, merge); thử lại sau "chưa merge"
   /answer <module> <nội dung>  trả lời câu hỏi của agent (flow đang bị chặn sẽ chạy tiếp)
   /owner <module> <thành viên> đổi người phụ trách module (key trong team.json)
   /auto [on|off]            bật/tắt tự xếp hàng các module chưa chạy (mặc định bật)
@@ -51,7 +52,8 @@ MODULES_FILE = HERE / "modules.json"
 DOCX = REPO / "Mô tả dự án.docx"
 SPEC_RE = re.compile(r"<<<SPEC\s*\n(.*?)\n\s*SPEC>>>", re.S)
 EXIT_TEXT = {0: "✅ xong", 1: "❌ lỗi", 2: "⛔ bị chặn, chờ trả lời", 3: "🧱 kẹt",
-             4: "⌛ hết iteration", 5: "❌ môi trường chưa sẵn sàng", -1: "⏹ đã dừng"}
+             4: "⌛ hết iteration", 5: "❌ môi trường chưa sẵn sàng", 6: "⚠️ xong, chưa vào main",
+             -1: "⏹ đã dừng"}
 HELP = __doc__.split("Lệnh", 1)[1].split("Chỉ nhận", 1)[0]
 
 
@@ -206,6 +208,7 @@ class Bot:
         handler = {
             "/start": self.cmd_help, "/help": self.cmd_help, "/modules": self.cmd_modules,
             "/run": self.cmd_run, "/status": self.cmd_status, "/timeline": self.cmd_timeline, "/stop": self.cmd_stop,
+            "/merge": self.cmd_merge,
             "/answer": self.cmd_answer, "/owner": self.cmd_owner, "/auto": self.cmd_auto,
         }.get(cmd)
         if not handler:
@@ -375,6 +378,25 @@ class Bot:
         self.announce(owner, f"⏹ {esc(self.name(who))} đã dừng <b>[{key}]</b>. "
                       f"Chạy lại bằng <code>/run {key}</code> (tiếp tục từ chỗ dừng).")
 
+    def cmd_merge(self, token, chat_id, who, args) -> None:
+        key = self.module_arg(token, chat_id, args)
+        if not key:
+            return
+        if rf.read_json(self.root / key / "state" / "state.json", {}).get("status") != "approved":
+            self.reply(token, chat_id, f"<code>{key}</code> chưa được orchestrator duyệt nên chưa đưa vào main được.")
+            return
+        with self.lock:
+            cur = self.state.get("current")
+            if (cur and cur["module"] == key) or any(j["module"] == key for j in self.state["queue"]):
+                self.reply(token, chat_id, f"<code>{key}</code> đang chạy hoặc đã có trong hàng đợi.")
+                return
+            self.state["queue"].insert(0, {"module": key, "by": who, "respec": False, "resume": False,
+                                           "merge_only": True})
+            self.save()
+        owner = load_modules()["modules"][key].get("owner")
+        self.announce(owner, f"🔀 {esc(self.name(who))} đưa <b>[{key}]</b> lên đầu hàng đợi để vào main "
+                      "(gộp main, chạy lại cổng, PR, chờ CI, merge).")
+
     def cmd_answer(self, token, chat_id, who, args) -> None:
         key = self.module_arg(token, chat_id, args)
         if not key:
@@ -543,6 +565,8 @@ class Bot:
                 cmd.append("--ask-permissions")
             if job.get("resume"):
                 cmd.append("--resume-blocked")
+            if job.get("merge_only"):
+                cmd.append("--merge-only")
             cmd += shlex.split(self.args.runner_args, posix=os.name != "nt") if self.args.runner_args else []
             console = (self.root / key / "runner-console.log")
             console.parent.mkdir(parents=True, exist_ok=True)

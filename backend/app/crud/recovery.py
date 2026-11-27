@@ -1,0 +1,189 @@
+"""Truy vấn phục hồi cơ: view training.v_muscle_recovery_status và bảng training.recovery_predictions.
+
+Đọc bằng `text()`: view tính sẵn % hồi phục và trạng thái (doc 05 §2.2: không tự tính lại), còn
+catalog.muscle_groups là bảng danh mục chỉ đọc của module khác. Ghi dự đoán bằng upsert; không commit
+(ranh giới transaction ở service).
+"""
+
+import uuid
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy import func, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.training import RecoveryPrediction
+from app.schemas.recovery import MuscleRecoveryListQuery, RecoveryPredictionListQuery, RecoveryPredictionOutput
+from app.schemas.schedule import CreateScheduledWorkoutRequest
+
+# Vị trí sau phần tử cuối của trang trước, theo thứ tự `trained_at DESC, session_id DESC, muscle_group_id ASC`.
+PredictionPosition = tuple[datetime, uuid.UUID, int]
+
+_MUSCLE_RECOVERY_SELECT = """
+SELECT muscle_group_id, muscle_code, muscle_name, heatmap_region_key, recovery_status, recovery_pct,
+       remaining_hours, fatigue_score, last_trained_at, recovered_at, last_session_id, model_version
+FROM training.v_muscle_recovery_status
+WHERE user_id = :user_id
+"""
+
+# Mỗi (buổi, nhóm cơ) chỉ giữ bản chạy dự đoán gần nhất; model_version phá hoà để kết quả ổn định.
+_LATEST_PREDICTIONS_CTE = """
+WITH latest AS (
+    SELECT DISTINCT ON (rp.session_id, rp.muscle_group_id)
+        rp.session_id, s.name AS session_name, coalesce(s.ended_at, s.started_at) AS trained_at,
+        rp.muscle_group_id, mg.code AS muscle_code, mg.name AS muscle_name,
+        rp.model_version, rp.fatigue_score, rp.recovered_at, rp.predicted_at
+    FROM training.recovery_predictions rp
+    JOIN training.workout_sessions s
+      ON s.id = rp.session_id AND s.user_id = :user_id AND s.deleted_at IS NULL
+    JOIN catalog.muscle_groups mg ON mg.id = rp.muscle_group_id
+    WHERE {muscle_filter}
+    ORDER BY rp.session_id, rp.muscle_group_id, rp.predicted_at DESC, rp.model_version DESC
+)
+SELECT * FROM latest
+"""
+
+# Keyset cho thứ tự hỗn hợp DESC/DESC/ASC: không gộp được thành một phép so sánh tuple.
+_PREDICTION_AFTER = """
+WHERE trained_at < :c_at
+   OR (trained_at = :c_at AND session_id < :c_session)
+   OR (trained_at = :c_at AND session_id = :c_session AND muscle_group_id > :c_muscle)
+"""
+
+
+async def list_muscle_recovery(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    query: MuscleRecoveryListQuery,
+    after_muscle_group_id: int | None,
+) -> list[Any]:
+    """Một trang Heatmap của user, sắp `muscle_group_id ASC`.
+
+    Lấy `limit + 1` dòng để tầng service biết còn trang sau mà không cần COUNT(*).
+    """
+    sql = _MUSCLE_RECOVERY_SELECT
+    params: dict[str, Any] = {"user_id": user_id, "limit": query.limit + 1}
+    if query.recovery_status is not None:
+        sql += " AND recovery_status = :recovery_status"
+        params["recovery_status"] = query.recovery_status
+    if after_muscle_group_id is not None:
+        sql += " AND muscle_group_id > :after"
+        params["after"] = after_muscle_group_id
+    sql += " ORDER BY muscle_group_id LIMIT :limit"
+    return list((await db.execute(text(sql), params)).mappings().all())
+
+
+async def list_prediction_history(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    query: RecoveryPredictionListQuery,
+    after: PredictionPosition | None,
+) -> list[Any]:
+    """Một trang lịch sử dự đoán của user (buổi chưa xoá), mới nhất trước; lấy `limit + 1` dòng."""
+    params: dict[str, Any] = {"user_id": user_id, "limit": query.limit + 1}
+    muscle_filter = "TRUE"
+    if query.muscle_group_id is not None:
+        muscle_filter = "rp.muscle_group_id = :muscle_group_id"
+        params["muscle_group_id"] = query.muscle_group_id
+    sql = _LATEST_PREDICTIONS_CTE.format(muscle_filter=muscle_filter)
+    if after is not None:
+        sql += _PREDICTION_AFTER
+        params["c_at"], params["c_session"], params["c_muscle"] = after
+    sql += " ORDER BY trained_at DESC, session_id DESC, muscle_group_id ASC LIMIT :limit"
+    return list((await db.execute(text(sql), params)).mappings().all())
+
+
+# Tải của buổi kèm thời gian phục hồi tham chiếu của nhóm cơ (đầu vào model phục hồi, spec §6 ý 9).
+_SESSION_LOADS_SELECT = """
+SELECT l.muscle_group_id, l.direct_sets, l.effective_sets, l.total_reps, l.weighted_volume_kg, l.avg_rpe,
+       mg.base_recovery_hours
+FROM training.v_session_muscle_load l
+JOIN catalog.muscle_groups mg ON mg.id = l.muscle_group_id
+WHERE l.session_id = :session_id
+ORDER BY l.muscle_group_id
+"""
+
+_SESSION_PREDICTIONS_SELECT = """
+SELECT rp.session_id, s.name AS session_name, coalesce(s.ended_at, s.started_at) AS trained_at,
+       rp.muscle_group_id, mg.code AS muscle_code, mg.name AS muscle_name,
+       rp.model_version, rp.fatigue_score, rp.recovered_at, rp.predicted_at
+FROM training.recovery_predictions rp
+JOIN training.workout_sessions s ON s.id = rp.session_id
+JOIN catalog.muscle_groups mg ON mg.id = rp.muscle_group_id
+WHERE rp.session_id = :session_id AND rp.model_version = :model_version
+ORDER BY rp.muscle_group_id
+"""
+
+
+async def list_session_muscle_loads(db: AsyncSession, session_id: uuid.UUID) -> list[Any]:
+    """Tải theo nhóm cơ của một buổi (view training.v_session_muscle_load), sắp `muscle_group_id ASC`."""
+    rows = await db.execute(text(_SESSION_LOADS_SELECT), {"session_id": session_id})
+    return list(rows.mappings().all())
+
+
+async def upsert_predictions(db: AsyncSession, session_id: uuid.UUID, output: RecoveryPredictionOutput) -> None:
+    """Ghi các dự đoán của một buổi cho `output.model_version`; chạy lại cùng phiên bản thì ghi đè. Không commit.
+
+    `muscle_group_id` trong `output` phải không trùng (service kiểm tra): một câu INSERT nhiều dòng
+    không được cập nhật cùng một khoá hai lần.
+    """
+    if not output.predictions:
+        return
+    stmt = pg_insert(RecoveryPrediction).values(
+        [
+            {
+                "session_id": session_id,
+                "muscle_group_id": prediction.muscle_group_id,
+                "model_version": output.model_version,
+                "fatigue_score": prediction.fatigue_score,
+                "recovered_at": prediction.recovered_at,
+            }
+            for prediction in output.predictions
+        ]
+    )
+    await db.execute(
+        stmt.on_conflict_do_update(
+            index_elements=["session_id", "muscle_group_id", "model_version"],
+            set_={
+                "fatigue_score": stmt.excluded.fatigue_score,
+                "recovered_at": stmt.excluded.recovered_at,
+                "predicted_at": func.now(),
+            },
+        )
+    )
+
+
+async def list_session_predictions(db: AsyncSession, session_id: uuid.UUID, model_version: str) -> list[Any]:
+    """Các dự đoán của một buổi theo một `model_version`, sắp `muscle_group_id ASC` (khung KEYS-PRED)."""
+    params = {"session_id": session_id, "model_version": model_version}
+    return list((await db.execute(text(_SESSION_PREDICTIONS_SELECT), params)).mappings().all())
+
+
+# Nhóm cơ đích = nhóm `primary` của các bài trong buổi giáo án (spec §6 ý 6; nhóm secondary chưa xét, Q10).
+# "Chưa hồi phục cho ngày D" = còn mệt tại đầu ngày D theo múi giờ user, hoặc tại hiện tại nếu D là hôm nay.
+# View chỉ có một dòng cho mỗi (user, nhóm cơ) nên IN (...) đã cho mỗi nhóm một dòng.
+_UNRECOVERED_TARGET_MUSCLES_SELECT = """
+SELECT r.muscle_group_id, r.muscle_name, r.recovered_at
+FROM training.v_muscle_recovery_status r
+WHERE r.user_id = :user_id
+  AND r.muscle_group_id IN (
+      SELECT em.muscle_group_id
+      FROM training.workout_plan_exercises pe
+      JOIN catalog.exercise_muscles em ON em.exercise_id = pe.exercise_id AND em.role = 'primary'
+      WHERE pe.plan_day_id = :plan_day_id
+  )
+  AND r.recovered_at > greatest(now(), CAST(:scheduled_date AS date)::timestamp AT TIME ZONE :tz)
+ORDER BY r.muscle_group_id
+"""
+
+
+async def list_unrecovered_target_muscles(
+    db: AsyncSession, user_id: uuid.UUID, req: CreateScheduledWorkoutRequest, tz: str
+) -> list[Any]:
+    """Nhóm cơ đích của `req.plan_day_id` chưa hồi phục vào `req.scheduled_date` (múi giờ `tz`).
+
+    Trả (muscle_group_id, muscle_name, recovered_at), sắp `muscle_group_id ASC`; rỗng nếu không có buổi giáo án.
+    """
+    params = {"user_id": user_id, "plan_day_id": req.plan_day_id, "scheduled_date": req.scheduled_date, "tz": tz}
+    return list((await db.execute(text(_UNRECOVERED_TARGET_MUSCLES_SELECT), params)).mappings().all())
