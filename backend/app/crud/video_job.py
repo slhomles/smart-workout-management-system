@@ -5,6 +5,7 @@ Ngữ cảnh hiệp/buổi/bài lấy từ view `ai.v_pose_analysis_details` (đ
 """
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import text
@@ -12,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ai import PoseAnalysis, VideoAnalysisJob
 from app.models.enums import AnalysisMode
+from app.schemas.video_job import VideoJobListQuery
 
 _AVAILABLE_VIDEO_SQL = """
 SELECT id, uploaded_by_user_id
@@ -63,3 +65,26 @@ async def get_job(db: AsyncSession, user_id: uuid.UUID, job_id: uuid.UUID) -> An
     """Một job của user kèm ngữ cảnh hiệp/bài; None nếu không có hoặc buổi đã xoá mềm."""
     sql = JOB_SELECT + " AND j.id = :job_id"
     return (await db.execute(text(sql), {"user_id": user_id, "job_id": job_id})).mappings().first()
+
+
+async def list_jobs(
+    db: AsyncSession, user_id: uuid.UUID, query: VideoJobListQuery, after: tuple[datetime, uuid.UUID] | None
+) -> list[Any]:
+    """Job của user, mới nhất trước (created_at DESC, id DESC), sau vị trí keyset `after`.
+
+    Lấy `query.limit + 1` dòng để tầng trên biết còn trang sau mà không cần COUNT(*).
+    """
+    sql = JOB_SELECT
+    params: dict[str, Any] = {"user_id": user_id, "limit": query.limit + 1}
+    if query.status is not None:
+        sql += " AND j.status = CAST(:status AS util.job_status)"
+        params["status"] = query.status.value
+    if query.set_id is not None:
+        sql += " AND d.set_id = :set_id"
+        params["set_id"] = query.set_id
+    if after is not None:
+        # So sánh cả tuple: các job tạo trong cùng transaction có thể trùng created_at.
+        sql += " AND (j.created_at, j.id) < (:after_created_at, :after_id)"
+        params["after_created_at"], params["after_id"] = after
+    sql += " ORDER BY j.created_at DESC, j.id DESC LIMIT :limit"
+    return list((await db.execute(text(sql), params)).mappings().all())

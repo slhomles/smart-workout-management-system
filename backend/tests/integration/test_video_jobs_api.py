@@ -6,12 +6,17 @@ request không cuốn theo dữ liệu đã chuẩn bị; cuối test fixture v�
 """
 
 import uuid
+from datetime import datetime
 from typing import Any
 
+import httpx
 import pytest
 from httpx import AsyncClient, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import get_settings
+from app.schemas.base import encode_cursor
 
 BASE = "/api/v1/ai/video-jobs"
 SQUAT_SLUG = "barbell-back-squat"
@@ -333,3 +338,182 @@ async def test_create_job_set_not_owned_returns_not_found(client: AsyncClient, a
 
     assert all(e["details"] == [] for e in errors)
     assert await count_ai_rows(db) == before
+
+
+# --- Helper cho GET /ai/video-jobs ---
+async def get_jobs(client: AsyncClient, headers: dict[str, str], params: dict[str, Any] | None = None) -> Response:
+    """GET danh sách job video với query `params`."""
+    return await client.get(BASE, params=params or {}, headers=headers)
+
+
+def assert_page(res: Response) -> dict[str, Any]:
+    """200 + body đúng 2 key data/pagination, mỗi phần tử đúng KEYS-VJ; trả body."""
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert set(body) == {"data", "pagination"}
+    assert set(body["pagination"]) == {"next_cursor", "has_more"}
+    assert all(set(item) == KEYS_VJ for item in body["data"]), body
+    return body
+
+
+def _ids(items: list[dict[str, Any]]) -> set[str]:
+    return {item["id"] for item in items}
+
+
+def assert_newest_first(items: list[dict[str, Any]]) -> None:
+    """Dãy (created_at, id) không tăng; so sánh theo giá trị (datetime, UUID) như ORDER BY của DB."""
+    keys = [(datetime.fromisoformat(item["created_at"]), uuid.UUID(item["id"])) for item in items]
+    assert keys == sorted(keys, reverse=True), keys
+
+
+async def _demo_jobs(
+    client: AsyncClient, auth_headers, db: AsyncSession, set_keys: tuple[int, ...]
+) -> tuple[dict[str, str], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Demo POST J(S<k>, V_DEMO) cho từng k (0 = S1, 1 = S2); trả (headers, [S1, S2], body các job)."""
+    sets = await squat_sets(db)
+    v_demo = await make_video(db, await persona_user_id(db, "demo"))
+    headers = await auth_headers("demo")
+    jobs = [assert_job_created(await post_job(client, headers, sets[k]["set_id"], v_demo)) for k in set_keys]
+    return headers, sets, jobs
+
+
+# --- SRT-06 ---
+@pytest.mark.tc("SRT-06")
+async def test_list_jobs_own_jobs_returns_post_bodies_newest_first(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    headers, _, (job_a, job_b) = await _demo_jobs(client, auth_headers, db, (0, 1))
+
+    body = assert_page(await get_jobs(client, headers))
+
+    assert body["pagination"] == {"next_cursor": None, "has_more": False}
+    assert len(body["data"]) == 2
+    assert _ids(body["data"]) == {job_a["id"], job_b["id"]}
+    by_id = {item["id"]: item for item in body["data"]}
+    assert by_id[job_a["id"]] == job_a
+    assert by_id[job_b["id"]] == job_b
+    assert_newest_first(body["data"])
+
+
+# --- SRT-08 ---
+@pytest.mark.tc("SRT-08")
+async def test_list_jobs_limit_and_next_cursor_pages_through_all(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    headers, _, jobs = await _demo_jobs(client, auth_headers, db, (0, 1, 0))
+
+    first = assert_page(await get_jobs(client, headers, {"limit": 2}))
+    assert len(first["data"]) == 2
+    assert first["pagination"]["has_more"] is True
+    assert isinstance(first["pagination"]["next_cursor"], str)
+
+    params = {"limit": 2, "cursor": first["pagination"]["next_cursor"]}
+    second = assert_page(await get_jobs(client, headers, params))
+    assert len(second["data"]) == 1
+    assert second["pagination"] == {"next_cursor": None, "has_more": False}
+
+    merged = first["data"] + second["data"]
+    assert len(_ids(merged)) == 3
+    assert _ids(merged) == _ids(jobs)
+    assert_newest_first(merged)
+
+
+# --- SRT-09 ---
+@pytest.mark.tc("SRT-09")
+async def test_list_jobs_other_users_and_soft_deleted_session_are_hidden(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    headers, sets, (_, job_b) = await _demo_jobs(client, auth_headers, db, (0, 1))
+
+    for persona in ("power", "admin"):
+        body = assert_page(await get_jobs(client, await auth_headers(persona)))
+        assert body["data"] == [], persona
+        assert body["pagination"]["has_more"] is False
+
+    await db.execute(
+        text("UPDATE training.workout_sessions SET deleted_at = now() WHERE id = :id"), {"id": sets[0]["session_id"]}
+    )
+    await db.commit()
+    body = assert_page(await get_jobs(client, headers))
+    assert _ids(body["data"]) == {job_b["id"]}
+
+
+# --- SRT-10 ---
+@pytest.mark.tc("SRT-10")
+async def test_list_jobs_invalid_query_returns_validation_error(client: AsyncClient, auth_headers):
+    cases: list[tuple[dict[str, Any], str]] = [
+        ({"limit": 0}, "limit"),
+        ({"limit": 101}, "limit"),
+        ({"cursor": "!!!khong-phai-cursor"}, "cursor"),
+        ({"cursor": encode_cursor({"foo": 1})}, "cursor"),
+        ({"status": "done"}, "status"),
+        ({"set_id": "abc"}, "set_id"),
+    ]
+    headers = await auth_headers("demo")
+    for params, field in cases:
+        error = assert_error(await get_jobs(client, headers, params), 422, "validation_error")
+        assert field in [d["field"] for d in error["details"]], (params, error)
+
+
+# --- SRT-11 ---
+@pytest.mark.tc("SRT-11")
+async def test_jobs_endpoints_missing_or_bad_token_returns_token_invalid(client: AsyncClient, db: AsyncSession):
+    s1 = (await squat_sets(db))[0]["set_id"]
+    v_demo = await make_video(db, await persona_user_id(db, "demo"))
+    before = await count_ai_rows(db)
+    for headers in ({}, {"Authorization": "Bearer khong-phai-jwt"}):
+        for res in (await post_job(client, headers, s1, v_demo), await get_jobs(client, headers)):
+            assert_error(res, 401, "token_invalid")
+            assert res.headers.get("WWW-Authenticate") == "Bearer"
+    assert (await count_ai_rows(db))[1] == before[1]
+
+
+# --- SRT-12 ---
+@pytest.mark.tc("SRT-12")
+async def test_jobs_endpoints_without_ai_use_returns_permission_denied(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    s1 = (await squat_sets(db))[0]["set_id"]
+    v_demo = await make_video(db, await persona_user_id(db, "demo"))
+    editor = await auth_headers("editor")
+    before = await count_ai_rows(db)
+
+    assert_error(await post_job(client, editor, s1, v_demo), 403, "permission_denied")
+    assert_error(await get_jobs(client, editor), 403, "permission_denied")
+    assert (await count_ai_rows(db))[1] == before[1]
+
+
+@pytest.mark.tc("SRT-12")
+async def test_jobs_endpoints_trainer_with_active_user_role_succeeds(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    set_id = await trainer_set(db)
+    v_trainer = await make_video(db, await persona_user_id(db, "trainer"))
+    headers = await auth_headers("trainer")
+
+    created = assert_job_created(await post_job(client, headers, set_id, v_trainer))
+    assert created["set_id"] == set_id
+    body = assert_page(await get_jobs(client, headers))
+    assert _ids(body["data"]) == {created["id"]}
+
+
+# --- SRT-13 ---
+@pytest.mark.tc("SRT-13")
+async def test_jobs_endpoints_make_no_outbound_http_call(
+    client: AsyncClient, auth_headers, db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+):
+    outbound_calls: list[httpx.Request] = []
+
+    async def _refuse(self: httpx.AsyncHTTPTransport, request: httpx.Request) -> httpx.Response:
+        outbound_calls.append(request)
+        raise httpx.ConnectError("mạng ngoài bị chặn trong test", request=request)
+
+    monkeypatch.setattr(get_settings(), "AI_SERVICE_URL", "http://127.0.0.1:9")
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", _refuse)
+
+    headers, _, (job,) = await _demo_jobs(client, auth_headers, db, (0,))
+    body = assert_page(await get_jobs(client, headers))
+
+    listed = {item["id"]: item for item in body["data"]}
+    assert listed[job["id"]]["status"] == "queued"
+    assert len(outbound_calls) == 0

@@ -28,6 +28,15 @@ class CreateVideoJobRequest(BaseModel):
     )
 
 
+class VideoJobListQuery(BaseModel):
+    """Bộ lọc + phân trang cursor của GET /ai/video-jobs (giới hạn đã kiểm ở Query của endpoint)."""
+
+    status: JobStatus | None = None
+    set_id: int | None = None
+    limit: int = 20
+    cursor: str | None = None
+
+
 class VideoJobResultRequest(BaseModel):
     """Kết quả worker gửi về khi phân tích video xong."""
 

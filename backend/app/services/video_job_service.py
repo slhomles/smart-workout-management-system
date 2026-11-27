@@ -13,8 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import DataValidationError
 from app.crud import video_job as crud
-from app.schemas.base import ErrorDetail
-from app.schemas.video_job import CreateVideoJobRequest, VideoJobResponse
+from app.schemas.base import ErrorDetail, Page, build_page, decode_keyset_cursor
+from app.schemas.video_job import CreateVideoJobRequest, VideoJobListQuery, VideoJobResponse
 from app.services import workout_ai_service
 
 # Cột model_* NOT NULL nên cần giá trị khi job còn chờ; worker ghi đè khi báo kết quả (spec §6 ý 6, Q8).
@@ -62,3 +62,15 @@ async def create_job(db: AsyncSession, user_id: uuid.UUID, req: CreateVideoJobRe
 
     # Đọc lại qua view để có ngữ cảnh hiệp/bài và các giá trị mặc định do DB sinh (queued_at, status...).
     return _job_response(await crud.get_job(db, user_id, job.id))
+
+
+def _job_cursor(row: Any) -> dict[str, Any]:
+    # isoformat() giữ microsecond + múi giờ, khớp định dạng decode_keyset_cursor đọc lại.
+    return {"created_at": row["created_at"].isoformat(), "id": str(row["id"])}
+
+
+async def list_jobs(db: AsyncSession, user_id: uuid.UUID, query: VideoJobListQuery) -> Page[VideoJobResponse]:
+    """Trang job video của user (mới nhất trước), lọc theo trạng thái/hiệp; cursor hỏng → 422."""
+    after = decode_keyset_cursor(query.cursor, "created_at")
+    rows = await crud.list_jobs(db, user_id, query, after)
+    return build_page(rows, query.limit, _job_response, _job_cursor)
