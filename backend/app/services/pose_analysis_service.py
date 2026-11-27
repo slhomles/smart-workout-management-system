@@ -1,6 +1,7 @@
 """
 Nghiệp vụ /ai/pose-analyses (chức năng 5, Option 1A): lưu kết quả phân tích tư thế realtime do
-thiết bị gửi lên. Module không chạy mô hình AI và không gọi ai-services (spec §6 ý 2).
+thiết bị gửi lên và tra cứu lịch sử (cả 1A lẫn 1B). Module không chạy mô hình AI và không gọi
+ai-services (spec §6 ý 2).
 Không ghi bảng training.* (spec §6 ý 5).
 """
 
@@ -15,10 +16,11 @@ from app.core.exceptions import DataValidationError, NotFoundError
 from app.crud import pose_analysis as crud
 from app.models.ai import PoseAnalysis, PostureIssue
 from app.models.enums import AnalysisMode
-from app.schemas.base import ErrorDetail
+from app.schemas.base import ErrorDetail, Page, build_page, decode_keyset_cursor
 from app.schemas.pose_analysis import (
     CreatePoseAnalysisRequest,
     CreatePostureIssueRequest,
+    PoseAnalysisFilter,
     PoseAnalysisResponse,
     PostureIssueSchema,
 )
@@ -98,3 +100,35 @@ async def create_analysis(
     if row is None:  # view lọc cùng điều kiện với _owned_ai_set; chỉ xảy ra nếu buổi vừa bị xoá mềm
         raise NotFoundError(*_SET_NOT_FOUND)
     return (await to_responses(db, [row]))[0]
+
+
+# --- Danh sách ---
+def _list_after(cursor: str | None) -> tuple[datetime, uuid.UUID] | None:
+    # Cursor có thể bị làm giả: decode_keyset_cursor không bắt AttributeError (vd "id": 5) và nhận
+    # datetime không múi giờ; cả hai phải là 422 field `cursor`, không được thành 500.
+    try:
+        after = decode_keyset_cursor(cursor, "created_at")
+    except AttributeError:
+        raise _invalid("cursor", "Cursor không hợp lệ", "invalid_cursor") from None
+    if after is not None and after[0].tzinfo is None:
+        raise _invalid("cursor", "Cursor không hợp lệ", "invalid_cursor")
+    return after
+
+
+def _cursor_of(item: PoseAnalysisResponse) -> dict[str, Any]:
+    return {"created_at": item.created_at.isoformat(), "id": str(item.id)}
+
+
+async def list_analyses(
+    db: AsyncSession, user_id: uuid.UUID, filters: PoseAnalysisFilter
+) -> Page[PoseAnalysisResponse]:
+    """Phân tích của chính user, mới nhất trước, kèm lỗi (spec §6 ý 8); lấy `limit + 1`, không COUNT(*)."""
+    query = crud.AnalysisListQuery(
+        limit=filters.limit + 1,
+        set_id=filters.set_id,
+        exercise_id=filters.exercise_id,
+        mode=filters.mode.value if filters.mode is not None else None,
+        after=_list_after(filters.cursor),
+    )
+    responses = await to_responses(db, await crud.list_analyses(db, user_id, query))
+    return build_page(responses, filters.limit, to_item=lambda item: item, cursor_of=_cursor_of)

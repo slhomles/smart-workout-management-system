@@ -14,6 +14,8 @@ from httpx import AsyncClient, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.schemas.base import encode_cursor
+
 BASE = "/api/v1/ai/pose-analyses"
 KEYS_PA = {
     "id", "set_id", "session_id", "exercise_id", "exercise_name", "mode", "model_name", "model_version",
@@ -189,6 +191,9 @@ class Api:
 
     async def post(self, persona: str, body: dict[str, Any]) -> Response:
         return await self.client.post(BASE, json=body, headers=await self.auth_headers(persona))
+
+    async def get(self, persona: str, params: dict[str, Any] | None = None) -> Response:
+        return await self.client.get(BASE, params=params or {}, headers=await self.auth_headers(persona))
 
 
 @pytest.fixture
@@ -392,3 +397,178 @@ async def test_create_analysis_foreign_and_missing_set_share_message(api: Api):
     foreign = _error(await api.post("demo", _v(api.seed["POWER_SET"])), 404, "exercise_set_not_found")
     missing = _error(await api.post("demo", _v(api.seed["MISSING_SET"])), 404, "exercise_set_not_found")
     assert foreign["message"] == missing["message"]
+
+
+# --- GET danh sách: tiện ích ---
+EMPTY_PAGE = {"data": [], "pagination": {"next_cursor": None, "has_more": False}}
+
+
+def _page(res: Response) -> dict[str, Any]:
+    """200 + đúng Page[PoseAnalysisResponse]: 2 key `data`, `pagination`; mỗi phần tử đúng KEYS-PA."""
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert set(body) == {"data", "pagination"} and set(body["pagination"]) == {"next_cursor", "has_more"}
+    for item in body["data"]:
+        _assert_shape(item)
+    return body
+
+
+def _ids(page: dict[str, Any]) -> set[str]:
+    return {item["id"] for item in page["data"]}
+
+
+def _assert_non_increasing(items: list[dict[str, Any]]) -> None:
+    """Dãy (created_at, id) không tăng: trong một transaction now() không đổi nên không so thứ tự tuyệt đối."""
+    keys = [(datetime.fromisoformat(i["created_at"]), uuid.UUID(i["id"])) for i in items]
+    assert keys == sorted(keys, reverse=True)
+
+
+async def _insert_video_analysis(api: Api) -> str:
+    """Bản `Vd` của POSE-06: phân tích video_server của S3, tạo 1 ngày trước, chèn thẳng qua db."""
+    sql = text(
+        "INSERT INTO ai.pose_analyses (set_id, mode, model_name, model_version, created_at)"
+        " VALUES (:set_id, 'video_server', 'yolov8_pose', '8.2.0', now() - interval '1 day') RETURNING id"
+    )
+    return str(await api.db.scalar(sql, {"set_id": api.seed["S3"]}))
+
+
+async def _create_a_b_vd(api: Api) -> tuple[dict[str, Any], dict[str, Any], str]:
+    a = _created(await api.post("demo", _pose01_body(api.seed)))
+    b = _created(await api.post("demo", _v(api.seed["S2"])))
+    return a, b, await _insert_video_analysis(api)
+
+
+# --- POSE-06: nội dung, thứ tự ---
+@pytest.mark.tc("POSE-06")
+async def test_list_analyses_without_params_returns_own_items_newest_first(api: Api):
+    a, b, vd = await _create_a_b_vd(api)
+    page = _page(await api.get("demo"))
+    assert page["pagination"] == {"next_cursor": None, "has_more": False}
+    data = page["data"]
+    assert len(data) == 3
+    assert {data[0]["id"], data[1]["id"]} == {a["id"], b["id"]}
+    assert data[2]["id"] == vd
+    _assert_non_increasing(data)
+    assert next(item for item in data if item["id"] == a["id"]) == a
+
+    assert _pick(data[2], ("mode", "analyzed_at", "model_name", "overall_score", "correct_form_pct", "issues",
+                           "issue_count", "video_job_status", "result_video_media_id", "exercise_id",
+                           "session_id")) == {
+        "mode": "video_server", "analyzed_at": None, "model_name": "yolov8_pose", "overall_score": None,
+        "correct_form_pct": None, "issues": [], "issue_count": 0, "video_job_status": None,
+        "result_video_media_id": None, "exercise_id": api.seed["SQUAT_ID"], "session_id": api.seed["SESS3"],
+    }
+
+
+# --- POSE-07: lọc, job video ---
+async def _create_pose07_data(api: Api) -> dict[str, str]:
+    a, b, vd = await _create_a_b_vd(api)
+    c = _created(await api.post("demo", _v(api.seed["BENCH"])))
+    return {"A": a["id"], "B": b["id"], "Vd": vd, "C": c["id"]}
+
+
+# (query, giá trị là khoá seed hoặc giá trị thô; tập khoá phân tích mong đợi)
+LIST_FILTERS: list[tuple[dict[str, str], set[str]]] = [
+    ({"set_id": "S1"}, {"A"}),
+    ({"exercise_id": "BENCH_ID"}, {"C"}),
+    ({"exercise_id": "SQUAT_ID"}, {"A", "B", "Vd"}),
+    ({"mode": "video_server"}, {"Vd"}),
+    ({"mode": "realtime_edge"}, {"A", "B", "C"}),
+    ({"mode": "realtime_edge", "exercise_id": "SQUAT_ID"}, {"A", "B"}),
+    ({"set_id": "POWER_SET"}, set()),
+]
+
+
+@pytest.mark.tc("POSE-07")
+async def test_list_analyses_filters_return_matching_items(api: Api):
+    ids = await _create_pose07_data(api)
+    actual = []
+    for query, _ in LIST_FILTERS:
+        params = {name: api.seed.get(value, value) for name, value in query.items()}
+        actual.append(_ids(_page(await api.get("demo", params))))
+    assert actual == [{ids[key] for key in keys} for _, keys in LIST_FILTERS]
+
+
+@pytest.mark.tc("POSE-07")
+async def test_list_analyses_video_job_reports_queued_status(api: Api):
+    ids = await _create_pose07_data(api)
+    media_sql = text("SELECT id FROM media.media_files WHERE object_key = :key")
+    media_id = await api.db.scalar(media_sql, {"key": "users/demo/progress/w00-front.jpg"})
+    assert media_id is not None
+    job_sql = text("INSERT INTO ai.video_analysis_jobs (pose_analysis_id, source_video_media_id) VALUES (:pa, :media)")
+    await api.db.execute(job_sql, {"pa": ids["Vd"], "media": media_id})
+
+    page = _page(await api.get("demo", {"mode": "video_server"}))
+    assert [_pick(item, ("id", "video_job_status", "result_video_media_id")) for item in page["data"]] == [
+        {"id": ids["Vd"], "video_job_status": "queued", "result_video_media_id": None},
+    ]
+
+
+# --- POSE-08: phân trang ---
+@pytest.mark.tc("POSE-08")
+async def test_list_analyses_limit_and_cursor_paginate_without_duplicates(api: Api):
+    created = {_created(await api.post("demo", _v(api.seed[key])))["id"] for key in ("S1", "S2", "S3")}
+    first = _page(await api.get("demo", {"limit": 2}))
+    cursor = first["pagination"]["next_cursor"]
+    assert (len(first["data"]), first["pagination"]["has_more"], type(cursor)) == (2, True, str)
+
+    second = _page(await api.get("demo", {"limit": 2, "cursor": cursor}))
+    assert (len(second["data"]), second["pagination"]) == (1, {"next_cursor": None, "has_more": False})
+
+    items = first["data"] + second["data"]
+    ids = [item["id"] for item in items]
+    assert (len(ids), set(ids)) == (3, created)  # 3 phần tử và 3 id khác nhau = không trùng
+    _assert_non_increasing(items)
+
+
+# --- POSE-09: cô lập dữ liệu, xoá mềm ---
+@pytest.mark.tc("POSE-09")
+@pytest.mark.parametrize("persona", ["power", "newbie", "admin"])
+async def test_list_analyses_other_user_sees_no_demo_items(api: Api, persona: str):
+    for key in ("S1", "S2"):
+        _created(await api.post("demo", _v(api.seed[key])))
+    assert _page(await api.get(persona)) == EMPTY_PAGE
+
+
+@pytest.mark.tc("POSE-09")
+async def test_list_analyses_soft_deleted_session_hides_its_items(api: Api):
+    _created(await api.post("demo", _v(api.seed["S1"])))
+    b = _created(await api.post("demo", _v(api.seed["S2"])))
+    await _soft_delete_s1_session(api)
+    assert _ids(_page(await api.get("demo"))) == {b["id"]}
+
+
+# --- POSE-10: lỗi tham số ---
+# (query, field phải có trong details)
+INVALID_QUERIES: list[tuple[dict[str, Any], str]] = [
+    ({"limit": 0}, "limit"),
+    ({"limit": 101}, "limit"),
+    ({"cursor": "!!!khong-phai-cursor"}, "cursor"),
+    ({"cursor": encode_cursor({"foo": 1})}, "cursor"),
+    ({"mode": "offline"}, "mode"),
+    ({"set_id": "abc"}, "set_id"),
+    ({"exercise_id": "abc"}, "exercise_id"),
+]
+
+
+@pytest.mark.tc("POSE-10")
+@pytest.mark.parametrize("case", INVALID_QUERIES, ids=[f"{n + 1}-{next(iter(q))}" for n, (q, _) in enumerate(INVALID_QUERIES)])
+async def test_list_analyses_invalid_query_returns_422(api: Api, case: tuple[dict[str, Any], str]):
+    params, field = case
+    error = _error(await api.get("demo", params), 422, "validation_error")
+    assert field in _fields(error), error
+
+
+# Cursor giả mạo đúng dạng JSON nhưng sai kiểu: phải là 422 `cursor`, không 500.
+FORGED_CURSORS: list[dict[str, Any]] = [
+    {"created_at": "2026-11-27T03:20:41+00:00", "id": 5},
+    {"created_at": "2026-11-27T03:20:41", "id": "3f1c2a8e-5b7d-4e2a-9c1f-0a6b8d4e2f10"},
+    {"created_at": 5, "id": "3f1c2a8e-5b7d-4e2a-9c1f-0a6b8d4e2f10"},
+]
+
+
+@pytest.mark.tc("POSE-10")
+@pytest.mark.parametrize("values", FORGED_CURSORS, ids=["id-int", "naive-datetime", "datetime-int"])
+async def test_list_analyses_forged_cursor_returns_422(api: Api, values: dict[str, Any]):
+    error = _error(await api.get("demo", {"cursor": encode_cursor(values)}), 422, "validation_error")
+    assert _fields(error) == ["cursor"], error

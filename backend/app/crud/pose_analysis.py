@@ -6,6 +6,7 @@ crud/model của module khác (spec posture-correction §6 ý 3). Số lỗi l�
 
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -72,6 +73,42 @@ async def get_analysis(db: AsyncSession, user_id: uuid.UUID, analysis_id: uuid.U
     sql = DETAILS_SELECT + " AND d.pose_analysis_id = :id"
     result = await db.execute(text(sql), {"user_id": user_id, "id": analysis_id})
     return result.mappings().first()
+
+
+@dataclass(frozen=True)
+class AnalysisListQuery:
+    """Điều kiện danh sách đã kiểm tra ở service; `None` = không lọc theo field đó."""
+
+    limit: int
+    set_id: int | None = None
+    exercise_id: int | None = None
+    mode: str | None = None
+    after: tuple[datetime, uuid.UUID] | None = None
+
+
+# Danh sách trắng mệnh đề lọc: SQL cố định, giá trị luôn bind (không nối chuỗi giá trị người dùng).
+_LIST_FILTERS = (
+    ("set_id", " AND d.set_id = :set_id"),
+    ("exercise_id", " AND d.exercise_id = :exercise_id"),
+    ("mode", " AND d.mode = CAST(:mode AS ai.analysis_mode)"),
+)
+
+
+async def list_analyses(db: AsyncSession, user_id: uuid.UUID, query: AnalysisListQuery) -> list[Any]:
+    """Phân tích của user (view đã ẩn buổi xoá mềm), keyset (created_at DESC, id DESC), tối đa `query.limit` dòng."""
+    sql = DETAILS_SELECT
+    params: dict[str, Any] = {"user_id": user_id, "limit": query.limit}
+    for name, clause in _LIST_FILTERS:
+        value = getattr(query, name)
+        if value is not None:
+            sql += clause
+            params[name] = value
+    if query.after is not None:
+        sql += " AND (pa.created_at, pa.id) < (:c_created_at, :c_id)"
+        params["c_created_at"], params["c_id"] = query.after
+    sql += " ORDER BY pa.created_at DESC, pa.id DESC LIMIT :limit"
+    result = await db.execute(text(sql), params)
+    return list(result.mappings().all())
 
 
 async def issues_of(db: AsyncSession, analysis_ids: Sequence[uuid.UUID]) -> list[Any]:

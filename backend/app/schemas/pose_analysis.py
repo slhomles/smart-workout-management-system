@@ -59,6 +59,19 @@ class CreatePoseAnalysisRequest(BaseModel):
     )
 
 
+class PoseAnalysisFilter(BaseModel):
+    """Query của GET /ai/pose-analyses: bộ lọc + phân trang cursor (Claude_api_respone §5).
+
+    Cận trên của id khớp kiểu cột (bigint/integer) để giá trị tràn trả 422 thay vì lỗi bind 500.
+    """
+
+    set_id: int | None = Field(None, gt=0, le=BIGINT_MAX, description="training.exercise_sets.id")
+    exercise_id: int | None = Field(None, gt=0, le=INT_MAX, description="catalog.exercises.id")
+    mode: AnalysisMode | None = Field(None, description="realtime_edge | video_server")
+    limit: int = Field(20, ge=1, le=100)
+    cursor: str | None = Field(None, description="`next_cursor` của trang trước")
+
+
 class PostureIssueSchema(BaseModel):
     """Một dòng ai.posture_issues."""
 
