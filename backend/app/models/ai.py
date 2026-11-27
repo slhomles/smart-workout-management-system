@@ -1,15 +1,19 @@
-"""Model kết quả AI — khớp database/postgresql/schemas/07_ai.sql (schema `ai`)."""
+"""Model kết quả AI — khớp database/postgresql/schemas/07_ai.sql (schema `ai`).
+
+Không khai ForeignKey tới training/catalog/media: các bảng đó không (hoặc không chắc) có model trong
+metadata, SQLAlchemy sẽ lỗi khi sắp thứ tự insert. Ràng buộc vẫn do DB kiểm tra.
+"""
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Numeric, SmallInteger, String, Text, text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Identity, Integer, Numeric, SmallInteger, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 from app.models.common import pg_enum
-from app.models.enums import AnalysisMode, JobStatus
+from app.models.enums import AnalysisMode, IssueSeverity, JobStatus
 
 SCHEMA = "ai"
 NOW = text("now()")
@@ -63,3 +67,25 @@ class VideoAnalysisJob(Base):
     notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class PostureIssue(Base):
+    """Một lỗi tư thế AI phát hiện trong một lần phân tích."""
+
+    __tablename__ = "posture_issues"
+    __table_args__ = {"schema": SCHEMA}
+
+    # GENERATED ALWAYS AS IDENTITY: không được gửi id khi insert.
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    pose_analysis_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ai.pose_analyses.id", ondelete="CASCADE"), nullable=False
+    )
+    mistake_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    rep_no: Mapped[int | None] = mapped_column(SmallInteger)
+    offset_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    frame_index: Mapped[int | None] = mapped_column(Integer)
+    severity: Mapped[IssueSeverity] = mapped_column(
+        pg_enum(IssueSeverity, "issue_severity", SCHEMA), nullable=False, server_default=text("'warning'")
+    )
+    measured_angle_deg: Mapped[float | None] = mapped_column(Numeric(5, 2, asdecimal=False))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)

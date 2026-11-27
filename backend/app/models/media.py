@@ -1,15 +1,15 @@
-"""Model `media.media_files` — khớp database/postgresql/schemas/03_media.sql."""
+"""Model schema `media` — khớp database/postgresql/schemas/03_media.sql và 08_gallery.sql."""
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 from app.models.common import pg_enum
-from app.models.enums import MediaStatus, StorageProvider
+from app.models.enums import CaptureSource, JobStatus, MediaStatus, PhotoAngle, StorageProvider
 
 SCHEMA = "media"
 NOW = text("now()")
@@ -37,3 +37,54 @@ class MediaFile(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ProgressPhoto(Base):
+    """Ảnh vóc dáng theo thời gian — khớp `media.progress_photos` (08_gallery.sql)."""
+
+    __tablename__ = "progress_photos"
+    __table_args__ = {"schema": SCHEMA}
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("auth.users.id", ondelete="CASCADE"), nullable=False
+    )
+    original_media_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("media.media_files.id", ondelete="RESTRICT"), nullable=False
+    )
+    watermarked_media_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("media.media_files.id", ondelete="SET NULL")
+    )
+    thumbnail_media_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("media.media_files.id", ondelete="SET NULL")
+    )
+    angle: Mapped[PhotoAngle] = mapped_column(pg_enum(PhotoAngle, "photo_angle", SCHEMA), nullable=False)
+    capture_source: Mapped[CaptureSource] = mapped_column(
+        pg_enum(CaptureSource, "capture_source", SCHEMA), nullable=False, server_default=text("'camera'")
+    )
+    taken_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    processing_status: Mapped[JobStatus] = mapped_column(
+        pg_enum(JobStatus, "job_status", "util"), nullable=False, server_default=text("'queued'")
+    )
+    processing_error: Mapped[str | None] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PhotoComparison(Base):
+    """Cặp ảnh Before/After — khớp `media.photo_comparisons`; chủ sở hữu suy ra từ ảnh (không có user_id)."""
+
+    __tablename__ = "photo_comparisons"
+    __table_args__ = {"schema": SCHEMA}
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    before_photo_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("media.progress_photos.id", ondelete="CASCADE"), nullable=False
+    )
+    after_photo_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("media.progress_photos.id", ondelete="CASCADE"), nullable=False
+    )
+    title: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
