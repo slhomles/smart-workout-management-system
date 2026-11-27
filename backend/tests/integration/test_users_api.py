@@ -541,7 +541,10 @@ async def test_lock_active_user_revokes_every_refresh_token_as_admin_revoked(
     client: AsyncClient, db: AsyncSession, auth_headers
 ):
     demo = persona_id(3)
-    await auth_headers("demo")  # thêm một refresh token chưa thu hồi (thiết bị web)
+    # Đăng nhập thật để có thêm một refresh token chưa thu hồi (thiết bị web);
+    # fixture auth_headers chỉ tạo access token, không ghi refresh token.
+    login = await _login(client, "demo@smartworkout.local")
+    assert login.status_code == 200, login.text
     active_before = await _unrevoked_token_ids(db, demo)
     assert len(active_before) >= 2
     assert await _token_id_by_raw(db, DEMO_REFRESH) in active_before
