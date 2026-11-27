@@ -20,6 +20,8 @@ from app.services import catalog_service
 
 URL = "/api/v1/ai/equipment-scans"
 DEMO_ID = "5eed0000-0000-4000-8000-000000000003"
+POWER_ID = "5eed0000-0000-4000-8000-000000000004"
+TRAINER_ID = "5eed0000-0000-4000-8000-000000000016"
 
 KEYS_SUM = {
     "id", "model_name", "model_version", "latency_ms", "scanned_at",
@@ -98,6 +100,16 @@ def post_scan(client: AsyncClient, auth_headers) -> Callable[..., Awaitable[Resp
         return await client.post(URL, files=files or _upload(), headers=await auth_headers(persona))
 
     return _post
+
+
+@pytest.fixture
+def get_scans(client: AsyncClient, auth_headers) -> Callable[..., Awaitable[Response]]:
+    """GET lịch sử quét bằng persona (mặc định demo), kèm query `limit`/`cursor` nếu có."""
+
+    async def _get(persona: str = "demo", params: dict[str, Any] | None = None) -> Response:
+        return await client.get(URL, params=params, headers=await auth_headers(persona))
+
+    return _get
 
 
 @pytest.fixture
@@ -185,6 +197,81 @@ def _created_scan(res: Response) -> dict[str, Any]:
     return body
 
 
+def _assert_summary_json_types(item: dict[str, Any]) -> None:
+    """Một phần tử danh sách: đúng KEYS-SUM và đúng kiểu JSON theo "Quy ước chung" của spec §5."""
+    assert set(item) == KEYS_SUM
+    assert item["id"] == str(uuid.UUID(item["id"]))
+    assert item["scanned_at"].endswith("Z")
+    # type() thay vì isinstance: bool là lớp con của int, cần phân biệt is_confident với ID.
+    assert type(item["is_confident"]) is bool
+    int_keys = ("latency_ms", "predicted_equipment_id", "corrected_equipment_id", "resolved_equipment_id")
+    assert {type(item[key]) for key in int_keys} <= {int, type(None)}
+    assert type(item["confidence"]) in (int, float, type(None))
+
+
+def _scan_page(res: Response) -> dict[str, Any]:
+    """GET danh sách thành công: 200, body `Page[T]` đúng 2 key, mọi phần tử đúng KEYS-SUM; trả body."""
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert set(body) == {"data", "pagination"}
+    for item in body["data"]:
+        _assert_summary_json_types(item)
+    return body
+
+
+def _scan_ids(res: Response) -> list[str]:
+    """`id` các lần quét của một trang danh sách, giữ thứ tự trả về."""
+    return [item["id"] for item in _scan_page(res)["data"]]
+
+
+def _assert_keyset_order(items: list[dict[str, Any]]) -> None:
+    """Dãy `(scanned_at, id)` không tăng.
+
+    So bằng datetime và UUID thay vì chuỗi: số chữ số phần lẻ giây có thể khác nhau giữa các bản ghi,
+    còn thứ tự UUID của Python (số nguyên 128 bit) trùng thứ tự kiểu `uuid` của PostgreSQL (so từng byte).
+    """
+    keys = [(datetime.fromisoformat(item["scanned_at"]), uuid.UUID(item["id"])) for item in items]
+    assert keys == sorted(keys, reverse=True)
+
+
+async def _insert_old_corrected_scan(db: AsyncSession) -> str:
+    """`C` của EQS-06: quét hôm qua bằng model cũ, top-1 cáp 0.45; user báo sai và sửa thành máy kéo xô."""
+    scan_id = await db.scalar(
+        text(
+            "INSERT INTO ai.equipment_scans"
+            " (user_id, model_name, model_version, scanned_at, feedback, feedback_at, corrected_equipment_id)"
+            " VALUES (:uid, 'yolov8_cls_gym', '0.9.0', now() - interval '1 day', 'incorrect',"
+            " now() - interval '1 day', :corrected_id) RETURNING id"
+        ),
+        {"uid": DEMO_ID, "corrected_id": await _equipment_id(db, "lat_pulldown_machine")},
+    )
+    await db.execute(
+        text("INSERT INTO ai.equipment_scan_predictions VALUES (:scan_id, :equipment_id, 0.4500)"),
+        {"scan_id": scan_id, "equipment_id": await _equipment_id(db, "cable_crossover")},
+    )
+    return str(scan_id)
+
+
+async def _assert_old_corrected_summary(db: AsyncSession, item: dict[str, Any]) -> None:
+    """Phần tử `C` của EQS-06: dưới ngưỡng tin cậy, thiết bị cuối cùng theo nhãn user đã sửa."""
+    cable_id = await _equipment_id(db, "cable_crossover")
+    lat_pulldown_id = await _equipment_id(db, "lat_pulldown_machine")
+    expected = {
+        "model_name": "yolov8_cls_gym",
+        "model_version": "0.9.0",
+        "latency_ms": None,
+        "predicted_equipment_id": cable_id,
+        "predicted_equipment_code": "cable_crossover",
+        "predicted_equipment_name": "Máy kéo cáp đôi",
+        "confidence": 0.45,
+        "is_confident": False,
+        "feedback": "incorrect",
+        "corrected_equipment_id": lat_pulldown_id,
+        "resolved_equipment_id": lat_pulldown_id,
+    }
+    assert {key: item[key] for key in expected} == expected
+
+
 # --- Thành công ---
 async def test_list_scans_own_history_returns_summary_page(client: AsyncClient, db: AsyncSession, auth_headers):
     scan_id, cable_id = await _insert_demo_scan(db)
@@ -246,6 +333,79 @@ async def test_list_scans_with_limit_follows_cursor_without_duplicates(
     assert keys == sorted(keys, reverse=True)
 
 
+@pytest.mark.tc("EQS-06")
+async def test_list_scans_mixed_history_returns_newest_first_summaries(
+    post_scan, get_scans, db: AsyncSession, fake_ai: FakeAi
+):
+    fake_ai.reply = _ai_ok([
+        {"label": "cable_crossover_machine", "confidence": 0.9234},
+        {"label": "lat_pulldown_machine", "confidence": 0.0512},
+        {"label": "seated_cable_row_machine", "confidence": 0.0154},
+    ])
+    scan_a = _created_scan(await post_scan(_upload(PNG, "scan.png", "image/png")))
+    fake_ai.reply = _ai_ok([])
+    scan_b = _created_scan(await post_scan())
+    scan_c_id = await _insert_old_corrected_scan(db)
+
+    body = _scan_page(await get_scans())
+
+    assert body["pagination"] == {"next_cursor": None, "has_more": False}
+    data = body["data"]
+    assert len(data) == 3
+    # A và B cùng `scanned_at` (cùng transaction test) nên thứ tự giữa hai bản ghi do `id DESC` quyết định.
+    assert ({data[0]["id"], data[1]["id"]}, data[2]["id"]) == ({scan_a["id"], scan_b["id"]}, scan_c_id)
+    _assert_keyset_order(data)
+    items = {item["id"]: item for item in data}
+    # Danh sách là phần KEYS-SUM của đúng response POST: cùng nguồn view, cùng cách serialize.
+    assert items[scan_a["id"]] == {key: scan_a[key] for key in scan_a.keys() - {"predictions", "suggested_exercises"}}
+    await _assert_old_corrected_summary(db, items[scan_c_id])
+    no_top1_keys = ("is_confident", "predicted_equipment_id", "resolved_equipment_id")
+    assert [items[scan_b["id"]][key] for key in no_top1_keys] == [False, None, None]
+
+
+@pytest.mark.tc("EQS-07")
+async def test_list_scans_limit_2_pages_through_posted_scans_by_id_desc(post_scan, get_scans, fake_ai: FakeAi):
+    fake_ai.reply = _ai_ok(VALID_PREDICTIONS)
+    created = {_created_scan(await post_scan())["id"] for _ in range(3)}
+
+    first = _scan_page(await get_scans(params={"limit": 2}))
+    next_cursor = first["pagination"]["next_cursor"]
+    assert (len(first["data"]), type(next_cursor)) == (2, str)
+    assert first["pagination"]["has_more"] is True
+    second = _scan_page(await get_scans(params={"limit": 2, "cursor": next_cursor}))
+    assert (len(second["data"]), second["pagination"]) == (1, {"next_cursor": None, "has_more": False})
+
+    items = first["data"] + second["data"]
+    ids = [item["id"] for item in items]
+    # Đủ 3 phần tử và tập bằng 3 id đã tạo, tức không trùng và không sót qua ranh giới trang.
+    assert (len(ids), set(ids)) == (3, created)
+    # Cả 3 lần quét nằm trong cùng transaction test nên cùng `scanned_at`: thứ tự chỉ còn do `id DESC`.
+    assert len({item["scanned_at"] for item in items}) == 1
+    _assert_keyset_order(items)
+
+
+@pytest.mark.tc("EQS-08")
+async def test_list_scans_returns_only_current_user_scans_even_for_admin(
+    post_scan, get_scans, db: AsyncSession, fake_ai: FakeAi
+):
+    fake_ai.reply = _ai_ok(VALID_PREDICTIONS)
+    demo_scan_id = _created_scan(await post_scan())["id"]
+    power_scan_id = await db.scalar(
+        text(
+            "INSERT INTO ai.equipment_scans (user_id, model_name, model_version)"
+            " VALUES (:uid, 'yolov8_cls_gym', '1.0.0') RETURNING id"
+        ),
+        {"uid": POWER_ID},
+    )
+
+    assert _scan_ids(await get_scans("power")) == [str(power_scan_id)]
+    # Admin cũng chỉ thấy lịch sử của chính mình: GET luôn lọc theo user hiện tại (spec §6 ý 2).
+    for persona in ("newbie", "admin"):
+        body = _scan_page(await get_scans(persona))
+        assert body == {"data": [], "pagination": {"next_cursor": None, "has_more": False}}, persona
+    assert _scan_ids(await get_scans("demo")) == [demo_scan_id]
+
+
 # --- Lỗi tham số ---
 @pytest.mark.tc("EQS-09")
 @pytest.mark.parametrize(
@@ -290,6 +450,21 @@ async def test_list_scans_without_ai_use_permission_returns_403(client: AsyncCli
     res = await client.get(URL, headers=await auth_headers("editor"))
 
     _assert_error(res, 403, "permission_denied")
+
+
+@pytest.mark.tc("EQS-11")
+async def test_list_scans_trainer_with_active_user_role_returns_own_new_scan(
+    post_scan, get_scans, db: AsyncSession, fake_ai: FakeAi
+):
+    # Đối chứng cho ca 403: trainer còn role `user` (có `ai:use`), chỉ role `content_editor` đã hết hạn.
+    fake_ai.reply = _ai_ok(VALID_PREDICTIONS)
+
+    scan_id = _created_scan(await post_scan(_upload(PNG), persona="trainer"))["id"]
+
+    assert _scan_ids(await get_scans("trainer")) == [scan_id]
+    assert await _persisted_scans(db, scan_id) == [
+        {"user_id": TRAINER_ID, "image_media_id": None, "latency_ms": 180, "feedback": None, "prediction_count": 1}
+    ]
 
 
 # --- POST: quét ảnh ---
