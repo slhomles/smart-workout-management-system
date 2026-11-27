@@ -107,3 +107,6 @@ scripts/agent-flow/team.json
 
 # Object storage local (dev)
 backend/.storage/
+
+# Dataset bài tập clone về theo AGENT_RESOURCES.md (nặng, không commit)
+resources/
