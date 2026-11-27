@@ -1,7 +1,8 @@
 """Cổng của target `frontend` (docs/guides/frontend-standards.md §6, §7): tsc, eslint, jest, tc, coverage.
 
 Gọi trực tiếp bin trong `frontend/node_modules` bằng `node` (không qua npx) để chạy giống nhau trên
-Windows và Linux. `node_modules` thiếu hoặc lệch `package-lock.json` thì tự `npm ci` trước.
+Windows và Linux. `node_modules` thiếu hoặc lệch `package-lock.json` thì tự `npm ci --ignore-scripts` trước (tsc, eslint, jest
+không cần script build native; trên Windows script của @parcel/watcher còn hay lỗi).
 Kết quả jest được quy về cùng dạng báo cáo của tc_plugin.py để check_done.gate_tc dùng chung.
 Chỉ dùng thư viện chuẩn.
 """
@@ -35,7 +36,7 @@ def _tail(text: str, n: int = 40) -> str:
 
 
 def _bin(froot: Path, rel: str) -> list[str]:
-    return [shutil.which("node") or "node", str(froot / "node_modules" / rel)]
+    return [shutil.which("node") or "node", str((froot / "node_modules" / rel).resolve())]
 
 
 def ensure_node_modules(froot: Path) -> str | None:
@@ -51,7 +52,7 @@ def ensure_node_modules(froot: Path) -> str | None:
     if not npm:
         return "không tìm thấy npm trong PATH (cần Node.js)"
     try:
-        proc = _run([npm, "ci", "--no-audit", "--no-fund"], froot, timeout=1200)
+        proc = _run([npm, "ci", "--no-audit", "--no-fund", "--ignore-scripts"], froot, timeout=1200)
     except subprocess.TimeoutExpired:
         return "npm ci quá 20 phút"
     if proc.returncode != 0:
