@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.training import RecoveryPrediction
 from app.schemas.recovery import MuscleRecoveryListQuery, RecoveryPredictionListQuery, RecoveryPredictionOutput
+from app.schemas.schedule import CreateScheduledWorkoutRequest
 
 # Vị trí sau phần tử cuối của trang trước, theo thứ tự `trained_at DESC, session_id DESC, muscle_group_id ASC`.
 PredictionPosition = tuple[datetime, uuid.UUID, int]
@@ -157,3 +158,32 @@ async def list_session_predictions(db: AsyncSession, session_id: uuid.UUID, mode
     """Các dự đoán của một buổi theo một `model_version`, sắp `muscle_group_id ASC` (khung KEYS-PRED)."""
     params = {"session_id": session_id, "model_version": model_version}
     return list((await db.execute(text(_SESSION_PREDICTIONS_SELECT), params)).mappings().all())
+
+
+# Nhóm cơ đích = nhóm `primary` của các bài trong buổi giáo án (spec §6 ý 6; nhóm secondary chưa xét, Q10).
+# "Chưa hồi phục cho ngày D" = còn mệt tại đầu ngày D theo múi giờ user, hoặc tại hiện tại nếu D là hôm nay.
+# View chỉ có một dòng cho mỗi (user, nhóm cơ) nên IN (...) đã cho mỗi nhóm một dòng.
+_UNRECOVERED_TARGET_MUSCLES_SELECT = """
+SELECT r.muscle_group_id, r.muscle_name, r.recovered_at
+FROM training.v_muscle_recovery_status r
+WHERE r.user_id = :user_id
+  AND r.muscle_group_id IN (
+      SELECT em.muscle_group_id
+      FROM training.workout_plan_exercises pe
+      JOIN catalog.exercise_muscles em ON em.exercise_id = pe.exercise_id AND em.role = 'primary'
+      WHERE pe.plan_day_id = :plan_day_id
+  )
+  AND r.recovered_at > greatest(now(), CAST(:scheduled_date AS date)::timestamp AT TIME ZONE :tz)
+ORDER BY r.muscle_group_id
+"""
+
+
+async def list_unrecovered_target_muscles(
+    db: AsyncSession, user_id: uuid.UUID, req: CreateScheduledWorkoutRequest, tz: str
+) -> list[Any]:
+    """Nhóm cơ đích của `req.plan_day_id` chưa hồi phục vào `req.scheduled_date` (múi giờ `tz`).
+
+    Trả (muscle_group_id, muscle_name, recovered_at), sắp `muscle_group_id ASC`; rỗng nếu không có buổi giáo án.
+    """
+    params = {"user_id": user_id, "plan_day_id": req.plan_day_id, "scheduled_date": req.scheduled_date, "tz": tz}
+    return list((await db.execute(text(_UNRECOVERED_TARGET_MUSCLES_SELECT), params)).mappings().all())

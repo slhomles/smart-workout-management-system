@@ -1371,3 +1371,132 @@ async def test_predict_recovery_without_token_or_permission_is_rejected(
     assert res.headers["WWW-Authenticate"] == "Bearer"
     _err(await _predict_recovery(client, await auth_headers("editor"), session_id), 403, "permission_denied")
     assert fake_ai.calls == []
+
+
+# --- POST /scheduled-workouts: cảnh báo phục hồi (spec §6 ý 6) ---
+ACK_TOLERANCE = timedelta(seconds=60)
+
+
+async def _seed_unrecovered_chest(db) -> None:
+    """Buổi S của demo (bắt đầu now()-2h, kết thúc now()-1h) + dự đoán chest 80, hồi phục lúc now()+60h."""
+    session = await _insert_session(db, DEMO_ID, timedelta(hours=1))
+    await _predict(db, session, (await _muscle_ids(db))["chest"], ("test-v1", 80, timedelta(hours=60), NO_TIME))
+
+
+async def _check_unacknowledged_push_rejected(client: AsyncClient, db, headers: dict, body: dict) -> None:
+    """(a) Ngực chưa hồi phục, chưa xác nhận: 422, đúng 1 detail cho nhóm ngực, không ghi lịch."""
+    before = await _schedule_count(db)
+    error = _err(await client.post(SCHEDULES, json=body, headers=headers), 422, "validation_error")
+    assert len(error["details"]) == 1, error
+    detail = error["details"][0]
+    assert (detail["field"], detail["code"]) == ("acknowledge_recovery_warning", "muscle_not_recovered"), detail
+    assert "Ngực" in detail["message"], detail
+    assert await _schedule_count(db) == before
+
+
+async def _check_acknowledged_push_created(client: AsyncClient, db, headers: dict, body: dict) -> None:
+    """(b) Đã xác nhận: 201, `recovery_warning_ack_at` là now() của DB (sai lệch ≤ 60 giây)."""
+    res = await client.post(SCHEDULES, json={**body, "acknowledge_recovery_warning": True}, headers=headers)
+    assert res.status_code == 201, res.text
+    item = res.json()
+    assert res.headers["Location"] == f"{SCHEDULES}/{item['id']}"
+    _assert_schedule_shape(item)
+    assert item["recovery_warning_ack_at"] is not None, item
+    db_now = await db.scalar(text("SELECT now()"))
+    assert abs(_parse_ts(item["recovery_warning_ack_at"]) - db_now) <= ACK_TOLERANCE, (item, db_now)
+
+
+@pytest.mark.tc("WRT-12")
+async def test_create_schedule_with_unrecovered_target_muscle_requires_acknowledgement(
+    client: AsyncClient, db, auth_headers
+):
+    demo = await auth_headers("demo")
+    await _seed_unrecovered_chest(db)
+    push = await _plan_day_id(db, "PPL của An", DEMO_ID, 1)
+    legs = await _plan_day_id(db, "PPL của An", DEMO_ID, 3)
+    tomorrow = await _today(db, DEMO_ID, 1)
+    push_tomorrow = {"scheduled_date": tomorrow, "plan_day_id": push}
+    await _check_unacknowledged_push_rejected(client, db, demo, push_tomorrow)
+    # Lỗi 422 làm fixture rollback savepoint của session, xoá luôn dữ liệu phục hồi chưa commit: dựng lại.
+    await _seed_unrecovered_chest(db)
+    await _check_acknowledged_push_created(client, db, demo, push_tomorrow)
+    # (c) Buổi chân không có nhóm cơ chính là ngực; (d) đầu ngày TODAY+4 ngực đã hồi phục.
+    res = await client.post(SCHEDULES, json={"scheduled_date": tomorrow, "plan_day_id": legs}, headers=demo)
+    await _created_schedule(db, res, DEMO_ID, tomorrow)
+    later = await _today(db, DEMO_ID, 4)
+    body = {"scheduled_date": later, "plan_day_id": push, "acknowledge_recovery_warning": True}
+    await _created_schedule(db, await client.post(SCHEDULES, json=body, headers=demo), DEMO_ID, later)
+
+
+async def test_list_schedules_with_non_string_cursor_id_returns_422(client: AsyncClient, auth_headers):
+    cursor = encode_cursor({"scheduled_date": "2026-01-01", "id": 1})
+    res = await client.get(SCHEDULES, params={"cursor": cursor}, headers=await auth_headers())
+    assert _fields(_err(res, 422, "validation_error")) == ["cursor"]
+
+
+# --- 7 endpoint của module: không đăng nhập / thiếu permission ---
+async def _module_requests(db) -> list[tuple[str, str, dict | None]]:
+    """7 endpoint của module với body/tham số hợp lệ (WRT-23, WRT-24): (method, url, json body)."""
+    session_id = await _session_id_of(db, LATEST_COMPLETED_SQL, DEMO_ID)
+    return [
+        ("GET", PLANS, None),
+        ("POST", PLANS, _plan_body(await _refs(db))),
+        ("GET", SCHEDULES, None),
+        ("POST", SCHEDULES, {"scheduled_date": await _today(db, DEMO_ID), "title": "x"}),
+        ("GET", MUSCLES, None),
+        ("GET", PREDICTIONS, None),
+        ("POST", f"{SESSIONS}/{session_id}/predict-recovery", None),
+    ]
+
+
+async def _module_row_counts(db) -> tuple[int, int, int]:
+    """Số dòng workout_plans, scheduled_workouts, recovery_predictions."""
+    plans = await db.scalar(text("SELECT count(*) FROM training.workout_plans"))
+    return plans, await _schedule_count(db), await _prediction_count(db)
+
+
+async def _call_all(
+    client: AsyncClient, requests: list[tuple[str, str, dict | None]], headers: dict | None
+) -> list[tuple[str, Response]]:
+    return [
+        (f"{method} {url}", await client.request(method, url, json=body, headers=headers))
+        for method, url, body in requests
+    ]
+
+
+@pytest.mark.tc("WRT-23")
+async def test_module_endpoints_without_token_return_401(client: AsyncClient, db, fake_ai: _FakeRecoveryAi):
+    requests = await _module_requests(db)
+    before = await _module_row_counts(db)
+    responses = await _call_all(client, requests, None)
+    assert len(responses) == 7
+    for endpoint, res in responses:
+        assert res.status_code == 401, (endpoint, res.text)
+        _err(res, 401, "token_invalid")
+        assert res.headers["WWW-Authenticate"] == "Bearer", endpoint
+    assert await _module_row_counts(db) == before
+    assert fake_ai.calls == []
+
+
+@pytest.mark.tc("WRT-24")
+async def test_module_endpoints_without_permission_return_403(
+    client: AsyncClient, db, auth_headers, fake_ai: _FakeRecoveryAi
+):
+    requests = await _module_requests(db)
+    before = await _module_row_counts(db)
+    responses = await _call_all(client, requests, await auth_headers("editor"))
+    assert len(responses) == 7
+    for endpoint, res in responses:
+        assert res.status_code == 403, (endpoint, res.text)
+        _err(res, 403, "permission_denied")
+    assert await _module_row_counts(db) == before
+    assert fake_ai.calls == []
+
+
+@pytest.mark.tc("WRT-24")
+async def test_list_module_resources_as_admin_shows_no_foreign_data(client: AsyncClient, db, auth_headers):
+    admin = await auth_headers("admin")
+    for url in (PLANS, SCHEDULES, PREDICTIONS):
+        assert (await _get_page(client, url, admin))["data"] == [], url
+    muscles = await _get_page(client, MUSCLES, admin)
+    _assert_all_ready(muscles["data"], await _heatmap_codes(db))

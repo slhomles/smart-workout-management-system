@@ -4,13 +4,14 @@
 """
 
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import DataValidationError
 from app.crud import body as body_crud
+from app.crud import recovery as recovery_crud
 from app.crud import schedule as crud
 from app.schemas.base import ErrorDetail, Page, build_page, decode_cursor
 from app.schemas.schedule import (
@@ -32,7 +33,8 @@ def _decode_schedule_cursor(cursor: str | None) -> tuple[date, uuid.UUID] | None
     values = decode_cursor(cursor)
     try:
         return date.fromisoformat(values["scheduled_date"]), uuid.UUID(values["id"])
-    except (KeyError, ValueError, TypeError):
+    # AttributeError: uuid.UUID() với giá trị không phải chuỗi (vd số nguyên) trong cursor do client sửa.
+    except (KeyError, ValueError, TypeError, AttributeError):
         raise DataValidationError([_INVALID_CURSOR]) from None
 
 
@@ -95,16 +97,46 @@ async def _validation_errors(
     return errors
 
 
+def _not_recovered_detail(row: Any) -> ErrorDetail:
+    recovered_at = row["recovered_at"].astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return ErrorDetail(
+        field="acknowledge_recovery_warning",
+        message=f"{row['muscle_name']} chưa hồi phục, dự kiến hồi phục lúc {recovered_at}",
+        code="muscle_not_recovered",
+    )
+
+
+async def _recovery_ack_at(
+    db: AsyncSession, user_id: uuid.UUID, req: CreateScheduledWorkoutRequest
+) -> datetime | None:
+    """Bước 5 (spec §6 ý 6): chặn nếu nhóm cơ đích chưa hồi phục mà user chưa xác nhận.
+
+    Trả thời điểm xác nhận để ghi `recovery_warning_ack_at`; None khi không có gì để xác nhận
+    (buổi tự do, hoặc mọi nhóm cơ đích đã hồi phục) dù client gửi `true`.
+    """
+    if req.plan_day_id is None:
+        return None
+    tz = await body_crud.get_user_timezone(db, user_id)
+    unrecovered = await recovery_crud.list_unrecovered_target_muscles(db, user_id, req, tz)
+    if not unrecovered:
+        return None
+    if not req.acknowledge_recovery_warning:
+        raise DataValidationError([_not_recovered_detail(row) for row in unrecovered])
+    # Giờ của DB (không phải giờ máy app) để cùng nguồn với now() mà view phục hồi dùng.
+    return await body_crud.db_now(db)
+
+
 async def create_schedule(
     db: AsyncSession, user_id: uuid.UUID, req: CreateScheduledWorkoutRequest
 ) -> ScheduledWorkoutResponse:
-    """Xếp một lịch tập cho chính user; mọi kiểm tra chạy trước khi ghi, commit đúng một lần."""
+    """Xếp một lịch tập cho chính user; mọi kiểm tra chạy trước khi ghi, commit đúng một lần.
+
+    Lỗi bước 2–4 được báo trước, khi đó không chạy kiểm tra phục hồi (spec §6 ý 5).
+    """
     errors = await _validation_errors(db, user_id, req)
     if errors:
         raise DataValidationError(errors)
-    # Bước 5 (kiểm tra phục hồi cơ, spec §6 ý 6) cắm ở đây: chặn khi chưa xác nhận, hoặc trả thời điểm
-    # xác nhận để ghi `recovery_warning_ack_at`. Chưa có kiểm tra nên luôn ghi null.
-    recovery_warning_ack_at = None
+    recovery_warning_ack_at = await _recovery_ack_at(db, user_id, req)
     schedule_id = await crud.create_schedule(db, user_id, req, recovery_warning_ack_at)
     await db.commit()
     return _schedule_response(await crud.get_schedule_row(db, user_id, schedule_id))
