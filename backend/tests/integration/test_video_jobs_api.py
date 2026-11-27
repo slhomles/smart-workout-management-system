@@ -18,7 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.exceptions import ConflictError, DataValidationError, NotFoundError
 from app.schemas.base import encode_cursor
-from app.schemas.video_job import VideoJobFailureRequest
+from app.schemas.video_job import VideoJobFailureRequest, VideoJobResultRequest
+from app.schemas.workout import RepEventInput
 from app.services import video_job_service
 
 BASE = "/api/v1/ai/video-jobs"
@@ -641,3 +642,260 @@ async def test_start_job_already_started_raises_conflict(client: AsyncClient, au
     assert (again.value.status_code, again.value.code) == (409, "conflict")
     state = await job_state(db, job_id)
     assert (state["status"], state["attempt_count"]) == ("processing", 1)
+
+
+# --- Helper cho record_result ---
+REPS3 = [
+    RepEventInput(rep_no=1, start_offset_ms=0, eccentric_ms=3000, pause_bottom_ms=200, concentric_ms=1000,
+                  pause_top_ms=300, min_joint_angle_deg=78.5, max_joint_angle_deg=172.0, is_full_rom=True),
+    RepEventInput(rep_no=2, start_offset_ms=4600, eccentric_ms=2900, pause_bottom_ms=100, concentric_ms=1100,
+                  pause_top_ms=300),
+    RepEventInput(rep_no=3, start_offset_ms=9000, eccentric_ms=3100, pause_bottom_ms=0, concentric_ms=900,
+                  pause_top_ms=0, is_full_rom=False),
+]
+FEEDBACK = "Tempo đều, hạ chậm 3 giây"
+
+
+def result_request(media: uuid.UUID, reps: list[RepEventInput]) -> VideoJobResultRequest:
+    """RES(media, reps) của spec §5."""
+    return VideoJobResultRequest(
+        model_name="yolov8_pose", model_version="8.2.1", result_video_media_id=media,
+        overall_score=85, correct_form_pct=90, feedback_summary=FEEDBACK, rep_events=reps,
+    )
+
+
+async def job_analysis(db: AsyncSession, job_id: uuid.UUID) -> dict[str, Any]:
+    """Video kết quả của job + các cột ai.pose_analyses của job, đọc thẳng qua db."""
+    sql = """
+    SELECT j.result_video_media_id, pa.model_version, pa.overall_score, pa.correct_form_pct,
+           pa.detected_rep_count, pa.feedback_summary, pa.analyzed_at
+    FROM ai.video_analysis_jobs j JOIN ai.pose_analyses pa ON pa.id = j.pose_analysis_id
+    WHERE j.id = :id
+    """
+    return dict((await db.execute(text(sql), {"id": job_id})).mappings().one())
+
+
+async def rep_rows(db: AsyncSession, set_id: int) -> list[dict[str, Any]]:
+    """Các dòng training.set_rep_events của hiệp (trường như RepEventInput), sắp theo rep_no."""
+    sql = """
+    SELECT rep_no, start_offset_ms, eccentric_ms, pause_bottom_ms, concentric_ms, pause_top_ms,
+           min_joint_angle_deg, max_joint_angle_deg, is_full_rom
+    FROM training.set_rep_events WHERE set_id = :id ORDER BY rep_no
+    """
+    return [dict(r) for r in (await db.execute(text(sql), {"id": set_id})).mappings().all()]
+
+
+def set_detail_url(exercise_set: dict[str, Any]) -> str:
+    """GET chi tiết hiệp của route Training (tempo đọc từ view v_set_tempo)."""
+    return (
+        f"/api/v1/workout-sessions/{exercise_set['session_id']}/exercises/"
+        f"{exercise_set['session_exercise_id']}/sets/{exercise_set['set_id']}"
+    )
+
+
+# --- SRT-16 ---
+@pytest.mark.tc("SRT-16")
+async def test_record_result_processing_job_completes_and_writes_reps(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    headers, sets, (job,) = await _demo_jobs(client, auth_headers, db, (0,))
+    s1, job_id = sets[0], uuid.UUID(job["id"])
+    v_sys = await make_video(db, None)
+    before = await set_snapshot(db, s1["set_id"])
+    await video_job_service.start_job(db, job_id, "worker-01")
+    started_at = (await job_state(db, job_id))["started_at"]
+
+    await video_job_service.record_result(db, job_id, result_request(v_sys, REPS3))
+
+    state = await job_state(db, job_id)
+    assert state["status"] == "completed"
+    assert state["started_at"] == started_at and state["finished_at"] >= state["started_at"]
+    analysis = await job_analysis(db, job_id)
+    assert analysis.pop("analyzed_at") is not None
+    assert analysis == {
+        "result_video_media_id": v_sys, "model_version": "8.2.1", "overall_score": 85,
+        "correct_form_pct": 90, "detected_rep_count": 3, "feedback_summary": FEEDBACK,
+    }
+    assert await rep_rows(db, s1["set_id"]) == [event.model_dump() for event in REPS3]
+    reps, source, _, weight_kg = await set_snapshot(db, s1["set_id"])
+    assert (reps, source, weight_kg) == (3, "ai_video", before[3])
+    await _assert_set_detail_from_video(client, headers, s1)
+    await _assert_listed_completed(client, headers, job["id"], v_sys)
+
+
+async def _assert_set_detail_from_video(client: AsyncClient, headers: dict[str, str], s1: dict[str, Any]) -> None:
+    res = await client.get(set_detail_url(s1), headers=headers)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert (body["reps"], body["source"], len(body["rep_events"])) == (3, "ai_video", 3)
+    assert body["tempo"] == {
+        "rep_count": 3, "avg_eccentric_ms": 3000, "avg_pause_bottom_ms": 100, "avg_concentric_ms": 1000,
+        "avg_pause_top_ms": 200, "time_under_tension_ms": 12900, "full_rom_pct": 66.7,
+    }
+
+
+async def _assert_listed_completed(
+    client: AsyncClient, headers: dict[str, str], job_id: str, result_media: uuid.UUID
+) -> None:
+    listed = {item["id"]: item for item in assert_page(await get_jobs(client, headers))["data"]}
+    item = listed[job_id]
+    expected = {
+        "status": "completed", "result_video_media_id": str(result_media), "overall_score": 85.0,
+        "correct_form_pct": 90.0, "detected_rep_count": 3, "model_version": "8.2.1",
+    }
+    assert {key: item[key] for key in expected} == expected
+    assert item["finished_at"] is not None and item["analyzed_at"] is not None
+
+
+# --- SRT-17 ---
+async def _seed_old_reps(db: AsyncSession, set_id: int) -> None:
+    """5 rep realtime cũ cho hiệp, hiệp đánh dấu ai_realtime với reps=5 (spec SRT-17a)."""
+    insert_sql = """
+    INSERT INTO training.set_rep_events (set_id, rep_no, start_offset_ms, eccentric_ms, concentric_ms)
+    SELECT :id, g, (g - 1) * 4000, 2000, 1000 FROM generate_series(1, 5) g
+    """
+    await db.execute(text(insert_sql), {"id": set_id})
+    update_sql = "UPDATE training.exercise_sets SET source = 'ai_realtime', reps = 5 WHERE id = :id"
+    await db.execute(text(update_sql), {"id": set_id})
+    await db.commit()
+
+
+@pytest.mark.tc("SRT-17")
+async def test_record_result_queued_job_replaces_old_reps(client: AsyncClient, auth_headers, db: AsyncSession):
+    s2 = (await squat_sets(db))[1]["set_id"]
+    await _seed_old_reps(db, s2)
+    _, _, (job,) = await _demo_jobs(client, auth_headers, db, (1,))
+    job_id = uuid.UUID(job["id"])
+    new_reps = [
+        RepEventInput(rep_no=no, start_offset_ms=offset, eccentric_ms=2500, concentric_ms=1200)
+        for no, offset in ((1, 0), (2, 4000))
+    ]
+
+    await video_job_service.record_result(db, job_id, result_request(await make_video(db, None), new_reps))
+
+    rows = await rep_rows(db, s2)
+    assert [row["rep_no"] for row in rows] == [1, 2]
+    assert all(row["eccentric_ms"] == 2500 for row in rows)
+    reps, source, _, _ = await set_snapshot(db, s2)
+    assert (reps, source) == (2, "ai_video")
+    state = await job_state(db, job_id)
+    assert state["status"] == "completed"
+    assert state["started_at"] is not None and state["started_at"] == state["finished_at"]
+
+
+@pytest.mark.tc("SRT-17")
+async def test_record_result_empty_reps_completes_without_touching_set(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    _, sets, (job,) = await _demo_jobs(client, auth_headers, db, (0,))
+    s1, job_id = sets[0]["set_id"], uuid.UUID(job["id"])
+    before = await set_snapshot(db, s1)
+
+    await video_job_service.record_result(db, job_id, result_request(await make_video(db, None), []))
+
+    assert (await job_state(db, job_id))["status"] == "completed"
+    analysis = await job_analysis(db, job_id)
+    assert analysis["detected_rep_count"] == 0 and analysis["analyzed_at"] is not None
+    assert await set_snapshot(db, s1) == before
+    assert before[1] == "manual"
+    assert await rep_event_count(db, s1) == 0
+
+
+# --- SRT-18 ---
+async def _invalid_result_media(db: AsyncSession, v_demo: uuid.UUID) -> list[uuid.UUID]:
+    """Media kết quả sai của SRT-18 (2)–(6): không có, trùng video gốc, ảnh, đã xoá, chưa upload xong."""
+    return [
+        uuid.uuid4(), v_demo, await img_demo(db), await make_deleted_video(db, None),
+        await make_video(db, None, status="pending_upload"),
+    ]
+
+
+@pytest.mark.tc("SRT-18")
+async def test_record_result_missing_job_raises_not_found(db: AsyncSession):
+    with pytest.raises(NotFoundError) as missing:
+        await video_job_service.record_result(db, uuid.uuid4(), result_request(await make_video(db, None), REPS3))
+    assert (missing.value.status_code, missing.value.code) == (404, "not_found")
+
+
+@pytest.mark.tc("SRT-18")
+async def test_record_result_invalid_media_raises_and_writes_nothing(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    _, sets, (job,) = await _demo_jobs(client, auth_headers, db, (0,))
+    s1, job_id = sets[0]["set_id"], uuid.UUID(job["id"])
+    await video_job_service.start_job(db, job_id, "w")
+    before = await set_snapshot(db, s1)
+
+    for media in await _invalid_result_media(db, uuid.UUID(job["source_video_media_id"])):
+        with pytest.raises(DataValidationError) as invalid:
+            await video_job_service.record_result(db, job_id, result_request(media, REPS3))
+        assert (invalid.value.status_code, invalid.value.code) == (422, "validation_error"), media
+        assert invalid.value.details[0].field == "result_video_media_id"
+
+    assert (await job_state(db, job_id))["status"] == "processing"
+    analysis = await job_analysis(db, job_id)
+    assert (analysis["result_video_media_id"], analysis["analyzed_at"]) == (None, None)
+    assert analysis["model_version"] == "8.2.0"
+    assert await rep_event_count(db, s1) == 0
+    assert await set_snapshot(db, s1) == before
+
+
+@pytest.mark.tc("SRT-18")
+async def test_record_result_finished_job_raises_conflict(client: AsyncClient, auth_headers, db: AsyncSession):
+    _, _, (completed, failed) = await _demo_jobs(client, auth_headers, db, (1, 0))
+    completed_id, failed_id = uuid.UUID(completed["id"]), uuid.UUID(failed["id"])
+    v_sys, v_sys2 = await make_video(db, None), await make_video(db, None)
+    await video_job_service.record_result(db, completed_id, result_request(v_sys, REPS3))
+    await video_job_service.record_failure(db, failed_id, VideoJobFailureRequest(error_message="x"))
+
+    for job_id, media in ((completed_id, v_sys), (failed_id, v_sys2)):
+        with pytest.raises(ConflictError) as finished:
+            await video_job_service.record_result(db, job_id, result_request(media, REPS3))
+        assert (finished.value.status_code, finished.value.code) == (409, "conflict")
+
+    assert (await job_state(db, completed_id))["status"] == "completed"
+    assert (await job_state(db, failed_id))["status"] == "failed"
+
+
+# --- SRT-20 ---
+@pytest.mark.tc("SRT-20")
+async def test_record_failure_processing_job_marks_failed_without_touching_set(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    headers, sets, (job,) = await _demo_jobs(client, auth_headers, db, (0,))
+    s1, job_id = sets[0]["set_id"], uuid.UUID(job["id"])
+    before = await set_snapshot(db, s1)
+    await video_job_service.start_job(db, job_id, "w")
+    message = "Không giải mã được video H.265"
+
+    await video_job_service.record_failure(db, job_id, VideoJobFailureRequest(error_message=message))
+
+    state = await job_state(db, job_id)
+    assert (state["status"], state["error_message"]) == ("failed", message)
+    assert state["finished_at"] >= state["started_at"]
+    assert (await job_analysis(db, job_id))["analyzed_at"] is None
+    assert await set_snapshot(db, s1) == before
+    assert await rep_event_count(db, s1) == 0
+    listed = {item["id"]: item for item in assert_page(await get_jobs(client, headers))["data"]}
+    assert listed[job["id"]]["status"] == "failed"
+    assert "error_message" not in listed[job["id"]] and "worker_id" not in listed[job["id"]]
+
+
+@pytest.mark.tc("SRT-20")
+async def test_record_failure_missing_or_finished_job_raises(client: AsyncClient, auth_headers, db: AsyncSession):
+    _, _, (failed, completed) = await _demo_jobs(client, auth_headers, db, (0, 1))
+    failed_id, completed_id = uuid.UUID(failed["id"]), uuid.UUID(completed["id"])
+    failure = VideoJobFailureRequest(error_message="Không giải mã được video H.265")
+    await video_job_service.start_job(db, failed_id, "w")
+    await video_job_service.record_failure(db, failed_id, failure)
+    await video_job_service.record_result(db, completed_id, result_request(await make_video(db, None), REPS3))
+
+    with pytest.raises(NotFoundError) as missing:
+        await video_job_service.record_failure(db, uuid.uuid4(), failure)
+    assert missing.value.code == "not_found"
+    for job_id in (failed_id, completed_id):
+        with pytest.raises(ConflictError) as finished:
+            await video_job_service.record_failure(db, job_id, failure)
+        assert finished.value.code == "conflict"
+
+    assert (await job_state(db, completed_id))["status"] == "completed"

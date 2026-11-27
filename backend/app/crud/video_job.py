@@ -74,6 +74,13 @@ async def lock_job(db: AsyncSession, job_id: uuid.UUID) -> VideoAnalysisJob | No
     return await db.scalar(stmt)
 
 
+async def get_pose_analysis(db: AsyncSession, analysis_id: uuid.UUID) -> PoseAnalysis:
+    """Phân tích của một job; luôn có vì FK NOT NULL video_analysis_jobs → pose_analyses (CASCADE)."""
+    # populate_existing: object có thể còn trong identity map từ lúc tạo job (expire_on_commit=False).
+    stmt = select(PoseAnalysis).where(PoseAnalysis.id == analysis_id).execution_options(populate_existing=True)
+    return (await db.execute(stmt)).scalar_one()
+
+
 async def get_job(db: AsyncSession, user_id: uuid.UUID, job_id: uuid.UUID) -> Any | None:
     """Một job của user kèm ngữ cảnh hiệp/bài; None nếu không có hoặc buổi đã xoá mềm."""
     sql = JOB_SELECT + " AND j.id = :job_id"

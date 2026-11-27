@@ -7,6 +7,7 @@ Hiệp tập chỉ đọc/ghi qua `workout_ai_service` của module Training (do
 """
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,14 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ConflictError, DataValidationError, NotFoundError
 from app.crud import body as body_crud
 from app.crud import video_job as crud
-from app.models.ai import VideoAnalysisJob
-from app.models.enums import JobStatus
+from app.models.ai import PoseAnalysis, VideoAnalysisJob
+from app.models.enums import JobStatus, LogSource
 from app.schemas.base import ErrorDetail, Page, build_page, decode_keyset_cursor
 from app.schemas.video_job import (
     CreateVideoJobRequest,
     VideoJobFailureRequest,
     VideoJobListQuery,
     VideoJobResponse,
+    VideoJobResultRequest,
 )
 from app.services import workout_ai_service
 
@@ -126,6 +128,55 @@ async def start_job(db: AsyncSession, job_id: uuid.UUID, worker_id: str) -> None
     job.started_at = await body_crud.db_now(db)
     job.attempt_count += 1
     job.worker_id = worker_id
+    await db.commit()
+
+
+def _invalid_result_video_error() -> DataValidationError:
+    # Cùng một message cho mọi lý do (không có, đã xoá, chưa sẵn sàng, không phải video, trùng video gốc).
+    return DataValidationError(
+        [ErrorDetail(
+            field="result_video_media_id",
+            message="Video kết quả không tồn tại, chưa sẵn sàng hoặc trùng video gốc",
+            code="invalid_media",
+        )]
+    )
+
+
+async def _ensure_result_video(db: AsyncSession, media_id: uuid.UUID, source_media_id: uuid.UUID) -> None:
+    # Không kiểm người upload: video kết quả do hệ thống sinh có uploaded_by_user_id NULL.
+    # Khác video gốc để thoả ck_video_analysis_jobs_distinct_media.
+    if media_id == source_media_id or await crud.get_available_video(db, media_id) is None:
+        raise _invalid_result_video_error()
+
+
+def _apply_analysis_result(analysis: PoseAnalysis, req: VideoJobResultRequest, now: datetime) -> None:
+    analysis.model_name = req.model_name
+    analysis.model_version = req.model_version
+    analysis.overall_score = req.overall_score
+    analysis.correct_form_pct = req.correct_form_pct
+    analysis.feedback_summary = req.feedback_summary
+    analysis.detected_rep_count = len(req.rep_events)
+    analysis.analyzed_at = now
+
+
+async def record_result(db: AsyncSession, job_id: uuid.UUID, req: VideoJobResultRequest) -> None:
+    """Worker báo kết quả: job còn chờ → `completed`, ghi pose_analyses và rep vào hiệp; commit một lần.
+
+    Không có job → 404 `not_found`; job đã kết thúc → 409 `conflict`; video kết quả không dùng được
+    → 422 field `result_video_media_id`. Mọi kiểm tra chạy trước lệnh ghi đầu tiên.
+    """
+    job = await _lock_pending_job(db, job_id)
+    await _ensure_result_video(db, req.result_video_media_id, job.source_video_media_id)
+    # Một mốc thời gian chung cho analyzed_at/started_at/finished_at.
+    now = await body_crud.db_now(db)
+    analysis = await crud.get_pose_analysis(db, job.pose_analysis_id)
+    _apply_analysis_result(analysis, req, now)
+    await workout_ai_service.apply_ai_rep_events(db, analysis.set_id, req.rep_events, LogSource.AI_VIDEO)
+    job.status = JobStatus.COMPLETED
+    job.result_video_media_id = req.result_video_media_id
+    # Job nhận kết quả khi worker chưa gọi start vẫn cần started_at để thoả ck_video_analysis_jobs_times.
+    job.started_at = job.started_at or now
+    job.finished_at = now
     await db.commit()
 
 
