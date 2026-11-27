@@ -3,30 +3,39 @@
 Mọi test HTTP chạy với `local_storage` (file trong `tmp_path`) hoặc `s3_fake` (client S3 giả): không gọi AWS thật.
 """
 
+import hashlib
 import io
+import json
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import pytest
+import pytest_asyncio
 from botocore.exceptions import NoCredentialsError
 from httpx import AsyncClient, Response
 from PIL import Image
+from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.redis_client import get_redis
 from app.main import app
-from app.services import storage_service
+from app.services import permission_service, storage_service
 
 URL = "/api/v1/media"
 METADATA_PATH = "/api/v1/media/{media_id}"
 CONTENT_PATH = "/api/v1/media/{media_id}/content"
 DB_BUCKET = "smart-workout-media"
 MISSING_ID = uuid.UUID("00000000-0000-4000-8000-000000000000")
+EDITOR_ID = uuid.UUID("5eed0000-0000-4000-8000-000000000002")
+NEWBIE_ID = uuid.UUID("5eed0000-0000-4000-8000-000000000008")
+# Media tạo thêm cho MED-06 (a): GIF của bài nháp, không có trong seed.
+DRAFT_GIF_KEY = "catalog/exercises/test-draft-exercise/demo.gif"
 SEED_KEYS = {
     "gif-row": "catalog/exercises/dumbbell-row/demo.gif",
     "thumb-row": "catalog/exercises/dumbbell-row/thumbnail.jpg",
@@ -39,6 +48,9 @@ SEED_KEYS = {
     "demo-stale": "users/demo/uploads/tmp-stale.jpg",
     "dung-w00": "users/dung/progress/w00-front.jpg",
     "dung-w00-wm": "users/dung/progress/w00-front.wm.jpg",
+    "demo-avatar-old": "users/demo/avatar-old.jpg",
+    "khoa-broken": "users/khoa/uploads/broken.jpg",
+    "plateau-side": "users/plateau/progress/side.jpg",
 }
 KEYS_MEDIA = {
     "id", "mime_type", "size_bytes", "width_px", "height_px", "duration_ms", "url", "url_expires_at", "created_at",
@@ -153,6 +165,22 @@ def media_api(client: AsyncClient, db: AsyncSession, auth_headers) -> MediaApi:
     return MediaApi(client, db, auth_headers)
 
 
+@pytest_asyncio.fixture
+async def newbie_perm_cache() -> AsyncGenerator[tuple[Redis, str], None]:
+    """Key cache quyền `perm:…08`, xoá trước và sau test (không FLUSHDB), theo tiền lệ EXW-19.
+
+    Xoá trước: test khác gọi bằng newbie đã cache đủ quyền (TTL 5 phút), làm MED-14 không thấy role bị thu hồi.
+    Xoá sau: nếu còn key giả, newbie bị sai quyền ở test khác suốt TTL.
+    """
+    redis = get_redis()
+    key = permission_service.cache_key(NEWBIE_ID)
+    await redis.delete(key)
+    try:
+        yield redis, key
+    finally:
+        await redis.delete(key)
+
+
 # --- Helper kiểm tra ---
 def _local_url(media_id: uuid.UUID) -> str:
     return f"{URL}/{media_id}/content"
@@ -213,6 +241,63 @@ def _jpeg(width: int, height: int) -> bytes:
     buffer = io.BytesIO()
     Image.new("RGB", (width, height), (40, 120, 200)).save(buffer, format="JPEG")
     return buffer.getvalue()
+
+
+async def _missing_error(media_api: MediaApi) -> dict:
+    """Body 404 của media không tồn tại: mốc để so mọi 404 phát sinh ở bước phân quyền (spec §6 ý 2)."""
+    return _err(await media_api.get("demo", MISSING_ID), 404, "not_found")
+
+
+def _assert_same_as_missing(res: Response, missing: dict) -> None:
+    """404 không phân biệt được với ca không tồn tại: cùng code, cùng message, `details` rỗng."""
+    err = _err(res, 404, "not_found")
+    assert err["details"] == []
+    assert err["message"] == missing["message"]
+
+
+async def _is_available(db: AsyncSession, media_id: uuid.UUID) -> bool:
+    sql = text("SELECT status = 'available' AND deleted_at IS NULL FROM media.media_files WHERE id = :id")
+    return bool(await db.scalar(sql, {"id": media_id}))
+
+
+async def _is_uploaded_by(db: AsyncSession, media_id: uuid.UUID, persona: str) -> bool:
+    sql = text(
+        "SELECT EXISTS (SELECT 1 FROM media.media_files m JOIN auth.users u ON u.id = m.uploaded_by_user_id"
+        " WHERE m.id = :id AND u.email = :email)"
+    )
+    return bool(await db.scalar(sql, {"id": media_id, "email": f"{persona}@smartworkout.local"}))
+
+
+async def _insert_draft_exercise_gif(db: AsyncSession) -> uuid.UUID:
+    """GIF chính của bài nháp `test-draft-exercise`, editor tải lên, đúng dữ liệu MED-06 (a); rollback cuối test."""
+    media_id = await db.scalar(
+        text(
+            "INSERT INTO media.media_files (uploaded_by_user_id, storage_provider, bucket, object_key, mime_type,"
+            " size_bytes, checksum_sha256, status)"
+            " VALUES (:uploader, 's3', :bucket, :key, 'image/gif', 1000, :checksum, 'available') RETURNING id"
+        ),
+        {
+            "uploader": EDITOR_ID,
+            "bucket": DB_BUCKET,
+            "key": DRAFT_GIF_KEY,
+            "checksum": hashlib.sha256(DRAFT_GIF_KEY.encode()).hexdigest(),
+        },
+    )
+    exercise_id = await db.scalar(text("SELECT id FROM catalog.exercises WHERE slug = 'test-draft-exercise'"))
+    await db.execute(
+        text(
+            "INSERT INTO catalog.exercise_media (exercise_id, media_id, media_role, is_primary, display_order)"
+            " VALUES (:exercise_id, :media_id, 'gif', true, 1)"
+        ),
+        {"exercise_id": exercise_id, "media_id": media_id},
+    )
+    return media_id
+
+
+async def _assert_cache_cleared(redis: Redis, key: str) -> None:
+    """MED-14: sau test Redis không còn `perm:…08` (tiền lệ EXW-19); fixture vẫn xoá lại ở teardown."""
+    await redis.delete(key)
+    assert await redis.exists(key) == 0
 
 
 # --- GET /media/{media_id}: local ---
@@ -303,6 +388,126 @@ async def test_get_media_own_media_returns_200(media_api: MediaApi, case: tuple[
     assert media["url"] == _local_url(media_id)
     assert (media["mime_type"], media["duration_ms"]) == ("image/jpeg", None)
     assert ((media["width_px"], media["height_px"]), media["size_bytes"]) == (size_px, size_bytes)
+
+
+# (persona, media) theo bảng MED-04; `missing` cũng nằm trong danh sách để cả 7 ca được so cùng một mốc.
+NOT_OWNER_CASES = [
+    ("demo", "dung-w00"),
+    ("demo", "dung-w00-wm"),
+    ("demo", "plateau-side"),
+    ("power", "demo-w00-thumb"),
+    ("editor", "demo-w00"),
+    ("dung", "demo-avatar"),
+    ("demo", "missing"),
+]
+
+
+@pytest.mark.tc("MED-04")
+@pytest.mark.usefixtures("local_storage")
+@pytest.mark.parametrize(("persona", "alias"), NOT_OWNER_CASES, ids=[f"{p}-{a}" for p, a in NOT_OWNER_CASES])
+async def test_get_media_not_owner_returns_404_same_as_missing(media_api: MediaApi, persona: str, alias: str):
+    media_id = await media_api.media_id(alias)
+    missing = await _missing_error(media_api)
+    if alias != "missing":
+        # Media có thật và đang available: 404 chỉ có thể do không phải chủ, vẫn không lộ là media tồn tại.
+        assert await _is_available(media_api.db, media_id)
+
+    res = await media_api.get(persona, media_id)
+
+    _assert_same_as_missing(res, missing)
+
+
+# (persona, media) MED-05 (a)–(c): chính người tải lên gọi media seed chưa sẵn sàng hoặc đã xoá mềm.
+NOT_READY_CASES = [
+    pytest.param("demo", "demo-stale", id="a-pending-upload"),
+    pytest.param("inprogress", "khoa-broken", id="b-failed"),
+    pytest.param("demo", "demo-avatar-old", id="c-soft-deleted"),
+]
+
+
+@pytest.mark.tc("MED-05")
+@pytest.mark.usefixtures("local_storage")
+@pytest.mark.parametrize(("persona", "alias"), NOT_READY_CASES)
+async def test_get_media_own_media_not_available_returns_404_same_as_missing(
+    media_api: MediaApi, persona: str, alias: str
+):
+    media_id = await media_api.media_id(alias)
+    missing = await _missing_error(media_api)
+    # Người gọi là chủ sở hữu: 404 chỉ có thể đến từ trạng thái/xoá mềm (bước 1 trước bước sở hữu).
+    assert await _is_uploaded_by(media_api.db, media_id, persona)
+
+    res = await media_api.get(persona, media_id)
+
+    _assert_same_as_missing(res, missing)
+
+
+# (persona, media) MED-05 (d), (e): media đang xem được bị chuyển sang `quarantined`.
+QUARANTINE_CASES = [
+    pytest.param("demo", "demo-avatar", id="d-own-avatar"),
+    pytest.param("power", "gif-row", id="e-catalog-gif"),
+]
+
+
+@pytest.mark.tc("MED-05")
+@pytest.mark.usefixtures("local_storage")
+@pytest.mark.parametrize(("persona", "alias"), QUARANTINE_CASES)
+async def test_get_media_quarantined_returns_404_same_as_missing(media_api: MediaApi, persona: str, alias: str):
+    media_id = await media_api.media_id(alias)
+    missing = await _missing_error(media_api)
+    # Trước khi chặn vẫn xem được, nên 404 sau đó chỉ do trạng thái `quarantined`.
+    _ok(await media_api.get(persona, media_id))
+    await media_api.db.execute(
+        text("UPDATE media.media_files SET status = 'quarantined' WHERE id = :id"), {"id": media_id}
+    )
+
+    res = await media_api.get(persona, media_id)
+
+    _assert_same_as_missing(res, missing)
+
+
+# Thứ tự request trong 2 test MED-06 là có chủ đích: request lỗi làm session `db` rollback về savepoint
+# (`_override` trong conftest), xoá luôn dữ liệu test vừa ghi. Vì vậy lấy mốc `missing` trước khi ghi,
+# và gọi ca 404 (demo) sau cùng.
+@pytest.mark.tc("MED-06")
+@pytest.mark.usefixtures("local_storage")
+async def test_get_media_draft_exercise_gif_returns_404_except_uploader(media_api: MediaApi):
+    missing = await _missing_error(media_api)
+    media_id = await _insert_draft_exercise_gif(media_api.db)
+
+    editor_media = _ok(await media_api.get("editor", media_id))
+    demo_res = await media_api.get("demo", media_id)
+
+    assert editor_media["id"] == str(media_id)
+    assert (editor_media["mime_type"], editor_media["size_bytes"]) == ("image/gif", 1000)
+    assert editor_media["url"] == _local_url(media_id)
+    _assert_same_as_missing(demo_res, missing)
+
+
+@pytest.mark.tc("MED-06")
+@pytest.mark.usefixtures("local_storage")
+async def test_get_media_soft_deleted_equipment_image_returns_404_except_uploader(media_api: MediaApi):
+    media_id = await media_api.media_id("img-dumbbell")
+    missing = await _missing_error(media_api)
+    await media_api.db.execute(text("UPDATE catalog.equipment SET deleted_at = now() WHERE code = 'dumbbell'"))
+
+    editor_media = _ok(await media_api.get("editor", media_id))
+    demo_res = await media_api.get("demo", media_id)
+
+    assert editor_media["id"] == str(media_id)
+    assert editor_media["url"] == _local_url(media_id)
+    _assert_same_as_missing(demo_res, missing)
+
+
+@pytest.mark.tc("MED-07")
+@pytest.mark.usefixtures("local_storage")
+@pytest.mark.parametrize(
+    "path", [f"{URL}/abc", f"{URL}/123", f"{URL}/abc/content"], ids=["metadata-abc", "metadata-123", "content-abc"]
+)
+async def test_get_media_invalid_media_id_returns_422(media_api: MediaApi, path: str):
+    res = await media_api.client.get(path, headers=await media_api.auth_headers("demo"))
+
+    err = _err(res, 422, "validation_error")
+    assert any("media_id" in (detail["field"] or "") for detail in err["details"])
 
 
 # --- GET /media/{media_id}: S3 presigned URL ---
@@ -464,6 +669,72 @@ async def test_get_media_without_token_returns_401(media_api: MediaApi, alias: s
 
     _err(res, 401, "token_invalid")
     assert res.headers["WWW-Authenticate"] == "Bearer"
+
+
+async def _revoke_newbie_roles(db: AsyncSession, redis: Redis, key: str) -> None:
+    """Thu hồi mọi role của newbie trong transaction test và xoá cache quyền, để request kế tiếp đọc quyền từ DB.
+
+    Mọi persona seed đều có quyền đọc danh mục nên phải thu hồi role. Request lỗi làm session `db` rollback về
+    savepoint (`_override` trong conftest), khôi phục role đã xoá, nên phải thu hồi lại trước từng request.
+    """
+    await redis.delete(key)
+    await db.execute(text("DELETE FROM auth.user_roles WHERE user_id = :user_id"), {"user_id": NEWBIE_ID})
+
+
+@pytest.mark.tc("MED-14")
+async def test_get_media_user_without_roles_returns_403_for_catalog_and_404_for_personal(
+    media_api: MediaApi, local_storage: Path, newbie_perm_cache: tuple[Redis, str]
+):
+    redis, key = newbie_perm_cache
+    # File có thật trên kho: 403 của /content chỉ có thể đến từ permission, không phải từ việc thiếu file.
+    _write_object(local_storage, "gif-row", b"GIF89a" + bytes(range(16)))
+    gif_id, dumbbell_id, dung_id = [await media_api.media_id(a) for a in ("gif-row", "img-dumbbell", "dung-w00")]
+    headers = await media_api.auth_headers("newbie")
+
+    for path in (f"{URL}/{gif_id}", f"{URL}/{gif_id}/content", f"{URL}/{dumbbell_id}"):
+        await _revoke_newbie_roles(media_api.db, redis, key)
+        _err(await media_api.client.get(path, headers=headers), 403, "permission_denied")
+        # Quyền thật sự được đọc lại từ DB (không còn role) chứ không lấy từ cache cũ.
+        assert json.loads(await redis.get(key)) == []
+    await _revoke_newbie_roles(media_api.db, redis, key)
+    # Media cá nhân của người khác rơi vào bước 4 (404 như không tồn tại), không bao giờ là 403.
+    _err(await media_api.client.get(f"{URL}/{dung_id}", headers=headers), 404, "not_found")
+
+    await _assert_cache_cleared(redis, key)
+
+
+@dataclass(frozen=True)
+class CachedPermissionCase:
+    """Một ca MED-14 (b)/(c): cache quyền của newbie chỉ có một permission đọc danh mục."""
+
+    permission: str
+    allowed_alias: str
+    denied_alias: str
+
+
+CACHED_PERMISSION_CASES = [
+    pytest.param(CachedPermissionCase("exercise:read", "gif-row", "img-dumbbell"), id="b-exercise-read-only"),
+    pytest.param(CachedPermissionCase("equipment:read", "img-dumbbell", "gif-row"), id="c-equipment-read-only"),
+]
+
+
+@pytest.mark.tc("MED-14")
+@pytest.mark.usefixtures("local_storage")
+@pytest.mark.parametrize("case", CACHED_PERMISSION_CASES)
+async def test_get_media_cached_single_permission_allows_only_matching_catalog_media(
+    media_api: MediaApi, newbie_perm_cache: tuple[Redis, str], case: CachedPermissionCase
+):
+    redis, key = newbie_perm_cache
+    await redis.set(key, json.dumps([case.permission]), ex=300)
+    allowed_id = await media_api.media_id(case.allowed_alias)
+    denied_id = await media_api.media_id(case.denied_alias)
+
+    allowed_res = await media_api.get("newbie", allowed_id)
+    denied_res = await media_api.get("newbie", denied_id)
+
+    assert _ok(allowed_res)["id"] == str(allowed_id)
+    _err(denied_res, 403, "permission_denied")
+    await _assert_cache_cleared(redis, key)
 
 
 @pytest.mark.tc("MED-15")
