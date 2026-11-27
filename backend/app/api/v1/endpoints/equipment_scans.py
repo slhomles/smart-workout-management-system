@@ -40,6 +40,7 @@ async def create_equipment_scan(
     current: CurrentUser = Depends(AI_USE),
     db: AsyncSession = Depends(get_db),
 ) -> EquipmentScanResponse:
+    """Quét ảnh thiết bị của chính user, lưu kết quả và trả gợi ý bài tập (chức năng 7, bước 2–4)."""
     result = await equipment_scan_service.create_scan(db, current.id, image)
     response.headers["Location"] = f"/api/v1/ai/equipment-scans/{result.id}"
     return result
@@ -64,4 +65,5 @@ async def list_equipment_scans(
     current: CurrentUser = Depends(AI_USE),
     db: AsyncSession = Depends(get_db),
 ) -> Page[EquipmentScanSummaryResponse]:
+    """Lịch sử quét thiết bị của chính user, phân trang cursor."""
     return await equipment_scan_service.list_scans(db, current.id, limit=limit, cursor=cursor)
