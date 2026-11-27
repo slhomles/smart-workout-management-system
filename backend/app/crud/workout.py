@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import SessionStatus
@@ -143,3 +143,38 @@ async def set_row(db: AsyncSession, set_id: int) -> Any | None:
 async def rep_events(db: AsyncSession, set_id: int) -> list[SetRepEvent]:
     rows = await db.scalars(select(SetRepEvent).where(SetRepEvent.set_id == set_id).order_by(SetRepEvent.rep_no))
     return list(rows.all())
+
+
+# --- Dành cho module AI (qua services/workout_ai_service.py) ---
+_OWNED_SET_CONTEXT_SQL = """
+SELECT es.id AS set_id, es.session_exercise_id, se.session_id,
+       e.id AS exercise_id, e.name AS exercise_name, e.supports_ai_tracking
+FROM training.exercise_sets es
+JOIN training.session_exercises se ON se.id = es.session_exercise_id
+JOIN training.workout_sessions s ON s.id = se.session_id
+JOIN catalog.exercises e ON e.id = se.exercise_id
+WHERE es.id = :set_id AND s.user_id = :user_id AND s.deleted_at IS NULL
+"""
+
+
+async def owned_set_context(db: AsyncSession, user_id: uuid.UUID, set_id: int) -> Any | None:
+    """Hiệp của user (buổi chưa xoá mềm) kèm buổi và bài tập; None nếu không có/không thuộc user."""
+    params = {"set_id": set_id, "user_id": user_id}
+    return (await db.execute(text(_OWNED_SET_CONTEXT_SQL), params)).mappings().first()
+
+
+async def lock_set(db: AsyncSession, set_id: int) -> ExerciseSet | None:
+    """Khoá dòng hiệp (`SELECT … FOR UPDATE`) để ghi rep AI; None nếu không có."""
+    # populate_existing: hiệp có thể còn trong identity map với giá trị cũ (expire_on_commit=False).
+    stmt = (
+        select(ExerciseSet)
+        .where(ExerciseSet.id == set_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return await db.scalar(stmt)
+
+
+async def delete_rep_events(db: AsyncSession, set_id: int) -> None:
+    """Xoá mọi rep của hiệp; delete ORM để identity map không giữ rep cũ trùng khoá (set_id, rep_no)."""
+    await db.execute(delete(SetRepEvent).where(SetRepEvent.set_id == set_id))
