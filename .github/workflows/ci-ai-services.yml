@@ -2,39 +2,42 @@ name: CI AI Services
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
     paths:
       - "ai-services/**"
+      - ".github/workflows/ci-ai-services.yml"
   pull_request:
-    branches: [main, develop]
+    branches: [main]
     paths:
       - "ai-services/**"
+      - ".github/workflows/ci-ai-services.yml"
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+    defaults:
+      run:
+        working-directory: ai-services
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
           cache: "pip"
           cache-dependency-path: ai-services/requirements.txt
-      
+
+      # Chỉ cài requirements.txt: test dùng model giả, không cần torch/ultralytics (requirements-ml.txt).
       - name: Install dependencies
-        run: |
-          cd ai-services
-          pip install -r requirements.txt
-      
+        run: pip install -r requirements.txt
+
       - name: Lint with Ruff
-        run: |
-          cd ai-services
-          ruff check .
-      
+        run: ruff check .
+
+      - name: Type check with mypy
+        run: mypy app/
+
       - name: Run tests
-        run: |
-          cd ai-services
-          pytest tests/
+        run: pytest --cov=app --cov-report=term
