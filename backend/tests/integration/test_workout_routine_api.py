@@ -430,3 +430,354 @@ async def test_create_plan_without_token_or_permission_is_rejected(client: Async
     assert res.headers["WWW-Authenticate"] == "Bearer"
     _err(await client.post(PLANS, json=body, headers=await auth_headers("editor")), 403, "permission_denied")
     assert await _plan_table_counts(db) == before
+
+
+# --- GET /scheduled-workouts ---
+SCHEDULES = "/api/v1/scheduled-workouts"
+KEYS_SCHED = {
+    "id", "scheduled_date", "title", "notes", "status", "plan_day", "recovery_warning_ack_at", "workout_session_id",
+    "is_completed", "created_at",
+}
+KEYS_SCHED_PLAN_DAY = {"id", "plan_id", "plan_name", "day_no", "name"}
+POWER_ID = "5eed0000-0000-4000-8000-000000000004"
+PLATEAU_ID = "5eed0000-0000-4000-8000-000000000006"
+INPROGRESS_ID = "5eed0000-0000-4000-8000-000000000007"
+
+
+def _assert_schedule_shape(item: dict) -> None:
+    """Đúng KEYS-SCHED, `plan_day` null hoặc đúng 5 key, thời điểm hậu tố Z."""
+    _keys(item, KEYS_SCHED)
+    assert item["created_at"].endswith("Z"), item
+    assert item["recovery_warning_ack_at"] is None or item["recovery_warning_ack_at"].endswith("Z"), item
+    if item["plan_day"] is not None:
+        _keys(item["plan_day"], KEYS_SCHED_PLAN_DAY)
+
+
+def _matching(items: list[dict], **expected: Any) -> list[dict]:
+    return [item for item in items if all(item[key] == value for key, value in expected.items())]
+
+
+async def _list_schedules(client: AsyncClient, headers: dict, **params: Any) -> dict:
+    return _ok_page(await client.get(SCHEDULES, params=params, headers=headers))
+
+
+async def _session_links(db, user_id: str) -> dict[str, tuple[str | None, bool]]:
+    """Theo `db`: id lịch → (id buổi tập chưa xoá mềm gắn với lịch, buổi đó có `completed` không)."""
+    rows = await db.execute(
+        text(
+            "SELECT sw.id::text AS id, ws.id::text AS session_id, coalesce(ws.status = 'completed', false) AS done"
+            " FROM training.scheduled_workouts sw LEFT JOIN training.workout_sessions ws"
+            " ON ws.scheduled_workout_id = sw.id AND ws.deleted_at IS NULL WHERE sw.user_id = :uid"
+        ),
+        {"uid": user_id},
+    )
+    return {row.id: (row.session_id, row.done) for row in rows}
+
+
+def _assert_schedule_items(items: list[dict], links: dict[str, tuple[str | None, bool]]) -> None:
+    """Mọi phần tử đúng shape, khớp liên kết buổi tập qua `db`; `scheduled_date` không giảm."""
+    for item in items:
+        _assert_schedule_shape(item)
+        assert (item["workout_session_id"], item["is_completed"]) == links[item["id"]], item
+    dates = [item["scheduled_date"] for item in items]
+    assert dates == sorted(dates)
+
+
+def _check_demo_special_schedules(items: list[dict]) -> None:
+    """Lịch "Tập bù Push" đã xác nhận cảnh báo, một lịch skipped và một lịch cancelled."""
+    (makeup,) = _matching(items, title="Tập bù Push")
+    assert makeup["recovery_warning_ack_at"] is not None
+    assert (makeup["status"], makeup["is_completed"]) == ("planned", False)
+    assert _pick(makeup["plan_day"], ("day_no", "name", "plan_name")) == {
+        "day_no": 1, "name": "Push – Ngực/Vai/Tay sau", "plan_name": "PPL của An",
+    }
+    (skipped,) = _matching(items, status="skipped")
+    assert _pick(skipped, ("notes", "is_completed", "workout_session_id")) == {
+        "notes": "Bận việc đột xuất", "is_completed": False, "workout_session_id": None,
+    }
+    (cancelled,) = _matching(items, status="cancelled")
+    assert cancelled["notes"] == "Đổi lịch"
+
+
+@pytest.mark.tc("WRT-08")
+async def test_list_schedules_demo_returns_all_with_session_links(client: AsyncClient, db, auth_headers):
+    body = await _list_schedules(client, await auth_headers("demo"), limit=100)
+    assert body["pagination"]["has_more"] is False
+    links = await _session_links(db, DEMO_ID)
+    assert len(body["data"]) == len(links) == 19
+    _assert_schedule_items(body["data"], links)
+    _check_demo_special_schedules(body["data"])
+
+
+async def _collect_pages(client: AsyncClient, headers: dict, limit: int) -> list[dict]:
+    """Lần theo `next_cursor` tới trang cuối (giới hạn số trang để test không lặp vô hạn)."""
+    pages: list[dict] = []
+    params: dict[str, Any] = {"limit": limit}
+    for _ in range(50):
+        page = await _list_schedules(client, headers, **params)
+        pages.append(page)
+        if not page["pagination"]["has_more"]:
+            return pages
+        params["cursor"] = page["pagination"]["next_cursor"]
+    raise AssertionError("Quá nhiều trang")
+
+
+def _merge_full_pages(pages: list[dict], limit: int) -> list[dict]:
+    """Mọi trang trừ trang cuối đủ `limit` phần tử và còn trang sau; trang cuối hết. Trả các phần tử gộp."""
+    assert len(pages) > 1
+    for page in pages[:-1]:
+        assert (len(page["data"]), page["pagination"]["has_more"]) == (limit, True)
+    assert pages[-1]["pagination"] == {"next_cursor": None, "has_more": False}
+    return [item for page in pages for item in page["data"]]
+
+
+async def _check_power_pagination(client: AsyncClient, db, headers: dict) -> None:
+    """(a) limit=40: gộp đủ lịch của power, không trùng, ngày không giảm."""
+    items = _merge_full_pages(await _collect_pages(client, headers, 40), 40)
+    ids = [item["id"] for item in items]
+    assert len(set(ids)) == len(ids) == len(await _session_links(db, POWER_ID))
+    dates = [item["scheduled_date"] for item in items]
+    assert dates == sorted(dates)
+
+
+async def _check_demo_date_range(client: AsyncClient, db, headers: dict) -> None:
+    """(b) from=D0+7&to=D0+13 (tính cả hai đầu), D0 = ngày lịch sớm nhất của demo."""
+    row = (
+        await db.execute(
+            text(
+                "WITH d AS (SELECT min(scheduled_date) AS d0 FROM training.scheduled_workouts WHERE user_id = :uid)"
+                " SELECT d.d0 + 7 AS lo, d.d0 + 13 AS hi, (SELECT count(*) FROM training.scheduled_workouts sw"
+                " WHERE sw.user_id = :uid AND sw.scheduled_date BETWEEN d.d0 + 7 AND d.d0 + 13) AS n FROM d"
+            ),
+            {"uid": DEMO_ID},
+        )
+    ).one()
+    lo, hi = row.lo.isoformat(), row.hi.isoformat()
+    items = (await _list_schedules(client, headers, **{"from": lo, "to": hi}))["data"]
+    assert len(items) == row.n > 0
+    assert all(lo <= item["scheduled_date"] <= hi for item in items)
+
+
+async def _inprogress_linked_schedules(db) -> dict[str, str]:
+    """Theo `db`: tên và trạng thái buổi tập của inprogress → id lịch gắn với buổi đó."""
+    rows = await db.execute(
+        text(
+            "SELECT scheduled_workout_id::text AS sid, name, status::text AS status FROM training.workout_sessions"
+            " WHERE user_id = :uid AND scheduled_workout_id IS NOT NULL AND deleted_at IS NULL"
+        ),
+        {"uid": INPROGRESS_ID},
+    )
+    linked: dict[str, str] = {}
+    for row in rows:
+        linked[row.name] = row.sid
+        linked[row.status] = row.sid
+    return linked
+
+
+async def _check_inprogress_sessions(client: AsyncClient, db, headers: dict) -> None:
+    """(d) Lịch gắn buổi in_progress/abandoned chưa hoàn thành; lịch gắn buổi completed thì hoàn thành."""
+    items = {item["id"]: item for item in (await _list_schedules(client, headers, limit=100))["data"]}
+    linked = await _inprogress_linked_schedules(db)
+    running, abandoned, done = items[linked["Circuit B"]], items[linked["abandoned"]], items[linked["Circuit A"]]
+    assert running["workout_session_id"] is not None and running["is_completed"] is False
+    assert abandoned["workout_session_id"] is not None and abandoned["is_completed"] is False
+    assert done["is_completed"] is True
+    (cancelled,) = _matching(list(items.values()), status="cancelled")
+    assert cancelled["notes"] == "Bận họp"
+
+
+@pytest.mark.tc("WRT-09")
+async def test_list_schedules_paginate_and_filter(client: AsyncClient, db, auth_headers):
+    await _check_power_pagination(client, db, await auth_headers("power"))
+    demo = await auth_headers("demo")
+    await _check_demo_date_range(client, db, demo)
+    skipped = _only_item(await _list_schedules(client, demo, status="skipped"))
+    assert skipped["status"] == "skipped"
+    await _check_inprogress_sessions(client, db, await auth_headers("inprogress"))
+
+
+@pytest.mark.tc("WRT-10")
+async def test_list_schedules_invalid_query_returns_422_and_no_schedule_returns_empty(
+    client: AsyncClient, auth_headers
+):
+    demo = await auth_headers("demo")
+    cases = [
+        ({"from": "2026-13-01"}, "from"),
+        ({"from": "2026-05-10", "to": "2026-05-09"}, "to"),
+        ({"limit": 0}, "limit"),
+        ({"limit": 101}, "limit"),
+        ({"cursor": "!!!khong-phai-cursor"}, "cursor"),
+        ({"status": "completed"}, "status"),
+    ]
+    fields = [
+        _fields(_err(await client.get(SCHEDULES, params=params, headers=demo), 422, "validation_error"))
+        for params, _ in cases
+    ]
+    assert fields == [[field] for _, field in cases]
+    empty = await _list_schedules(client, await auth_headers("newbie"))
+    assert empty == {"data": [], "pagination": {"next_cursor": None, "has_more": False}}
+
+
+async def test_list_schedules_with_foreign_cursor_returns_422(client: AsyncClient, auth_headers):
+    res = await client.get(SCHEDULES, params={"cursor": encode_cursor({"foo": 1})}, headers=await auth_headers())
+    assert _fields(_err(res, 422, "validation_error")) == ["cursor"]
+
+
+async def test_list_schedules_without_token_or_permission_is_rejected(client: AsyncClient, auth_headers):
+    res = await client.get(SCHEDULES)
+    _err(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+    _err(await client.get(SCHEDULES, headers=await auth_headers("editor")), 403, "permission_denied")
+
+
+# --- POST /scheduled-workouts ---
+async def _today(db, user_id: str, offset: int = 0) -> str:
+    """TODAY (+ offset ngày) theo múi giờ của user ở auth.user_profiles, dạng YYYY-MM-DD."""
+    day = await db.scalar(
+        text(
+            "SELECT (now() AT TIME ZONE timezone)::date + CAST(:offset AS integer)"
+            " FROM auth.user_profiles WHERE user_id = :uid"
+        ),
+        {"uid": user_id, "offset": offset},
+    )
+    return day.isoformat()
+
+
+async def _plan_day_id(db, plan_name: str, owner_id: str | None, day_no: int) -> str:
+    """ID buổi giáo án theo (tên giáo án, chủ sở hữu; None = giáo án mẫu, day_no)."""
+    day_id = await db.scalar(
+        text(
+            "SELECT d.id::text FROM training.workout_plan_days d JOIN training.workout_plans p ON p.id = d.plan_id"
+            " WHERE p.name = :name AND p.owner_user_id IS NOT DISTINCT FROM CAST(:owner AS uuid) AND d.day_no = :day"
+        ),
+        {"name": plan_name, "owner": owner_id, "day": day_no},
+    )
+    assert day_id is not None, (plan_name, owner_id, day_no)
+    return day_id
+
+
+async def _schedule_count(db) -> int:
+    return await db.scalar(text("SELECT count(*) FROM training.scheduled_workouts"))
+
+
+async def _created_schedule(db, res: Response, user_id: str, scheduled_date: str) -> dict:
+    """201 + `Location` + KEYS-SCHED + mặc định của lịch mới; qua `db`: đúng user và ngày."""
+    assert res.status_code == 201, res.text
+    item = res.json()
+    assert res.headers["Location"] == f"{SCHEDULES}/{item['id']}"
+    _assert_schedule_shape(item)
+    assert _pick(item, ("status", "is_completed", "workout_session_id", "recovery_warning_ack_at")) == {
+        "status": "planned", "is_completed": False, "workout_session_id": None, "recovery_warning_ack_at": None,
+    }
+    row = (
+        await db.execute(
+            text("SELECT user_id::text AS uid, scheduled_date FROM training.scheduled_workouts WHERE id = :id"),
+            {"id": item["id"]},
+        )
+    ).one()
+    assert (row.uid, row.scheduled_date.isoformat()) == (user_id, scheduled_date)
+    assert item["scheduled_date"] == scheduled_date
+    return item
+
+
+async def _check_demo_free_schedule(client: AsyncClient, db, headers: dict) -> None:
+    """(a) Buổi tự do: title đã strip, không có plan_day."""
+    today = await _today(db, DEMO_ID)
+    body = {"scheduled_date": today, "title": "  Chạy bộ công viên ", "notes": "5 km"}
+    item = await _created_schedule(db, await client.post(SCHEDULES, json=body, headers=headers), DEMO_ID, today)
+    assert _pick(item, ("title", "plan_day", "notes")) == {"title": "Chạy bộ công viên", "plan_day": None, "notes": "5 km"}
+
+
+async def _check_demo_plan_day_schedule(client: AsyncClient, db, headers: dict) -> None:
+    """(b) Buổi 3 của "PPL của An": plan_day đủ thông tin buổi và giáo án."""
+    day = await _today(db, DEMO_ID, 2)
+    legs = await _plan_day_id(db, "PPL của An", DEMO_ID, 3)
+    res = await client.post(SCHEDULES, json={"scheduled_date": day, "plan_day_id": legs}, headers=headers)
+    item = await _created_schedule(db, res, DEMO_ID, day)
+    plan_id = await db.scalar(text("SELECT plan_id::text FROM training.workout_plan_days WHERE id = :id"), {"id": legs})
+    assert item["title"] is None
+    assert item["plan_day"] == {
+        "id": legs, "plan_id": plan_id, "plan_name": "PPL của An", "day_no": 3, "name": "Legs – Chân/Mông",
+    }
+
+
+@pytest.mark.tc("WRT-11")
+async def test_create_schedule_free_or_from_plan_day_returns_201(client: AsyncClient, db, auth_headers):
+    demo = await auth_headers("demo")
+    await _check_demo_free_schedule(client, db, demo)
+    await _check_demo_plan_day_schedule(client, db, demo)
+    day = await _today(db, NEWBIE_ID, 1)
+    t1_name = await db.scalar(text("SELECT name FROM training.workout_plans WHERE id = :id"), {"id": T(1)})
+    body = {"scheduled_date": day, "plan_day_id": await _plan_day_id(db, t1_name, None, 1)}
+    res = await client.post(SCHEDULES, json=body, headers=await auth_headers("newbie"))
+    item = await _created_schedule(db, res, NEWBIE_ID, day)
+    assert (item["plan_day"]["plan_id"], item["plan_day"]["plan_name"]) == (T(1), "Full Body cho người mới")
+
+
+async def _invalid_plan_day_cases(db) -> list[tuple[str, dict, str]]:
+    """Ca (3)–(7) của WRT-13: buổi giáo án không dùng được, ngày = TODAY của persona gửi."""
+    t7_name = await db.scalar(text("SELECT name FROM training.workout_plans WHERE id = :id"), {"id": T(7)})
+    plan_days = [
+        ("demo", DEMO_ID, await _plan_day_id(db, "Upper/Lower của Bình", POWER_ID, 1)),
+        ("demo", DEMO_ID, "00000000-0000-4000-8000-000000000000"),
+        ("demo", DEMO_ID, await _plan_day_id(db, t7_name, None, 1)),
+        ("power", POWER_ID, await _plan_day_id(db, "PPL (giai đoạn trước)", POWER_ID, 1)),
+        ("plateau", PLATEAU_ID, await _plan_day_id(db, "Nháp – bỏ", PLATEAU_ID, 1)),
+    ]
+    return [
+        (persona, {"scheduled_date": await _today(db, user_id), "plan_day_id": day_id}, "plan_day_id")
+        for persona, user_id, day_id in plan_days
+    ]
+
+
+async def _invalid_schedule_cases(db) -> list[tuple[str, dict, str]]:
+    """12 ca của WRT-13: (persona, body, field mong đợi)."""
+    today = await _today(db, DEMO_ID)
+    return [
+        ("demo", {"scheduled_date": today}, "plan_day_id"),
+        ("demo", {"scheduled_date": await _today(db, DEMO_ID, -1), "title": "x"}, "scheduled_date"),
+        *await _invalid_plan_day_cases(db),
+        ("demo", {"scheduled_date": today, "title": "x" * 151}, "title"),
+        ("demo", {"scheduled_date": today, "title": "x", "notes": "n" * 501}, "notes"),
+        ("demo", {"scheduled_date": "2026-02-30", "title": "x"}, "scheduled_date"),
+        ("demo", {"scheduled_date": today, "plan_day_id": "abc"}, "plan_day_id"),
+        (
+            "demo",
+            {"scheduled_date": today, "title": "x", "acknowledge_recovery_warning": "maybe"},
+            "acknowledge_recovery_warning",
+        ),
+    ]
+
+
+def _plan_day_messages(error: dict) -> tuple[str, tuple[str, ...]]:
+    return error["message"], tuple(d["message"] for d in error["details"] if d["field"] == "plan_day_id")
+
+
+@pytest.mark.tc("WRT-13")
+async def test_create_schedule_invalid_body_returns_422_without_writing(client: AsyncClient, db, auth_headers):
+    cases = await _invalid_schedule_cases(db)
+    headers = {persona: await auth_headers(persona) for persona in ("demo", "power", "plateau")}
+    before = await _schedule_count(db)
+    errors = [
+        _err(await client.post(SCHEDULES, json=body, headers=headers[persona]), 422, "validation_error")
+        for persona, body, _ in cases
+    ]
+    mismatched = [
+        (number, _fields(error), expected)
+        for number, (error, (_, _, expected)) in enumerate(zip(errors, cases, strict=True), start=1)
+        if expected not in _fields(error)
+    ]
+    assert mismatched == []
+    # Ca (3), (4), (5): cùng message, không lộ buổi giáo án có tồn tại hay thuộc ai.
+    assert len({_plan_day_messages(error) for error in errors[2:5]}) == 1, errors[2:5]
+    assert await _schedule_count(db) == before
+
+
+async def test_create_schedule_without_token_or_permission_is_rejected(client: AsyncClient, db, auth_headers):
+    body = {"scheduled_date": await _today(db, DEMO_ID), "title": "x"}
+    before = await _schedule_count(db)
+    res = await client.post(SCHEDULES, json=body)
+    _err(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+    _err(await client.post(SCHEDULES, json=body, headers=await auth_headers("editor")), 403, "permission_denied")
+    assert await _schedule_count(db) == before
