@@ -544,10 +544,21 @@ class Bot:
             if self.state.get("current") or not self.state["queue"]:
                 return
             job = self.state["queue"].pop(0)
+            if job.get("by") == "auto" and self.deps_missing(job["module"]):
+                self.save()  # bỏ job: auto_fill xếp lại khi phụ thuộc đã vào main
+                return
             self.state["current"] = {"module": job["module"], "phase": "spec", "by": job["by"],
                                      "started": time.time(), "pid": None}
             self.save()
         threading.Thread(target=self.run_job, args=(job,), daemon=True).start()
+
+    def deps_missing(self, key: str) -> list[str]:
+        """Phụ thuộc chưa vào main của job tự xếp (hàng đợi cũ có thể còn job xếp trước khi có depends_on)."""
+        modules = load_modules()["modules"]
+        missing = missing_deps(modules[key], modules, self.root) if key in modules else []
+        if missing:
+            self.log(f"[{key}] bỏ khỏi hàng đợi vì chưa đủ phụ thuộc: {', '.join(missing)}")
+        return missing
 
     def finish_job(self, module: str, code: int) -> None:
         with self.lock:
