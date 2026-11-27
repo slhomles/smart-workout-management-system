@@ -31,6 +31,8 @@ CATALOG_READ_PERMISSIONS = {
 # Thông điệp cố định: không lộ tên exception/chi tiết nội bộ (Claude_api_respone §3); chi tiết nằm ở log.
 STORAGE_DOWN_MESSAGE = "Kho lưu trữ media tạm thời không khả dụng"
 SIGNING_FAILED_DETAIL = "Không tạo được đường dẫn tải file từ kho lưu trữ"
+READ_FAILED_DETAIL = "Không đọc được file từ kho lưu trữ"
+FILE_MISSING_MESSAGE = "File media không còn trên kho lưu trữ"
 
 
 async def _is_owned_by(db: AsyncSession, media: MediaFile, user_id: uuid.UUID) -> bool:
@@ -105,3 +107,24 @@ async def get_media(db: AsyncSession, user_id: uuid.UUID, media_id: uuid.UUID) -
         url_expires_at=url_expires_at,
         created_at=media.created_at,
     )
+
+
+async def get_media_content(db: AsyncSession, user_id: uuid.UUID, media_id: uuid.UUID) -> tuple[bytes, str]:
+    """Nội dung file media và `mime_type` của nó; chỉ đọc kho sau khi đã qua phân quyền (spec §6 ý 7).
+
+    File không còn trên kho → 404 `not_found` với message riêng: user đã được phép xem media này nên message
+    khác không lộ media có tồn tại hay không (spec §6 ý 2). Kho lỗi → 503 `service_unavailable`.
+    """
+    media = await get_accessible_media(db, user_id, media_id)
+    try:
+        data = await storage_service.read_object(media.bucket, media.object_key)
+    except Exception as exc:
+        # Không log object_key: key của media cá nhân có thể chứa định danh user.
+        logger.exception("media: không đọc được file từ kho media_id=%s", media.id)
+        raise ServiceUnavailableError(
+            STORAGE_DOWN_MESSAGE,
+            [ErrorDetail(field="storage", message=READ_FAILED_DETAIL, code="down")],
+        ) from exc
+    if data is None:
+        raise NotFoundError("not_found", FILE_MISSING_MESSAGE)
+    return data, media.mime_type

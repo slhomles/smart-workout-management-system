@@ -3,22 +3,28 @@
 Mọi test HTTP chạy với `local_storage` (file trong `tmp_path`) hoặc `s3_fake` (client S3 giả): không gọi AWS thật.
 """
 
+import io
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 import pytest
 from botocore.exceptions import NoCredentialsError
 from httpx import AsyncClient, Response
+from PIL import Image
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.main import app
 from app.services import storage_service
 
 URL = "/api/v1/media"
+METADATA_PATH = "/api/v1/media/{media_id}"
+CONTENT_PATH = "/api/v1/media/{media_id}/content"
 DB_BUCKET = "smart-workout-media"
 MISSING_ID = uuid.UUID("00000000-0000-4000-8000-000000000000")
 SEED_KEYS = {
@@ -137,6 +143,10 @@ class MediaApi:
         """`GET /media/{media_id}` với token của persona."""
         return await self.client.get(f"{URL}/{media_id}", headers=await self.auth_headers(persona))
 
+    async def content(self, persona: str, media_id: uuid.UUID) -> Response:
+        """`GET /media/{media_id}/content` với token của persona."""
+        return await self.client.get(f"{URL}/{media_id}/content", headers=await self.auth_headers(persona))
+
 
 @pytest.fixture
 def media_api(client: AsyncClient, db: AsyncSession, auth_headers) -> MediaApi:
@@ -190,6 +200,19 @@ def _err(res: Response, status: int, code: str) -> dict:
     assert set(body) == {"error"} and set(body["error"]) == {"code", "message", "details", "request_id"}
     assert body["error"]["code"] == code and isinstance(body["error"]["details"], list)
     return body["error"]
+
+
+def _write_object(storage_dir: Path, alias: str, data: bytes) -> None:
+    """Đặt file của media seed vào kho local, đúng vị trí `<LOCAL_STORAGE_DIR>/<bucket>/<object_key>`."""
+    path = storage_dir / DB_BUCKET / SEED_KEYS[alias]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+
+
+def _jpeg(width: int, height: int) -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (width, height), (40, 120, 200)).save(buffer, format="JPEG")
+    return buffer.getvalue()
 
 
 # --- GET /media/{media_id}: local ---
@@ -339,3 +362,125 @@ async def test_get_media_s3_signing_fails_returns_503_without_leaking_error(medi
     for leaked in ("NoCredentialsError", "credentials"):
         assert leaked not in err["message"]
         assert leaked not in detail["message"]
+
+
+# --- GET /media/{media_id}/content ---
+@dataclass(frozen=True)
+class ContentCase:
+    """Một ca MED-11: persona tải nội dung file đã ghi sẵn vào kho local."""
+
+    persona: str
+    alias: str
+    data: bytes
+    content_type: str
+
+
+CONTENT_CASES = [
+    pytest.param(ContentCase("demo", "gif-row", b"GIF89a" + bytes(range(64)), "image/gif"), id="a-demo-catalog-gif"),
+    pytest.param(ContentCase("demo", "demo-w00-wm", _jpeg(20, 20), "image/jpeg"), id="b-demo-own-watermarked"),
+    pytest.param(ContentCase("newbie", "img-dumbbell", bytes(range(100, 200)), "image/jpeg"), id="c-newbie-equipment"),
+]
+
+
+@pytest.mark.tc("MED-11")
+@pytest.mark.parametrize("case", CONTENT_CASES)
+async def test_get_media_content_local_file_returns_raw_bytes(
+    media_api: MediaApi, local_storage: Path, case: ContentCase
+):
+    _write_object(local_storage, case.alias, case.data)
+    media_id = await media_api.media_id(case.alias)
+
+    res = await media_api.content(case.persona, media_id)
+
+    assert res.status_code == 200, res.text
+    assert res.content == case.data
+    assert res.headers["content-type"].startswith(case.content_type)
+
+
+@pytest.mark.tc("MED-12")
+@pytest.mark.usefixtures("local_storage")
+async def test_get_media_content_file_missing_in_storage_returns_404(
+    media_api: MediaApi, read_object_spy: list[tuple[str, str]]
+):
+    gif_id = await media_api.media_id("gif-row")
+
+    _err(await media_api.content("demo", gif_id), 404, "not_found")
+
+    # Đã qua phân quyền nên kho được đọc đúng một lần, theo bucket/key của bản ghi DB.
+    assert read_object_spy == [(DB_BUCKET, SEED_KEYS["gif-row"])]
+
+
+@pytest.mark.tc("MED-12")
+async def test_get_media_content_denied_media_returns_404_without_reading_storage(
+    media_api: MediaApi, local_storage: Path, read_object_spy: list[tuple[str, str]]
+):
+    # File có thật trên kho: 404 chỉ có thể đến từ phân quyền, không phải từ việc thiếu file.
+    _write_object(local_storage, "dung-w00", _jpeg(20, 20))
+    _write_object(local_storage, "demo-stale", _jpeg(20, 20))
+
+    errors = [
+        _err(await media_api.content("demo", await media_api.media_id(alias)), 404, "not_found")
+        for alias in ("dung-w00", "demo-stale", "missing")
+    ]
+
+    assert len({err["message"] for err in errors}) == 1
+    assert read_object_spy == []
+
+
+@pytest.mark.tc("MED-12")
+@pytest.mark.usefixtures("local_storage")
+async def test_get_media_content_storage_error_returns_503_without_leaking_error(
+    media_api: MediaApi, monkeypatch: pytest.MonkeyPatch
+):
+    async def _broken_read(bucket: str, object_key: str) -> bytes | None:
+        raise OSError("disk-hong")
+
+    monkeypatch.setattr(storage_service, "read_object", _broken_read)
+    gif_id = await media_api.media_id("gif-row")
+
+    res = await media_api.content("demo", gif_id)
+
+    err = _err(res, 503, "service_unavailable")
+    assert len(err["details"]) == 1
+    detail = err["details"][0]
+    assert set(detail) == {"field", "message", "code"}
+    assert (detail["field"], detail["code"]) == ("storage", "down")
+    assert isinstance(detail["message"], str) and detail["message"]
+    assert "disk-hong" not in res.text
+
+
+# --- Đăng nhập & OpenAPI của 2 route ---
+@pytest.mark.tc("MED-13")
+@pytest.mark.usefixtures("local_storage")
+@pytest.mark.parametrize(
+    ("alias", "suffix"),
+    [("gif-row", ""), ("gif-row", "/content"), ("demo-w00", "")],
+    ids=["metadata-gif-row", "content-gif-row", "metadata-demo-w00"],
+)
+async def test_get_media_without_token_returns_401(media_api: MediaApi, alias: str, suffix: str):
+    media_id = await media_api.media_id(alias)
+
+    res = await media_api.client.get(f"{URL}/{media_id}{suffix}")
+
+    _err(res, 401, "token_invalid")
+    assert res.headers["WWW-Authenticate"] == "Bearer"
+
+
+@pytest.mark.tc("MED-15")
+@pytest.mark.parametrize("path", [METADATA_PATH, CONTENT_PATH])
+def test_openapi_media_route_documents_tags_errors_and_permissions(path: str):
+    operation = app.openapi()["paths"][path]["get"]
+
+    assert operation["tags"] == ["Gallery"]
+    assert len(operation["summary"]) <= 80
+    assert {"401", "403", "404", "422", "503"} <= set(operation["responses"])
+    assert "exercise:read" in operation["description"]
+    assert "equipment:read" in operation["description"]
+
+
+@pytest.mark.tc("MED-15")
+def test_openapi_media_metadata_route_returns_media_response_schema():
+    operation = app.openapi()["paths"][METADATA_PATH]["get"]
+
+    schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+    assert schema["$ref"].endswith("/MediaResponse")

@@ -3,7 +3,7 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -22,6 +22,12 @@ ACCESS_RULES = (
 )
 STORAGE_DOWN: dict[int | str, dict[str, Any]] = {
     503: {"model": ErrorResponse, "description": "`service_unavailable`: kho lưu trữ media không khả dụng"},
+}
+FILE_CONTENT: dict[int | str, dict[str, Any]] = {
+    200: {
+        "content": {"image/*": {}, "video/*": {}},
+        "description": "Nội dung file (không bọc JSON); `Content-Type` là `mime_type` của media",
+    },
 }
 
 
@@ -44,3 +50,25 @@ async def get_media(
     db: AsyncSession = Depends(get_db),
 ) -> MediaResponse:
     return await media_service.get_media(db, current.id, media_id)
+
+
+@router.get(
+    "/{media_id}/content",
+    response_class=Response,
+    status_code=200,
+    responses={**ERROR_RESPONSES, **STORAGE_DOWN, **FILE_CONTENT},
+    summary="Tải nội dung file media",
+    description=(
+        ACCESS_RULES + " Trả nội dung file (không bọc JSON), `Content-Type` là `mime_type` của media; dùng được "
+        "cho cả lưu local và S3 (production nên dùng presigned `url` của `GET /media/{media_id}`). File không còn "
+        "trên kho → 404 `not_found`. `media_id` không phải UUID → 422 `validation_error`; "
+        "kho lưu trữ lỗi → 503 `service_unavailable`."
+    ),
+)
+async def get_media_content(
+    media_id: uuid.UUID,
+    current: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    data, mime_type = await media_service.get_media_content(db, current.id, media_id)
+    return Response(content=data, media_type=mime_type)
