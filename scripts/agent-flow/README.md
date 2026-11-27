@@ -65,6 +65,26 @@ Copy `docs/features/_TEMPLATE.md` thành `docs/features/<module>.md`, rồi đi�
 
 Kiểm tra spec: `python scripts\agent-flow\check_done.py --spec docs\features\<module>.md --meta`
 
+### Target: backend, ai-services, frontend
+
+Frontmatter `target` (mặc định `backend`) chọn thư mục code, bộ cổng, file core và venv (`targets.py`):
+
+| Target | Thư mục | Cổng mặc định | Cần cài trên máy chạy bot |
+|---|---|---|---|
+| `backend` | `backend/` | spec, protected, clean, pytest, tc, coverage, ruff, mypy, standards | `backend\.venv`, `backend/.env`, Tailscale tới VM |
+| `ai-services` | `ai-services/` | như backend | `ai-services\.venv` (`py -3.11 -m venv ai-services\.venv`, rồi `pip install -r ai-services\requirements.txt`) |
+| `frontend` | `frontend/` | spec, protected, clean, tsc, eslint, jest, tc, coverage, standards | Node.js + npm; cổng tự `npm ci` khi `node_modules` lệch `package-lock.json` (`check_frontend.py`) |
+
+- Frontend gắn test case bằng ID ở đầu tên test jest (`it('FEA-01 …')`).
+- Cổng `standards` của frontend lấy cảnh báo kích thước từ eslint (`max-lines`, `max-lines-per-function`, `max-params`, `max-depth`, `complexity`).
+- Mỗi target có bản tóm tắt quy tắc riêng (`_shared/rules-digest[-<target>].md`), lập từ danh sách `DIGEST_SOURCES` trong `run_flow.py`.
+
+### Phụ thuộc giữa module (`depends_on` trong `modules.json`)
+
+- Tự xếp hàng (`/auto on`) chỉ xếp một module khi mọi module trong `depends_on` đã vào `main`: `status: done` trong `modules.json`, hoặc `run.json` của module đó có `merged_pr`.
+- Module đang chờ phụ thuộc hiện ở `/status` (dòng "Chờ phụ thuộc vào main"). Phụ thuộc bị chặn thì module phụ thuộc cứ chờ; hàng đợi vẫn chạy các module khác.
+- `/run <module>` bằng tay không kiểm phụ thuộc (người chạy tự chịu).
+
 ## 3. Chạy
 
 ```powershell

@@ -39,6 +39,7 @@ Bạn là **IMPLEMENTER** trong agent flow của dự án smart_workout. Bạn n
 - Gọi mạng, sửa `.env`, chạy `docker compose down`, xoá volume, sửa hay xoá dữ liệu trên DB dùng chung ngoài transaction test.
 - Làm việc ngoài phạm vi task. Thấy lỗi khác thì ghi vào `NOTES`, không tự sửa.
 - Dùng `print()` (dùng `logging`), để `# type: ignore` không giải thích, để lại code chết.
+- Dùng lệnh bị chặn rồi mất lượt thử: xem kiểu xuống dòng bằng `git ls-files --eol <file>` hoặc đọc `.gitattributes` (KHÔNG `git config`); dọn biến môi trường PowerShell bằng `$env:TEN = $null` (KHÔNG `Remove-Item`).
 
 ## Báo cáo cuối (bắt buộc, đúng format)
 
@@ -58,3 +59,20 @@ TESTS_RUN:
 QUESTIONS: (bắt buộc nếu BLOCKED: chỗ thiếu/mâu thuẫn, phương án, đề xuất)
 NOTES: (lỗi ngoài phạm vi, rủi ro, việc chưa làm)
 ```
+
+## Target của module (`target` trong frontmatter spec, mặc định `backend`)
+
+Phần trên viết cho target **backend**. Brief ghi `TARGET`; với target khác, thay các chỗ tương ứng như sau (quy tắc chung về tài liệu, git, file bảo vệ chung, không bịa vẫn giữ nguyên):
+
+| | `ai-services` | `frontend` |
+|---|---|---|
+| Thư mục code | `ai-services/` (package `app/`, test `ai-services/tests/`) | `frontend/` (`src/`, test `*.test.ts(x)` hoặc `frontend/__tests__/`) |
+| Tài liệu chính | `docs/architecture/06-ai-contracts.md` (hợp đồng, PHẢI khớp field), `docs/guides/coding-standards.md`, `AGENT_RESOURCES.md` §4 | `docs/guides/frontend-standards.md` (toàn bộ, đặc biệt §8 design system và bản đồ màn hình), ảnh mẫu `docs/ui-refs/home-workout/` (mở đúng ảnh của màn đang làm), `AGENT_RESOURCES.md` (§2 mặc định tập luyện, §3 UI, §4 AI), schema backend trong `backend/app/schemas/` để lấy đúng kiểu dữ liệu |
+| Gắn test case | `@pytest.mark.tc("<ID>")` như backend | ID ở **đầu tên test**: `it('FEA-01 hiện lỗi khi sai mật khẩu', …)` |
+| Cổng nhanh | `--gates spec,protected,pytest,tc,ruff,standards --tests <file test>` | `--gates spec,protected,tsc,eslint,jest,tc,standards --tests <file test>` |
+| Lệnh test | python venv trong brief, cwd `ai-services/` | cwd `frontend/`: `node node_modules/jest/bin/jest.js <file>`, `node node_modules/typescript/bin/tsc --noEmit`, `node node_modules/eslint/bin/eslint.js .` |
+| File core (khi `allow_core_changes: no`) | `ai-services/app/core/`, `app/main.py`, `app/contracts.py`, `tests/conftest.py` | `src/app/_layout.tsx`, `src/app/(tabs)/_layout.tsx`, `src/services/api/`, `src/styles/theme.ts`, file cấu hình jest/eslint/tsconfig/app.config |
+| Thư viện (khi `allow_new_dependencies: no`) | `ai-services/requirements*.txt` | `frontend/package.json`, `package-lock.json` (không chạy `npm install <gói>`) |
+| Không được | Gọi mạng, tải model trong test (dùng model giả), sửa hợp đồng ở một phía | Gọi backend thật trong jest; viết màu/kích thước cứng ngoài `theme.ts`; dùng logo, ảnh hay tên của app mẫu; tự bịa số liệu tập luyện (lấy theo `AGENT_RESOURCES.md` §2) |
+
+Stage file theo đúng thư mục của target (ví dụ `git add frontend/src/screens/workout/...`).

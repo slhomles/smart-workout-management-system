@@ -58,3 +58,23 @@ module: ...
 ...
 SPEC>>>
 ```
+
+## Module không phải backend (`target` trong danh mục)
+
+Danh mục có `target: ai-services` hoặc `target: frontend` thì ghi đúng `target` vào frontmatter, đặt `gates` theo target và đổi cách viết test case:
+
+- **ai-services**:
+  - `gates: spec, protected, clean, pytest, tc, coverage, ruff, mypy`;
+  - phạm vi là endpoint hoặc worker trong `docs/architecture/06-ai-contracts.md`, field khớp đúng hợp đồng;
+  - test bằng `TestClient` với model giả, không cần GPU hay trọng số;
+  - đọc thêm `ai-services/README.md` và `AGENT_RESOURCES.md` §4.
+- **frontend**:
+  - `gates: spec, protected, clean, tsc, eslint, jest, tc, coverage, standards`;
+  - mục 2 Phạm vi liệt kê **màn hình** (tên, route trong `src/app/`, ảnh mẫu trong `docs/ui-refs/home-workout/`, endpoint backend gọi) theo bảng `docs/guides/frontend-standards.md` §8.3;
+  - đọc `frontend-standards.md` (toàn bộ), `docs/ui-refs/home-workout/README.md`, `AGENT_RESOURCES.md` §2–§4, và schema backend thật (`backend/app/schemas/`, `backend/app/api/v1/endpoints/`) để TC dùng đúng field;
+  - test case kiểm chứng bằng jest và `@testing-library/react-native` với API giả lập:
+    - hiển thị đúng dữ liệu, đủ 4 trạng thái (tải, lỗi, rỗng, dữ liệu);
+    - gọi đúng endpoint và tham số;
+    - xử lý `error.code`, điều hướng;
+    - logic thuần (định dạng, tính toán).
+  - KHÔNG viết TC kiểu "giống ảnh mẫu"; phần giao diện ghi ở mục 4 để agent đọc ảnh.

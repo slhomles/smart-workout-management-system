@@ -32,7 +32,7 @@ Nếu cần sửa code dù chỉ một dòng, giao lại cho implementer kèm fe
 
 1. **Nạp bối cảnh**: đọc `brief.md` → `state.json` (nếu có) → 30 dòng cuối `journal.md` → `ANSWERS.md` (nếu brief báo có) → `CLAUDE.md` → spec module → **bản tóm tắt quy tắc** (dòng `RULES_DIGEST` trong brief, xem bước 2).
 2. **Lập kế hoạch** (khi chưa có `state.json`, hoặc brief báo spec đã đổi / có ANSWERS mới):
-   - **Bản tóm tắt quy tắc** (ngoại lệ của CLAUDE.md §1 cho agent flow). Brief ghi `RULES_DIGEST` là **CÒN HIỆU LỰC**: đọc file đó và KHÔNG đọc lại toàn bộ tài liệu, chỉ mở thêm đúng mục gốc khi cần. Brief ghi **CẦN TẠO LẠI**: đọc toàn bộ tài liệu bắt buộc **một lần** (`CLAUDE.md`, `docs/architecture/Claude_api_respone.md`, `04-auth-strategy.md`, `05-tooling-workflow.md`, `Claude_git.md`, `docs/guides/coding-standards.md`, `docs/database/design-overview.md`, `test-dataset.md`), viết bản tóm tắt (tối đa ~200 dòng) vào file `RULES_DIGEST`, rồi ghi **đúng chuỗi sha** brief đưa ra vào file `.sha` đi kèm. Bản tóm tắt gồm: format response và lỗi, các `error.code` đã đăng ký (§10), status code, kiểu ID, phân trang, tầng và layout file, quy ước test và fixture, quy tắc git/commit, coding standards; mỗi ý kèm con trỏ `file §mục`. Không chép dài, không thêm quy tắc không có trong tài liệu.
+   - **Bản tóm tắt quy tắc** (ngoại lệ của CLAUDE.md §1 cho agent flow). Brief ghi `RULES_DIGEST` là **CÒN HIỆU LỰC**: đọc file đó và KHÔNG đọc lại toàn bộ tài liệu, chỉ mở thêm đúng mục gốc khi cần. Brief ghi **CẦN TẠO LẠI**: đọc toàn bộ tài liệu bắt buộc **một lần** (danh sách `RULES_SOURCES` trong brief, theo target của module), viết bản tóm tắt (tối đa ~200 dòng) vào file `RULES_DIGEST`, rồi ghi **đúng chuỗi sha** brief đưa ra vào file `.sha` đi kèm. Bản tóm tắt gồm: format response và lỗi, các `error.code` đã đăng ký (§10), status code, kiểu ID, phân trang, tầng và layout file, quy ước test và fixture, quy tắc git/commit, coding standards; mỗi ý kèm con trỏ `file §mục`. Không chép dài, không thêm quy tắc không có trong tài liệu.
    - Theo CLAUDE.md §2 và bản tóm tắt, xác định khu vực spec chạm tới. Chỉ đọc thêm toàn bộ tài liệu của khu vực mà bản tóm tắt chưa đủ chi tiết (ví dụ DDL của bảng spec dùng).
    - Đối chiếu spec với tài liệu theo CLAUDE.md §3. Chỗ tài liệu thiếu hoặc mâu thuẫn mà §3 không giải quyết: ghi vào `questions`, KHÔNG đoán.
    - Chia module thành **4–6 task** (mục tiêu của flow là xong một module trong khoảng 1 giờ): gom theo nhóm endpoint dùng chung một service, tối đa ~5 TC mỗi task, mỗi task vẫn là một commit. Đừng tách mỗi endpoint thành một task. Mỗi task ghi rõ các TC nó phủ, file dự kiến, tài liệu + mục cần đọc, file test của task, task phụ thuộc. Đi theo contract-first (doc 05 §1.1): schema → route/mock (nếu spec yêu cầu) → service/crud → test nghiệp vụ.
@@ -124,3 +124,20 @@ Giữ JSON hợp lệ, vì runner đọc `status`, `approved_sha`, `tasks[].stat
 
 - `journal.md`: mỗi iteration thêm một mục gồm tiêu đề `## Iteration N — <thời gian>`, các task đã xử lý, kết quả kiểm chứng, commit, câu hỏi mới, việc tiếp theo.
 - `REPORT.md` (ghi khi approved) gồm: tóm tắt module; bảng TC → test nodeid → commit; danh sách tài liệu đã đọc và quy tắc đã áp dụng (theo CLAUDE.md §1.3); kết quả từng checklist (`Claude_api_respone.md` §9, doc 05 §11, `Claude_git.md` §3, doc 04 §10 nếu có); các quyết định bạn tự chốt khi tài liệu cho phép; việc còn lại cho người (push, PR, review).
+
+## Target của module (`target` trong frontmatter spec, mặc định `backend`)
+
+Phần trên viết cho target **backend**. Brief ghi `TARGET`; với target khác, thay các chỗ tương ứng như sau (quy tắc chung về tài liệu, git, file bảo vệ chung, không bịa vẫn giữ nguyên):
+
+| | `ai-services` | `frontend` |
+|---|---|---|
+| Thư mục code | `ai-services/` (package `app/`, test `ai-services/tests/`) | `frontend/` (`src/`, test `*.test.ts(x)` hoặc `frontend/__tests__/`) |
+| Tài liệu chính | `docs/architecture/06-ai-contracts.md` (hợp đồng, PHẢI khớp field), `docs/guides/coding-standards.md`, `AGENT_RESOURCES.md` §4 | `docs/guides/frontend-standards.md` (toàn bộ, đặc biệt §8 design system và bản đồ màn hình), ảnh mẫu `docs/ui-refs/home-workout/` (mở đúng ảnh của màn đang làm), `AGENT_RESOURCES.md` (§2 mặc định tập luyện, §3 UI, §4 AI), schema backend trong `backend/app/schemas/` để lấy đúng kiểu dữ liệu |
+| Gắn test case | `@pytest.mark.tc("<ID>")` như backend | ID ở **đầu tên test**: `it('FEA-01 hiện lỗi khi sai mật khẩu', …)` |
+| Cổng nhanh | `--gates spec,protected,pytest,tc,ruff,standards --tests <file test>` | `--gates spec,protected,tsc,eslint,jest,tc,standards --tests <file test>` |
+| Lệnh test | python venv trong brief, cwd `ai-services/` | cwd `frontend/`: `node node_modules/jest/bin/jest.js <file>`, `node node_modules/typescript/bin/tsc --noEmit`, `node node_modules/eslint/bin/eslint.js .` |
+| File core (khi `allow_core_changes: no`) | `ai-services/app/core/`, `app/main.py`, `app/contracts.py`, `tests/conftest.py` | `src/app/_layout.tsx`, `src/app/(tabs)/_layout.tsx`, `src/services/api/`, `src/styles/theme.ts`, file cấu hình jest/eslint/tsconfig/app.config |
+| Thư viện (khi `allow_new_dependencies: no`) | `ai-services/requirements*.txt` | `frontend/package.json`, `package-lock.json` (không chạy `npm install <gói>`) |
+| Không được | Gọi mạng, tải model trong test (dùng model giả), sửa hợp đồng ở một phía | Gọi backend thật trong jest; viết màu/kích thước cứng ngoài `theme.ts`; dùng logo, ảnh hay tên của app mẫu; tự bịa số liệu tập luyện (lấy theo `AGENT_RESOURCES.md` §2) |
+
+Stage file theo đúng thư mục của target (ví dụ `git add frontend/src/screens/workout/...`).
