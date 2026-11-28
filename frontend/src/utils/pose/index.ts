@@ -2,6 +2,17 @@
 export { angleDeg } from './angle';
 export type { AngleOptions } from './angle';
 export { LANDMARK_INDEX, measureJoint, pickSide, toPixelLandmarks } from './landmarks';
+export {
+  AI_RULE_SLUGS,
+  canUseAiTrainer,
+  getPoseRules,
+  hasAiRules,
+  POSE_RULES,
+  PoseRulesError,
+  validatePoseRules,
+} from './rules';
+export type { AiTrainerCandidate } from './rules';
+export { checkPose } from './check';
 export type {
   ExerciseRule,
   FormCheck,
