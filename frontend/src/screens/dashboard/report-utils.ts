@@ -2,8 +2,11 @@
  * Hàm thuần của tab Báo cáo (spec fe-dashboard §2.3). Ngày xử lý theo giờ địa phương hoặc chuỗi,
  * KHÔNG dùng `toISOString()`: đổi sang UTC sẽ lệch ngày ở múi giờ dương (vd Asia/Ho_Chi_Minh lúc 00:30).
  */
+import type { ChartPoint } from '@/components/common/LineChartCard';
 import { startOfWeek } from '@/components/common/WeekStrip';
-import type { RecoveryStatus } from '@/types/dashboard';
+import type { UnitSystem } from '@/types/auth';
+import type { RecoveryStatus, WeightTrendPoint } from '@/types/dashboard';
+import { kgToLb } from '@/utils/units';
 
 const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DAYS_PER_WEEK = 7;
@@ -73,4 +76,29 @@ export function bmiCategoryLabel(category: string | null): string {
 
 export function recoveryStatusLabel(status: RecoveryStatus): string {
   return RECOVERY_STATUS_LABELS[status];
+}
+
+export type WeightExtremes = { heaviestKg: number | null; lightestKg: number | null };
+
+function presentValues(values: (number | null)[]): number[] {
+  return values.filter((value): value is number => value !== null);
+}
+
+/** Nặng nhất là max các `max_weight_kg`, nhẹ nhất là min các `min_weight_kg`; tuần không có số đo (null) bị bỏ qua. */
+export function weightExtremes(points: WeightTrendPoint[]): WeightExtremes {
+  const maxima = presentValues(points.map((p) => p.max_weight_kg));
+  const minima = presentValues(points.map((p) => p.min_weight_kg));
+  return {
+    heaviestKg: maxima.length > 0 ? Math.max(...maxima) : null,
+    lightestKg: minima.length > 0 ? Math.min(...minima) : null,
+  };
+}
+
+/** Điểm biểu đồ cân nặng: chỉ tuần có `avg_weight_kg`, nhãn `dd/mm`, giá trị theo đơn vị hiển thị (`null` = metric). */
+export function weightChartPoints(points: WeightTrendPoint[], unitSystem: UnitSystem | null): ChartPoint[] {
+  return points.flatMap((p) => {
+    if (p.avg_weight_kg === null) return [];
+    const value = unitSystem === 'imperial' ? kgToLb(p.avg_weight_kg) : p.avg_weight_kg;
+    return [{ label: formatDayMonth(p.week_start), value }];
+  });
 }

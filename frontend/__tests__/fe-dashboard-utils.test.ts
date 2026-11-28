@@ -4,7 +4,10 @@ import {
   lastDayOfPeriod,
   previousWeekStart,
   recoveryStatusLabel,
+  weightChartPoints,
+  weightExtremes,
 } from '@/screens/dashboard/report-utils';
+import type { WeightTrendPoint } from '@/types/dashboard';
 
 describe('report-utils (spec fe-dashboard §2.3)', () => {
   it.each([
@@ -74,5 +77,52 @@ describe('report-utils (spec fe-dashboard §2.3)', () => {
     expect(recoveryStatusLabel('fatigued')).toBe('Mệt mỏi');
     expect(recoveryStatusLabel('recovering')).toBe('Đang hồi phục');
     expect(recoveryStatusLabel('ready')).toBe('Sẵn sàng');
+  });
+});
+
+function weekPoint(weekStart: string, weights: { avg: number | null; min: number | null; max: number | null }): WeightTrendPoint {
+  return {
+    week_start: weekStart,
+    avg_weight_kg: weights.avg,
+    min_weight_kg: weights.min,
+    max_weight_kg: weights.max,
+    avg_body_fat_pct: null,
+    measurement_count: weights.avg === null ? 0 : 2,
+    change_kg: null,
+    is_plateau: false,
+    sessions_completed: 0,
+    est_calories_burned_kcal: 0,
+  };
+}
+
+const MIXED_POINTS = [
+  weekPoint('2026-11-02', { avg: 71.2, min: 70.9, max: 71.5 }),
+  weekPoint('2026-11-09', { avg: null, min: null, max: null }),
+  weekPoint('2026-11-16', { avg: 70.4, min: 69.8, max: 70.6 }),
+];
+
+describe('report-utils: cân nặng (spec fe-dashboard §2.2 ý 4)', () => {
+  it('FEDASH-07 weightExtremes lấy max của max_weight_kg và min của min_weight_kg, bỏ tuần null', () => {
+    expect(weightExtremes(MIXED_POINTS)).toEqual({ heaviestKg: 71.5, lightestKg: 69.8 });
+  });
+
+  it('FEDASH-08 weightExtremes không có điểm hoặc mọi giá trị null thì trả null', () => {
+    expect(weightExtremes([])).toEqual({ heaviestKg: null, lightestKg: null });
+    expect(weightExtremes([MIXED_POINTS[1] as WeightTrendPoint])).toEqual({ heaviestKg: null, lightestKg: null });
+  });
+
+  it('FEDASH-07 weightChartPoints (metric) bỏ tuần không có avg_weight_kg, nhãn dd/mm, giá trị kg', () => {
+    expect(weightChartPoints(MIXED_POINTS, 'metric')).toEqual([
+      { label: '02/11', value: 71.2 },
+      { label: '16/11', value: 70.4 },
+    ]);
+    expect(weightChartPoints(MIXED_POINTS, null)).toEqual(weightChartPoints(MIXED_POINTS, 'metric'));
+    expect(weightChartPoints([], 'metric')).toEqual([]);
+  });
+
+  it('FEDASH-07 weightChartPoints (imperial) đổi giá trị sang lb', () => {
+    const [first] = weightChartPoints(MIXED_POINTS, 'imperial');
+    expect(first?.label).toBe('02/11');
+    expect(first?.value).toBeCloseTo(156.969, 3);
   });
 });
