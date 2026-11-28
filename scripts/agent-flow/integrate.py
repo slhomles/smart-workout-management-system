@@ -21,6 +21,7 @@ __all__ = ["IntegrationError", "integrate", "sync_main"]
 HERE = Path(__file__).resolve().parent
 MAX_MERGE_ROUNDS = 2
 MAX_FIX_ATTEMPTS = 2
+MAX_TITLE = 72  # Claude_git.md §2: dòng đầu commit
 SYNCED_PREFIXES = (".claude/agents/",)  # runner chép vào worktree khi nhánh chưa track
 
 
@@ -115,6 +116,12 @@ def clear_synced_copies(wt: Path, sha: str) -> None:
             (wt / path).unlink(missing_ok=True)
 
 
+def merge_title(commit_scope: str, branch: str) -> str:
+    """Tiêu đề commit gộp main; dòng đầu tối đa 72 ký tự (Claude_git.md §2) nên bỏ tên nhánh khi quá dài."""
+    title = f"chore({commit_scope}): merge main into {branch}"
+    return title if len(title) <= MAX_TITLE else f"chore({commit_scope}): merge latest main"
+
+
 def finish_merge(flow, log) -> bool:
     """Giải xung đột rồi commit gộp; False nếu gộp không đổi gì (nhánh đã có đủ nội dung của main)."""
     left = resolve_known(flow.wt, conflicted(flow.wt))
@@ -128,7 +135,7 @@ def finish_merge(flow, log) -> bool:
     assert_no_markers(flow.wt)
     if not git(flow.wt, "diff", "--cached", "--name-only"):
         return False
-    commit(flow, f"chore({scope(flow)}): merge main into {flow.spec['branch']}")
+    commit(flow, merge_title(scope(flow), flow.spec["branch"]))
     return True
 
 

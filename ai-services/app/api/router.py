@@ -6,9 +6,11 @@ không có tiền tố `/api/v1`.
 from fastapi import APIRouter
 
 from app.api import health
+from app.equipment import router as equipment
 from app.recovery import router as recovery
 
 api_router = APIRouter()
 
+api_router.include_router(equipment.router)
 api_router.include_router(health.router)
 api_router.include_router(recovery.router)

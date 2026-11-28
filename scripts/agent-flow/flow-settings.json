@@ -29,7 +29,11 @@
       "PowerShell(pip install*)",
       "PowerShell(pip uninstall*)",
       "PowerShell(python -m pip install*)",
-      "PowerShell(python -m pip uninstall*)"
+      "PowerShell(python -m pip uninstall*)",
+      "Bash(git stash list*)",
+      "Bash(git stash show*)",
+      "PowerShell(git stash list*)",
+      "PowerShell(git stash show*)"
     ],
     "deny": [
       "AskUserQuestion",
@@ -44,7 +48,6 @@
       "Bash(git merge*)",
       "Bash(git switch*)",
       "Bash(git checkout*)",
-      "Bash(git stash*)",
       "Bash(git config*)",
       "Bash(git worktree*)",
       "Bash(git branch -D*)",
@@ -70,7 +73,6 @@
       "PowerShell(git merge*)",
       "PowerShell(git switch*)",
       "PowerShell(git checkout*)",
-      "PowerShell(git stash*)",
       "PowerShell(git config*)",
       "PowerShell(git worktree*)",
       "PowerShell(git branch -D*)",
@@ -90,7 +92,27 @@
       "Bash(git commit*)",
       "Bash(git -c*)",
       "PowerShell(git commit*)",
-      "PowerShell(git -c*)"
+      "PowerShell(git -c*)",
+      "Bash(git stash)",
+      "Bash(git stash push*)",
+      "Bash(git stash pop*)",
+      "Bash(git stash apply*)",
+      "Bash(git stash drop*)",
+      "Bash(git stash clear*)",
+      "Bash(git stash save*)",
+      "Bash(git stash branch*)",
+      "Bash(git stash store*)",
+      "Bash(git stash create*)",
+      "PowerShell(git stash)",
+      "PowerShell(git stash push*)",
+      "PowerShell(git stash pop*)",
+      "PowerShell(git stash apply*)",
+      "PowerShell(git stash drop*)",
+      "PowerShell(git stash clear*)",
+      "PowerShell(git stash save*)",
+      "PowerShell(git stash branch*)",
+      "PowerShell(git stash store*)",
+      "PowerShell(git stash create*)"
     ]
   }
 }
