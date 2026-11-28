@@ -372,7 +372,7 @@ Mã lỗi dùng chung envelope `ErrorResponse` (xem `05-tooling-workflow.md`). F
 ## 7. Quy tắc cho Frontend (React Native + Expo)
 
 PHẢI:
-1. Lưu `access_token`, `refresh_token`, `device_id` trong `expo-secure-store`. KHÔNG dùng AsyncStorage/MMKV thường/Redux persist cho token.
+1. Lưu `access_token`, `refresh_token`, `device_id` trong `expo-secure-store`. KHÔNG dùng AsyncStorage/MMKV thường/Redux persist cho token. Ngoại lệ duy nhất: bản **web** chạy để phát triển/demo (`Platform.OS === "web"`, không có SecureStore) lưu trong `localStorage` của trình duyệt; không phát hành bản web cho người dùng thật (nhóm chốt 28/11/2026).
 2. Gắn `Authorization: Bearer <access_token>` bằng **request interceptor** của Axios; KHÔNG gắn thủ công từng lời gọi.
 3. Xử lý `TOKEN_EXPIRED` bằng **single-flight refresh**: chỉ một lần gọi `/auth/refresh` tại một thời điểm, các request 401 khác đợi chung kết quả rồi retry **đúng một lần**. Nếu không có cơ chế này, nhiều request song song sẽ dùng cùng một refresh token → server coi là dùng lại (`TOKEN_REUSED`) và đá người dùng ra.
 4. Sau `refresh` thành công PHẢI ghi **cả hai** token mới vào SecureStore trước khi retry (refresh token cũ đã vô hiệu).

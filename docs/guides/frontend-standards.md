@@ -12,7 +12,7 @@
 | Gọi API | Axios, một client duy nhất ở `src/services/api/client.ts` |
 | Dữ liệu từ server | `@tanstack/react-query` |
 | Trạng thái phiên đăng nhập | `zustand` (`src/store/session.ts`) |
-| Lưu token | `expo-secure-store` (doc 04 §7 ý 1) |
+| Lưu token | `expo-secure-store` (doc 04 §7 ý 1); riêng bản web dev/demo dùng `localStorage` (ngoại lệ doc 04 §7) |
 | Test | `jest-expo` + `@testing-library/react-native` |
 | Lint | `eslint` (cấu hình `eslint-config-expo`) + `prettier` |
 | Giao diện | `expo-linear-gradient` (gradient), `@expo/vector-icons` (icon), `@expo-google-fonts/be-vietnam-pro` (font), `react-native-svg` + `react-native-body-highlighter` (muscle map), `expo-image` (GIF và ảnh) |
