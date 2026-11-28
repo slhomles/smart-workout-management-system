@@ -17,6 +17,7 @@ from app.api.v1.endpoints import (
     pose_analyses,
     reports,
     users,
+    video_job_worker,
     video_jobs,
     workout_routine,
     workout_sessions,
@@ -35,6 +36,7 @@ api_v1_router.include_router(media.router)
 api_v1_router.include_router(pose_analyses.router)
 api_v1_router.include_router(reports.router)
 api_v1_router.include_router(users.router)
+api_v1_router.include_router(video_job_worker.router)
 api_v1_router.include_router(video_jobs.router)
 api_v1_router.include_router(workout_routine.router)
 api_v1_router.include_router(workout_sessions.router)

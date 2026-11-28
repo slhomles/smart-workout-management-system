@@ -92,15 +92,22 @@ class Settings(BaseSettings):
     # --- AI Services ---
     AI_SERVICE_URL: str = "http://localhost:8001"
     AI_HEALTH_TIMEOUT_SECONDS: float = 2.0
+    # Bí mật chung với worker video (header X-Worker-Token, 06-ai-contracts §3.1); rỗng thì mọi request worker bị 401.
+    AI_WORKER_TOKEN: str = ""
 
     @model_validator(mode="after")
     def _check_production_safety(self) -> "Settings":
-        """Ngoài development: chặn secret mặc định/yếu và CORS '*' (doc 04 §6.4, doc 05 §7.3)."""
+        """Ngoài development: chặn JWT_SECRET_KEY/AI_WORKER_TOKEN yếu và CORS '*'.
+
+        Căn cứ: doc 04 §6.4, doc 05 §7.3, 06-ai-contracts §3.1.
+        """
         if self.APP_ENV != "development":
             if self.JWT_SECRET_KEY == DEFAULT_JWT_SECRET or len(self.JWT_SECRET_KEY) < 32:
                 raise ValueError("JWT_SECRET_KEY phải là chuỗi ngẫu nhiên ≥ 32 ký tự ngoài môi trường development")
             if "*" in self.CORS_ORIGINS:
                 raise ValueError("CORS_ORIGINS không được chứa '*' ngoài môi trường development")
+            if len(self.AI_WORKER_TOKEN) < 32:
+                raise ValueError("AI_WORKER_TOKEN phải là chuỗi ngẫu nhiên ≥ 32 ký tự ngoài môi trường development")
         return self
 
 

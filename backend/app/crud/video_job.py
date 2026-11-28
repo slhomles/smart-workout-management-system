@@ -1,12 +1,13 @@
-"""Truy vấn job phân tích video (ai.video_analysis_jobs + ai.pose_analyses) và đọc media video.
+"""Truy vấn job phân tích video (ai.video_analysis_jobs + ai.pose_analyses), hàng đợi worker và media video.
 
-`media.media_files` chỉ đọc bằng `text()` vì module Gallery chưa có service.
+`media.media_files` truy cập bằng `text()` vì module Gallery chưa có service công khai cho file
+hệ thống (spec be-video-worker-api §6 ý 6, Q3).
 Ngữ cảnh hiệp/buổi/bài lấy từ view `ai.v_pose_analysis_details` (đã lọc buổi xoá mềm).
 """
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,14 +16,18 @@ from app.models.ai import PoseAnalysis, VideoAnalysisJob
 from app.models.enums import AnalysisMode
 from app.schemas.video_job import VideoJobListQuery
 
+if TYPE_CHECKING:
+    # Chỉ để khai kiểu tham số; crud không gọi service lúc chạy.
+    from app.services.storage_service import StoredObject
+
 _AVAILABLE_VIDEO_SQL = """
 SELECT id, uploaded_by_user_id
 FROM media.media_files
 WHERE id = :id AND deleted_at IS NULL AND status = 'available' AND mime_type LIKE 'video/%'
 """
 
-# SELECT dùng chung cho đọc một job và danh sách job của user (lọc thêm bằng `AND ...`).
-JOB_SELECT = """
+# Cột + JOIN chung của job; JOIN view nên job thuộc buổi đã xoá mềm không có dòng.
+_JOB_BASE_SELECT = """
 SELECT j.id, j.pose_analysis_id, d.set_id, d.session_id, d.exercise_id, d.exercise_name, j.status,
        j.source_video_media_id, j.result_video_media_id, d.model_name, d.model_version,
        d.overall_score, d.correct_form_pct, d.detected_rep_count, pa.feedback_summary,
@@ -30,7 +35,48 @@ SELECT j.id, j.pose_analysis_id, d.set_id, d.session_id, d.exercise_id, d.exerci
 FROM ai.video_analysis_jobs j
 JOIN ai.v_pose_analysis_details d ON d.pose_analysis_id = j.pose_analysis_id
 JOIN ai.pose_analyses pa ON pa.id = j.pose_analysis_id
-WHERE d.user_id = :user_id
+"""
+
+# SELECT dùng chung cho đọc một job và danh sách job của user (lọc thêm bằng `AND ...`).
+JOB_SELECT = _JOB_BASE_SELECT + "WHERE d.user_id = :user_id\n"
+
+_SOURCE_MEDIA_SQL = """
+SELECT bucket, object_key, mime_type
+FROM media.media_files
+WHERE id = :id AND deleted_at IS NULL AND status = 'available'
+"""
+
+# Job queued còn lượt thử, buổi chưa xoá mềm; ưu tiên cao nhất rồi cũ nhất (dùng ix_video_analysis_jobs_queue).
+# SKIP LOCKED để nhiều worker cùng claim không chờ nhau; j.id làm khoá phụ cho thứ tự tất định.
+_CLAIM_NEXT_SQL = """
+SELECT j.id
+FROM ai.video_analysis_jobs j
+WHERE j.status = 'queued'
+  AND j.attempt_count < j.max_attempts
+  AND EXISTS (SELECT 1 FROM ai.v_pose_analysis_details d WHERE d.pose_analysis_id = j.pose_analysis_id)
+ORDER BY j.priority DESC, j.queued_at, j.id
+LIMIT 1
+FOR UPDATE OF j SKIP LOCKED
+"""
+
+# Video kết quả do hệ thống sinh: không có người upload (COMMENT cột uploaded_by_user_id); đã có
+# size + checksum nên được đặt `available` ngay (ck_media_files_available).
+_INSERT_SYSTEM_VIDEO_SQL = """
+INSERT INTO media.media_files (uploaded_by_user_id, storage_provider, bucket, object_key, mime_type,
+                               size_bytes, checksum_sha256, status)
+VALUES (NULL, CAST(:provider AS media.storage_provider), :bucket, :object_key, 'video/mp4',
+        :size_bytes, :checksum_sha256, CAST('available' AS media.media_status))
+RETURNING id
+"""
+
+_CLAIM_CONTEXT_SQL = """
+SELECT j.id AS job_id, d.set_id, d.exercise_id, e.slug AS exercise_slug, j.attempt_count,
+       m.mime_type AS source_video_content_type
+FROM ai.video_analysis_jobs j
+JOIN ai.v_pose_analysis_details d ON d.pose_analysis_id = j.pose_analysis_id
+JOIN catalog.exercises e ON e.id = d.exercise_id
+JOIN media.media_files m ON m.id = j.source_video_media_id
+WHERE j.id = :job_id
 """
 
 
@@ -108,3 +154,36 @@ async def list_jobs(
         params["after_created_at"], params["after_id"] = after
     sql += " ORDER BY j.created_at DESC, j.id DESC LIMIT :limit"
     return list((await db.execute(text(sql), params)).mappings().all())
+
+
+async def claim_next_job_id(db: AsyncSession) -> uuid.UUID | None:
+    """Khoá và trả id job kế tiếp worker nên nhận (FOR UPDATE SKIP LOCKED); None nếu hàng đợi trống."""
+    return await db.scalar(text(_CLAIM_NEXT_SQL))
+
+
+async def get_claim_context(db: AsyncSession, job_id: uuid.UUID) -> Any | None:
+    """Ngữ cảnh worker cần sau khi claim: hiệp, bài (id, slug), số lần thử, MIME video gốc; None nếu không có."""
+    return (await db.execute(text(_CLAIM_CONTEXT_SQL), {"job_id": job_id})).mappings().first()
+
+
+async def get_worker_job(db: AsyncSession, job_id: uuid.UUID) -> Any | None:
+    """Một job bất kể chủ sở hữu (worker không có user); None nếu không có hoặc buổi đã xoá mềm."""
+    sql = _JOB_BASE_SELECT + " WHERE j.id = :job_id"
+    return (await db.execute(text(sql), {"job_id": job_id})).mappings().first()
+
+
+async def get_source_media(db: AsyncSession, media_id: uuid.UUID) -> Any | None:
+    """Vị trí kho + MIME của video gốc còn dùng được (chưa xoá, `available`); None nếu không có."""
+    return (await db.execute(text(_SOURCE_MEDIA_SQL), {"id": media_id})).mappings().first()
+
+
+async def insert_system_video(db: AsyncSession, stored: "StoredObject") -> uuid.UUID:
+    """Đăng ký video MP4 hệ thống vừa lưu vào kho (`available`, không người upload); chỉ flush, không commit."""
+    params = {
+        "provider": stored.provider.value,
+        "bucket": stored.bucket,
+        "object_key": stored.object_key,
+        "size_bytes": stored.size_bytes,
+        "checksum_sha256": stored.checksum_sha256,
+    }
+    return (await db.execute(text(_INSERT_SYSTEM_VIDEO_SQL), params)).scalar_one()

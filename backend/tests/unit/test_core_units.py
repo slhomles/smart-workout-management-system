@@ -22,7 +22,13 @@ def test_settings_reject_unsafe_production_values():
         Settings(APP_ENV="production", CORS_ORIGINS=["http://app.local"], _env_file=None)
     with pytest.raises(ValidationError):
         Settings(APP_ENV="production", JWT_SECRET_KEY="x" * 40, CORS_ORIGINS=["*"], _env_file=None)
-    ok = Settings(APP_ENV="production", JWT_SECRET_KEY="x" * 40, CORS_ORIGINS=["http://app.local"], _env_file=None)
+    ok = Settings(
+        APP_ENV="production",
+        JWT_SECRET_KEY="x" * 40,
+        CORS_ORIGINS=["http://app.local"],
+        AI_WORKER_TOKEN="x" * 32,
+        _env_file=None,
+    )
     assert ok.CORS_ORIGINS == ["http://app.local"]
 
 
