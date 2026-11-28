@@ -1,0 +1,134 @@
+{
+  "version": 1,
+  "min_visibility": 0.5,
+  "exercises": {
+    "barbell-back-squat": {
+      "source": "Kỹ thuật theo ExRx Barbell Squat https://exrx.net/WeightExercises/Quadriceps/BBSquat và bước 3 của seed 03_exercises.sql (hạ đến khi đùi song song sàn hoặc thấp hơn, lưng giữ thẳng). Góc gối hông-gối-cổ chân: đứng thẳng >= 160, đùi song song sàn khi quay ngang cho góc gối dưới 90, nên flexed_deg 90; partial_deg 130 là đã gập rõ nhưng chưa tới song song. Góc vai-hông-gối < 40 ở pha xuống/đáy/lên coi là gập thân quá mức, dùng làm dấu hiệu thay thế cho cong lưng dưới vì góc 3 điểm không đo trực tiếp được cột sống. Các ngưỡng là ước lượng từ mô tả kỹ thuật tại các nguồn trên, owner cần kiểm chứng (spec Q2). min_visibility 0.5 lấy bằng giá trị mặc định 0.5 của các ngưỡng tin cậy (min_pose_detection_confidence, min_tracking_confidence) trong MediaPipe Pose Landmarker https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker.",
+      "view": "side",
+      "rep": {
+        "joint": ["hip", "knee", "ankle"],
+        "start": "extended",
+        "first_phase": "eccentric",
+        "extended_deg": 160,
+        "flexed_deg": 90,
+        "partial_deg": 130,
+        "partial_mistake_code": "SQUAT_SHALLOW_DEPTH"
+      },
+      "checks": [
+        {
+          "mistake_code": "SQUAT_BACK_ROUNDING",
+          "joint": ["shoulder", "hip", "knee"],
+          "min_deg": 40,
+          "max_deg": null,
+          "phases": ["eccentric", "bottom", "concentric"],
+          "severity": "critical"
+        }
+      ]
+    },
+    "conventional-deadlift": {
+      "source": "Kỹ thuật theo ExRx Barbell Deadlift https://exrx.net/WeightExercises/GluteusMaximus/BBDeadlift và bước 2-4 của seed 03_exercises.sql (gập hông nắm thanh, kéo lên tới khi đứng thẳng hoàn toàn). Góc hông vai-hông-gối: tư thế bắt đầu gập hông <= 100, đứng thẳng khoá hông >= 165, partial_deg 140 là đã kéo quá nửa đường. Các ngưỡng là ước lượng từ mô tả kỹ thuật tại các nguồn trên, owner cần kiểm chứng (spec Q2). min_visibility 0.5 theo MediaPipe Pose Landmarker https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker.",
+      "view": "side",
+      "rep": {
+        "joint": ["shoulder", "hip", "knee"],
+        "start": "flexed",
+        "first_phase": "concentric",
+        "extended_deg": 165,
+        "flexed_deg": 100,
+        "partial_deg": 140,
+        "partial_mistake_code": null
+      },
+      "checks": []
+    },
+    "push-up": {
+      "source": "Kỹ thuật theo ExRx Push-up https://exrx.net/WeightExercises/PectoralSternal/BWPushup và bước 1-3 của seed 03_exercises.sql (thân thẳng từ đầu đến gót, gập khuỷu hạ ngực gần chạm sàn, giữ hông không võng). Góc khuỷu vai-khuỷu-cổ tay: tay duỗi >= 160, ngực gần sàn cho khuỷu <= 90, partial_deg 120 là mới hạ được một phần. Thân thẳng cho góc vai-hông-cổ chân gần 180; dưới 160 coi là võng hông. Các ngưỡng là ước lượng từ mô tả kỹ thuật tại các nguồn trên, owner cần kiểm chứng (spec Q2). min_visibility 0.5 theo MediaPipe Pose Landmarker https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker.",
+      "view": "side",
+      "rep": {
+        "joint": ["shoulder", "elbow", "wrist"],
+        "start": "extended",
+        "first_phase": "eccentric",
+        "extended_deg": 160,
+        "flexed_deg": 90,
+        "partial_deg": 120,
+        "partial_mistake_code": "PUSHUP_PARTIAL_ROM"
+      },
+      "checks": [
+        {
+          "mistake_code": "PUSHUP_HIP_SAG",
+          "joint": ["shoulder", "hip", "ankle"],
+          "min_deg": 160,
+          "max_deg": null,
+          "phases": ["eccentric", "bottom", "concentric", "top"],
+          "severity": "warning"
+        }
+      ]
+    },
+    "barbell-curl": {
+      "source": "Kỹ thuật theo ExRx Barbell Curl https://exrx.net/WeightExercises/Biceps/BBCurl và bước 1-3 của seed 03_exercises.sql (đứng thẳng, cuốn tạ lên ngực, giữ khuỷu tay cố định bên thân, hạ đến khi tay duỗi). Góc khuỷu vai-khuỷu-cổ tay: tay duỗi >= 150, cuốn hết lên ngực <= 60, partial_deg 100 là cuốn được khoảng nửa đường. Khuỷu sát thân cho góc hông-vai-khuỷu nhỏ; trên 30 coi là khuỷu đưa ra trước. Thân đứng thẳng cho góc vai-hông-gối gần 180; dưới 160 coi là đung đưa thân. Các ngưỡng là ước lượng từ mô tả kỹ thuật tại các nguồn trên, owner cần kiểm chứng (spec Q2). min_visibility 0.5 theo MediaPipe Pose Landmarker https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker.",
+      "view": "side",
+      "rep": {
+        "joint": ["shoulder", "elbow", "wrist"],
+        "start": "extended",
+        "first_phase": "concentric",
+        "extended_deg": 150,
+        "flexed_deg": 60,
+        "partial_deg": 100,
+        "partial_mistake_code": null
+      },
+      "checks": [
+        {
+          "mistake_code": "CURL_ELBOW_DRIFT",
+          "joint": ["hip", "shoulder", "elbow"],
+          "min_deg": null,
+          "max_deg": 30,
+          "phases": ["concentric", "top", "eccentric"],
+          "severity": "warning"
+        },
+        {
+          "mistake_code": "CURL_BODY_SWING",
+          "joint": ["shoulder", "hip", "knee"],
+          "min_deg": 160,
+          "max_deg": null,
+          "phases": ["eccentric", "bottom", "concentric", "top"],
+          "severity": "warning"
+        }
+      ]
+    },
+    "overhead-press": {
+      "source": "Kỹ thuật theo ExRx Barbell Military Press https://exrx.net/WeightExercises/DeltoidAnterior/BBMilitaryPress và bước 1-3 của seed 03_exercises.sql (tạ đặt trên vai trước, đẩy thẳng lên qua đầu, hạ về vai có kiểm soát). Góc khuỷu vai-khuỷu-cổ tay: tạ ở vai cho khuỷu <= 80, khoá tay trên đầu >= 160, partial_deg 120 là đẩy được khoảng nửa đường. Thân đứng thẳng cho góc vai-hông-gối gần 180; dưới 160 coi là ưỡn lưng dưới ngả người ra sau. Các ngưỡng là ước lượng từ mô tả kỹ thuật tại các nguồn trên, owner cần kiểm chứng (spec Q2). min_visibility 0.5 theo MediaPipe Pose Landmarker https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker.",
+      "view": "side",
+      "rep": {
+        "joint": ["shoulder", "elbow", "wrist"],
+        "start": "flexed",
+        "first_phase": "concentric",
+        "extended_deg": 160,
+        "flexed_deg": 80,
+        "partial_deg": 120,
+        "partial_mistake_code": null
+      },
+      "checks": [
+        {
+          "mistake_code": "OHP_LUMBAR_ARCH",
+          "joint": ["shoulder", "hip", "knee"],
+          "min_deg": 160,
+          "max_deg": null,
+          "phases": ["concentric", "top", "eccentric"],
+          "severity": "warning"
+        }
+      ]
+    },
+    "walking-lunge": {
+      "source": "Kỹ thuật theo ExRx Dumbbell Walking Lunge https://exrx.net/WeightExercises/Quadriceps/DBWalkingLunge và bước 1-3 của seed 04_exercises_more.sql (bước dài về trước, hạ gối sau gần chạm sàn, đẩy chân trước đứng lên). Góc gối hông-gối-cổ chân: đứng thẳng >= 160, gối sau gần chạm sàn cho gối khoảng 90 nên flexed_deg 100, partial_deg 130 là mới hạ được một phần. Các ngưỡng là ước lượng từ mô tả kỹ thuật tại các nguồn trên, owner cần kiểm chứng (spec Q2). min_visibility 0.5 theo MediaPipe Pose Landmarker https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker.",
+      "view": "side",
+      "rep": {
+        "joint": ["hip", "knee", "ankle"],
+        "start": "extended",
+        "first_phase": "eccentric",
+        "extended_deg": 160,
+        "flexed_deg": 100,
+        "partial_deg": 130,
+        "partial_mistake_code": null
+      },
+      "checks": []
+    }
+  }
+}
