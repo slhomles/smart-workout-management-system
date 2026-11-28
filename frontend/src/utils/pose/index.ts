@@ -13,6 +13,8 @@ export {
 } from './rules';
 export type { AiTrainerCandidate } from './rules';
 export { checkPose } from './check';
+export { createRepCounter, phaseOf } from './rep-counter';
+export type { RepCounter } from './rep-counter';
 export type {
   ExerciseRule,
   FormCheck,
