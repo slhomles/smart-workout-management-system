@@ -51,7 +51,7 @@ function HeightRow() {
     <View style={styles.heightRow}>
       <View style={styles.fill}>
         {profile.data ? (
-          <MetricRow label="Chiều cao" value={value} />
+          <MetricRow testID="bmi-height" label="Chiều cao" value={value} />
         ) : (
           <ActivityIndicator accessibilityLabel="Đang tải..." color={theme.primary} />
         )}
@@ -73,7 +73,7 @@ export function BmiSection({ metrics }: { metrics: LatestMetrics | null }) {
   const theme = useTheme();
   const bmi = metrics?.bmi ?? null;
   return (
-    <View>
+    <View testID="bmi-section">
       <SectionHeader title="BMI" />
       <ReportCard>
         {bmi !== null ? (
@@ -84,9 +84,9 @@ export function BmiSection({ metrics }: { metrics: LatestMetrics | null }) {
           </AppText>
         )}
         <CardDivider />
-        <MetricRow label="BMR" value={formatKcal(metrics?.bmr_kcal)} />
-        <MetricRow label="TDEE" value={formatKcal(metrics?.tdee_kcal)} />
-        <MetricRow label="% mỡ" value={formatPercent(metrics?.body_fat_pct)} />
+        <MetricRow testID="bmi-bmr" label="BMR" value={formatKcal(metrics?.bmr_kcal)} />
+        <MetricRow testID="bmi-tdee" label="TDEE" value={formatKcal(metrics?.tdee_kcal)} />
+        <MetricRow testID="bmi-body-fat" label="% mỡ" value={formatPercent(metrics?.body_fat_pct)} />
         <CardDivider />
         <HeightRow />
       </ReportCard>
