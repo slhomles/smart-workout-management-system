@@ -219,6 +219,18 @@ export const REPORT_R1: ReportExport = {
   created_at: '2026-11-23T01:00:00Z',
 };
 
+/** Trang 2 của FEDASH-18: tuần 09/11–15/11, `summary` như r-1 nhưng 2 buổi, chưa có tuân thủ và cân nặng TB. */
+export const REPORT_R2: ReportExport = {
+  ...REPORT_R1,
+  id: 'r-2',
+  period_start: '2026-11-09',
+  period_end: '2026-11-16',
+  media_id: 'media-r-2',
+  image_url: '/api/v1/reports/r-2/image',
+  summary: { ...REPORT_R1.summary, sessions_completed: 2, adherence_pct: null, avg_weight_kg: null },
+  created_at: '2026-11-16T01:00:00Z',
+};
+
 // --- Lỗi API (Claude_api_respone.md §3) ---
 /** `message` cố ý khác thông điệp màn hiện để chứng minh rẽ nhánh theo `code`, trừ khi test truyền `message`. */
 export function apiError(status: number, code: string, details: ApiErrorDetail[] = [], message?: string): AxiosError {
