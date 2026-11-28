@@ -13,6 +13,7 @@ from app.api.v1.endpoints import (
     equipment_scans,
     gallery,
     health,
+    media,
     pose_analyses,
     reports,
     users,
@@ -30,6 +31,7 @@ api_v1_router.include_router(dashboard.router)
 api_v1_router.include_router(equipment_scans.router)
 api_v1_router.include_router(gallery.router)
 api_v1_router.include_router(health.router)
+api_v1_router.include_router(media.router)
 api_v1_router.include_router(pose_analyses.router)
 api_v1_router.include_router(reports.router)
 api_v1_router.include_router(users.router)

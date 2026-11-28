@@ -274,6 +274,8 @@ def run_pytest(root: Path, python: str, want_cov: bool, tmp: Path, tests: list[s
         [str(HERE), str(backend)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])
     )
     env["COVERAGE_FILE"] = str(tmp / ".coverage")
+    # Test không được gọi S3 thật (doc 05 §10), kể cả khi .env của máy chạy bot bật S3 cho app.
+    env["STORAGE_BACKEND"] = "local"
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONDONTWRITEBYTECODE"] = "1"  # không để __pycache__ làm bẩn worktree
     try:
