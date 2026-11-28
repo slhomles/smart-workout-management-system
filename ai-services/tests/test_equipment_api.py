@@ -1,4 +1,5 @@
-"""Test HTTP cho `POST /equipment-recognition/classify` (AIEC-01–04) qua fixture `client`.
+"""Test cho `POST /equipment-recognition/classify` (AIEC-01–04, 06, 11, 13, 15): HTTP qua fixture `client`,
+`classify_image` gọi thẳng, đăng ký lúc import và OpenAPI.
 
 Quy ước theo spec docs/features/ai-equipment-classify.md §5: `GYM27`, `P`, `FakeClassifier`, `install`, `FT`
 (= fixture `ft`, tạo mới mỗi test vì `seen` giữ trạng thái), `FT_PREDS`, `IMG`, `UP`, `URL`, `WEIGHTS`
@@ -6,9 +7,17 @@ Quy ước theo spec docs/features/ai-equipment-classify.md §5: `GYM27`, `P`, `
 Model thật được thay bằng `FakeClassifier` qua `install`: không cần ultralytics/torch, trọng số hay mạng.
 """
 
+import ast
 import io
+import json
+import logging
+import random
+import subprocess
+import sys
+import threading
 import time
 from collections.abc import Iterator, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +29,11 @@ from PIL import Image
 from app.contracts import EQUIPMENT_LABELS, AiClassifyResult
 from app.core.config import get_settings
 from app.equipment import loader as equipment_loader
+from app.equipment.labels import FINETUNED_LABEL_MAP
 from app.equipment.loader import reset_equipment_model
+from app.equipment.predictions import build_predictions
+from app.equipment.service import classify_image
+from app.main import create_app
 
 GYM27 = EQUIPMENT_LABELS
 URL = "/equipment-recognition/classify"
@@ -327,3 +340,205 @@ def test_classify_malformed_request_or_wrong_route_returns_framework_error_witho
 
     assert calls == []
     assert ft.seen == []
+
+
+class _ConcurrencyProbe(FakeClassifier):
+    """`probe` của AIEC-06a: `FakeClassifier` đếm số lời gọi `predict_proba` đang chạy cùng lúc."""
+
+    def __init__(self, class_names: tuple[str, ...], probs: Mapping[str, float], delay: float) -> None:
+        super().__init__(class_names, probs, delay=delay)
+        self.active = 0
+        self.max_active = 0
+        self._counter_lock = threading.Lock()
+
+    def predict_proba(self, image: Image.Image) -> dict[str, float]:
+        with self._counter_lock:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+        try:
+            return super().predict_proba(image)
+        finally:
+            with self._counter_lock:
+                self.active -= 1
+
+
+@pytest.mark.tc("AIEC-06")
+def test_classify_image_from_concurrent_threads_runs_inference_one_at_a_time(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    probe = _ConcurrencyProbe(GYM27, FT_PROBS, delay=0.02)
+    install(monkeypatch, tmp_path, probe)
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(lambda _: classify_image(IMG()), range(4)))
+
+    assert len(results) == 4
+    for result in results:
+        assert isinstance(result, AiClassifyResult)
+        assert result.model_dump(mode="json")["predictions"] == FT_PREDS
+    assert probe.max_active == 1
+
+
+@pytest.mark.tc("AIEC-06")
+def test_classify_first_request_with_slow_model_load_reports_inference_latency_only(
+        client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    install(monkeypatch, tmp_path, FakeClassifier(GYM27, FT_PROBS, delay=0.02), load_delay=0.3)
+
+    res = client.post(URL, files=UP(IMG()))
+
+    assert res.status_code == 200, res.text
+    # Suy luận ngủ 20 ms, nạp model ngủ 300 ms: `latency_ms` < 300 chứng tỏ không tính thời gian nạp.
+    assert 15 <= res.json()["latency_ms"] < 300
+
+
+def _post_finetuned_ok(client: TestClient) -> list[dict[str, Any]]:
+    """Gửi `UP(IMG())`, kiểm `200` + OK-BODY + `model_version == "1.0.0"`; trả `predictions`."""
+    res = client.post(URL, files=UP(IMG()))
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    _assert_ok_body(body)
+    assert body["model_version"] == "1.0.0"
+    predictions: list[dict[str, Any]] = body["predictions"]
+    return predictions
+
+
+def _random_distribution(rng: random.Random) -> dict[str, float]:
+    weights = [rng.random() for _ in GYM27]
+    total = sum(weights)
+    return {label: weight / total for label, weight in zip(GYM27, weights)}
+
+
+@pytest.mark.tc("AIEC-11")
+def test_classify_various_distributions_returns_valid_ranked_top_five(
+        client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    fake = FakeClassifier(GYM27, P())
+    install(monkeypatch, tmp_path, fake)
+
+    # (1) Phân phối đều 1/27 ≈ 0.037: hoà nên xếp theo `label` tăng dần.
+    fake.probs = dict.fromkeys(GYM27, 1 / 27)
+    tied_labels = ["ab_wheel", "adjustable_bench", "barbell", "cable_crossover_machine", "chest_press_machine"]
+    assert _post_finetuned_ok(client) == [{"label": label, "confidence": 0.037} for label in tied_labels]
+    # (2) Chắc chắn một nhãn; (3) toàn 0 nên không còn nhãn nào.
+    fake.probs = P(treadmill=1.0)
+    assert _post_finetuned_ok(client) == [{"label": "treadmill", "confidence": 1.0}]
+    fake.probs = P()
+    assert _post_finetuned_ok(client) == []
+    # (4) 20 phân phối ngẫu nhiên, seed cố định để test tất định.
+    rng = random.Random(2026)
+    for _ in range(20):
+        fake.probs = _random_distribution(rng)
+        predictions = _post_finetuned_ok(client)
+        expected = [p.model_dump() for p in build_predictions(fake.probs, FINETUNED_LABEL_MAP)]
+        assert predictions == expected
+        assert len(predictions) == 5
+
+
+AI_SERVICES_DIR = Path(__file__).resolve().parents[1]
+HEAVY_PACKAGES = frozenset({"ultralytics", "torch", "torchvision", "cv2"})
+REGISTRY_PROBE_CODE = (
+    "import json, sys, app.main; from app.core.models import registry; s = registry.models['equipment']; "
+    "print(json.dumps({'version': s.version, 'required': s.required, 'heavy': sorted(m for m in "
+    "('ultralytics', 'torch', 'torchvision', 'cv2') if m in sys.modules)}))"
+)
+
+
+@pytest.mark.tc("AIEC-13")
+def test_import_app_main_registers_equipment_unloaded_without_heavy_libraries() -> None:
+    # Tiến trình con: `sys.modules` và registry sạch, không bị các test khác trong process này ảnh hưởng.
+    completed = subprocess.run([sys.executable, "-c", REGISTRY_PROBE_CODE], cwd=AI_SERVICES_DIR,
+                               capture_output=True, text=True, timeout=60, check=True)
+
+    last_line = completed.stdout.strip().splitlines()[-1]
+    assert json.loads(last_line) == {"version": None, "required": False, "heavy": []}
+
+
+def _import_roots(node: ast.Import | ast.ImportFrom) -> set[str]:
+    if isinstance(node, ast.Import):
+        return {alias.name.split(".")[0] for alias in node.names}
+    # Import tương đối (`from . import x`) luôn thuộc gói `app`, không phải thư viện nặng.
+    if node.level or node.module is None:
+        return set()
+    return {node.module.split(".")[0]}
+
+
+def _collect_heavy_imports(node: ast.AST, is_in_function: bool, found: list[tuple[int, bool]]) -> None:
+    """Ghi `(lineno, is_in_function)` cho mọi import thư viện nặng dưới `node`, mang theo cờ tổ tiên là hàm."""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.Import, ast.ImportFrom)) and _import_roots(child) & HEAVY_PACKAGES:
+            found.append((child.lineno, is_in_function))
+        is_function = isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+        _collect_heavy_imports(child, is_in_function or is_function, found)
+
+
+@pytest.mark.tc("AIEC-13")
+def test_equipment_sources_import_heavy_libraries_only_inside_functions() -> None:
+    heavy_imports: dict[str, list[tuple[int, bool]]] = {}
+    for source in sorted((AI_SERVICES_DIR / "app" / "equipment").rglob("*.py")):
+        found: list[tuple[int, bool]] = []
+        _collect_heavy_imports(ast.parse(source.read_text(encoding="utf-8")), False, found)
+        heavy_imports[source.name] = found
+
+    module_level = {name: [line for line, is_in_function in found if not is_in_function]
+                    for name, found in heavy_imports.items()}
+    assert all(lines == [] for lines in module_level.values()), module_level
+    # Đối chứng: `loader.py` import ultralytics trong hàm, nên test thực sự tìm thấy import nặng để kiểm.
+    assert any(heavy_imports.values())
+
+
+def _resolve_schema(openapi: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
+    ref = schema.get("$ref")
+    if ref is None:
+        return schema
+    resolved: dict[str, Any] = openapi["components"]["schemas"][ref.rsplit("/", 1)[-1]]
+    return resolved
+
+
+@pytest.mark.tc("AIEC-13")
+def test_openapi_documents_classify_as_multipart_post_returning_ai_classify_result(client: TestClient) -> None:
+    res = client.get("/openapi.json")
+
+    assert res.status_code == 200, res.text
+    openapi = res.json()
+    path_item = openapi["paths"][URL]
+    assert set(path_item) == {"post"}
+    operation = path_item["post"]
+    response_schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+    assert response_schema["$ref"].endswith("/AiClassifyResult")
+    request_content = operation["requestBody"]["content"]
+    assert "multipart/form-data" in request_content
+    form_schema = _resolve_schema(openapi, request_content["multipart/form-data"]["schema"])
+    assert "image" in form_schema["required"]
+    assert form_schema["properties"]["image"]["format"] == "binary"
+    assert not [path for path in openapi["paths"] if path.startswith("/api/v1")]
+
+
+@pytest.mark.tc("AIEC-15")
+def test_classify_when_inference_raises_returns_internal_error_without_details(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    install(monkeypatch, tmp_path, FakeClassifier(GYM27, P(), error=RuntimeError("chi tiet noi bo model")))
+
+    # Như test_errors.py: không ném lại lỗi server vào test, để thấy đúng response 500 mà client nhận.
+    with TestClient(create_app(), raise_server_exceptions=False) as raw_client:
+        res = raw_client.post(URL, files=UP(IMG()), headers={"X-Request-ID": "req_aiec0015"})
+
+    assert res.status_code == 500, res.text
+    _assert_err_body(res, "req_aiec0015")
+    assert res.json()["error"]["code"] == "internal_error"
+    assert "chi tiet noi bo model" not in res.text
+
+
+@pytest.mark.tc("AIEC-15")
+def test_classify_logs_never_contain_file_names_or_image_bytes(
+        client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, ft: FakeClassifier,
+        caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.DEBUG)
+    install(monkeypatch, tmp_path, ft)
+
+    ok = client.post(URL, files=UP(IMG("JPEG"), "nguyen-van-a.jpg", "image/jpeg"))
+    bad = client.post(URL, files=UP(b"khong-phai-anh", "tran-thi-b.png"))
+
+    assert (ok.status_code, bad.status_code) == (200, 400)
+    private_fragments = ("nguyen-van-a", "tran-thi-b", "khong-phai-anh")
+    for record in caplog.records:
+        logged_text = record.getMessage() + str(record.args)
+        assert not [fragment for fragment in private_fragments if fragment in logged_text], record.name
