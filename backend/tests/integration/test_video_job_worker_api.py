@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.main import app
 from app.services import storage_service, video_job_worker_service
 from tests.integration.test_video_jobs_api import (
     KEYS_VJ,
@@ -213,13 +214,19 @@ def resj(reps: list[dict[str, Any]], **overrides: Any) -> str:
     return json.dumps({**payload, **overrides})
 
 
+def result_parts(video: bytes | None = MP4, result: str | None = resj(REPS3)) -> dict[str, Any]:
+    """Kwargs `files`/`data` của POST_RESULT; `video`/`result` = None thì không gửi part đó."""
+    return {
+        "files": None if video is None else {"video": ("result.mp4", video, "video/mp4")},
+        "data": None if result is None else {"result": result},
+    }
+
+
 async def post_result(
     client: AsyncClient, job_id: Any, video: bytes | None = MP4, result: str | None = resj(REPS3)
 ) -> Response:
     """POST_RESULT(job, video, result) của spec §5 với WH; `video`/`result` = None thì không gửi part đó."""
-    files = None if video is None else {"video": ("result.mp4", video, "video/mp4")}
-    data = None if result is None else {"result": result}
-    return await client.post(f"{BASE}/{job_id}/result", files=files, data=data, headers=WH)
+    return await client.post(f"{BASE}/{job_id}/result", **result_parts(video, result), headers=WH)
 
 
 def rkey(job_id: Any) -> str:
@@ -687,3 +694,159 @@ async def test_post_result_storage_error_returns_service_unavailable_without_lea
     assert "s3-hong" not in res.text
     await assert_result_not_stored(db, job_id, "processing")
     assert await rep_event_count(db, s1) == 0
+
+
+def assert_validation_field(res: Response, field: str) -> None:
+    """422 `validation_error`, có ít nhất một `details[].field` chứa `field`."""
+    error = assert_error(res, 422, "validation_error")
+    assert any(field in (detail["field"] or "") for detail in error["details"]), (field, error)
+
+
+# --- VWK-04 ---
+WRONG_WT = "sai-token-" + "a" * 40
+
+
+@pytest.fixture(params=["missing", "wrong_token", "user_jwt", "empty_config"])
+async def rejected_headers(
+    request: pytest.FixtureRequest, worker_token: str, auth_headers, monkeypatch: pytest.MonkeyPatch
+) -> list[dict[str, str]]:
+    """Header của ca VWK-04 (a)–(d); ca (d) đặt AI_WORKER_TOKEN rỗng (sau `worker_token`) rồi gửi "" và WH cũ."""
+    if request.param == "missing":
+        return [{}]
+    if request.param == "wrong_token":
+        return [{"X-Worker-Token": WRONG_WT}]
+    if request.param == "user_jwt":
+        return [await auth_headers("demo")]
+    monkeypatch.setattr(get_settings(), "AI_WORKER_TOKEN", "")
+    return [{"X-Worker-Token": ""}, WH]
+
+
+async def call_worker_routes(client: AsyncClient, job_id: str, headers: dict[str, str]) -> list[Response]:
+    """Gọi cả 4 route worker (claim, source-video, result, failure) với cùng header."""
+    return [
+        await claim(client, headers=headers),
+        await client.get(f"{BASE}/{job_id}/source-video", headers=headers),
+        await client.post(f"{BASE}/{job_id}/result", **result_parts(), headers=headers),
+        await client.post(f"{BASE}/{job_id}/failure", json={"error_message": "x"}, headers=headers),
+    ]
+
+
+async def assert_job_untouched(db: AsyncSession, job_id: str) -> None:
+    """Job vẫn queued như lúc tạo, không có video kết quả trong DB lẫn trong kho local."""
+    state = await job_state(db, uuid.UUID(job_id))
+    assert (state["status"], state["attempt_count"], state["error_message"]) == ("queued", 0, None)
+    await assert_result_not_stored(db, job_id, "queued")
+    storage_root = Path(get_settings().LOCAL_STORAGE_DIR)
+    assert not [path for path in storage_root.rglob("*") if path.as_posix().endswith(rkey(job_id))]
+
+
+@pytest.mark.tc("VWK-04")
+@pytest.mark.usefixtures("local_storage", "queue_clear")
+async def test_worker_routes_without_valid_worker_token_return_unauthorized(
+    client: AsyncClient, auth_headers, db: AsyncSession, rejected_headers: list[dict[str, str]]
+):
+    (job_id,) = await create_jobs(client, auth_headers, db, (0,))
+
+    for headers in rejected_headers:
+        responses = await call_worker_routes(client, job_id, headers)
+        assert len(responses) == 4
+        for res in responses:
+            error = assert_error(res, 401, "unauthorized")
+            assert error["details"] == []
+            assert WT not in res.text
+
+    await assert_job_untouched(db, job_id)
+
+
+# --- VWK-14 ---
+@pytest.mark.tc("VWK-14")
+@pytest.mark.usefixtures("worker_token", "local_storage", "queue_clear")
+async def test_post_failure_missing_or_finished_job_returns_error(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    sets = await squat_sets(db)
+    job_failed = await processing_job(client, auth_headers, db, set_key=0)
+    job_done = await processing_job(client, auth_headers, db, set_key=0)
+    job_session_gone = await processing_job(client, auth_headers, db, set_key=1)
+    assert_failed_job(await post_failure(client, job_failed), job_failed)
+    assert_completed_job(await post_result(client, job_done), job_done)
+
+    assert_error(await post_failure(client, uuid.uuid4()), 404, "not_found")
+    assert_error(await post_failure(client, job_failed), 409, "conflict")
+    assert_error(await post_failure(client, job_done), 409, "conflict")
+    await soft_delete_session(db, sets[1]["session_id"])
+    assert_error(await post_failure(client, job_session_gone), 404, "not_found")
+
+    assert (await job_state(db, uuid.UUID(job_done)))["status"] == "completed"
+    assert (await job_state(db, uuid.UUID(job_failed)))["status"] == "failed"
+    state = await job_state(db, uuid.UUID(job_session_gone))
+    assert (state["status"], state["error_message"]) == ("processing", None)
+
+
+@pytest.mark.tc("VWK-14")
+@pytest.mark.usefixtures("worker_token", "queue_clear")
+async def test_post_failure_invalid_body_or_job_id_returns_validation_error(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    job_id = await processing_job(client, auth_headers, db)
+    bodies: list[dict[str, Any]] = [{}, {"error_message": ""}, {"error_message": "e" * 2001}]
+
+    for body in bodies:
+        res = await client.post(f"{BASE}/{job_id}/failure", json=body, headers=WH)
+        assert_validation_field(res, "error_message")
+    res = await client.post(f"{BASE}/abc/failure", json={"error_message": "x"}, headers=WH)
+    assert_validation_field(res, "job_id")
+
+    state = await job_state(db, uuid.UUID(job_id))
+    assert (state["status"], state["error_message"], state["finished_at"]) == ("processing", None, None)
+
+
+# --- VWK-17 ---
+# (path, method, mã response tối thiểu ngoài "401")
+WORKER_OPERATIONS: list[tuple[str, str, set[str]]] = [
+    (f"{BASE}/claim", "post", {"200", "204", "422"}),
+    (f"{BASE}/{{job_id}}/source-video", "get", {"404", "409", "503"}),
+    (f"{BASE}/{{job_id}}/result", "post", {"404", "409", "422", "503"}),
+    (f"{BASE}/{{job_id}}/failure", "post", {"404", "409", "422"}),
+]
+
+
+def resolve_schema(openapi: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
+    """Thay `$ref` `#/components/schemas/<Tên>` bằng schema thật."""
+    if "$ref" not in schema:
+        return schema
+    return openapi["components"]["schemas"][schema["$ref"].rsplit("/", 1)[-1]]
+
+
+@pytest.mark.tc("VWK-17")
+@pytest.mark.parametrize(("path", "method", "codes"), WORKER_OPERATIONS)
+def test_openapi_worker_route_documents_tag_token_and_errors(path: str, method: str, codes: set[str]):
+    operation = app.openapi()["paths"][path][method]
+
+    assert operation["tags"] == ["AI"]
+    assert isinstance(operation["summary"], str) and 0 < len(operation["summary"]) <= 80
+    assert "X-Worker-Token" in operation["description"]
+    assert {"401", *codes} <= set(operation["responses"])
+
+
+@pytest.mark.tc("VWK-17")
+def test_openapi_claim_route_returns_claimed_video_job_schema():
+    operation = app.openapi()["paths"][f"{BASE}/claim"]["post"]
+
+    schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+    assert schema["$ref"].endswith("/ClaimedVideoJobResponse")
+
+
+@pytest.mark.tc("VWK-17")
+def test_openapi_result_route_accepts_multipart_video_and_result():
+    openapi = app.openapi()
+    operation = openapi["paths"][f"{BASE}/{{job_id}}/result"]["post"]
+
+    schema = resolve_schema(openapi, operation["requestBody"]["content"]["multipart/form-data"]["schema"])
+    assert {"video", "result"} <= set(schema["properties"])
+    assert {"video", "result"} <= set(schema["required"])
+
+
+@pytest.mark.tc("VWK-17")
+def test_openapi_user_video_job_routes_still_have_get_and_post():
+    assert {"get", "post"} <= set(app.openapi()["paths"][BASE])
