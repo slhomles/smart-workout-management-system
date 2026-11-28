@@ -8,6 +8,7 @@ Dữ liệu chuẩn bị được `db.commit()` (chỉ release savepoint), cuố
 import hmac
 import logging
 import uuid
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -16,13 +17,16 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.services import storage_service
 from tests.integration.test_video_jobs_api import (
+    KEYS_VJ,
     assert_error,
     job_state,
     make_video,
     persona_user_id,
     post_job,
     set_attempt_count,
+    set_snapshot,
     squat_exercise,
     squat_sets,
 )
@@ -31,6 +35,7 @@ BASE = "/api/v1/ai/video-jobs"
 WT = "wt-test-" + "a" * 40
 WH = {"X-Worker-Token": WT}
 KEYS_CLAIM = {"job_id", "set_id", "exercise_id", "exercise_slug", "attempt_count", "source_video_content_type"}
+CONTENT = b"\x00\x00\x00\x18ftypisom" + bytes(range(256))
 
 
 # --- Fixture ---
@@ -55,6 +60,19 @@ async def queue_clear(db: AsyncSession) -> None:
     await db.execute(text("UPDATE ai.video_analysis_jobs SET status = 'cancelled' WHERE status = 'queued'"))
     await db.commit()
 
+
+@pytest.fixture
+def read_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    """Spy bọc `storage_service.read_object` (vẫn gọi hàm gốc); trả danh sách (bucket, object_key) đã đọc."""
+    calls: list[tuple[str, str]] = []
+    original = storage_service.read_object
+
+    async def _spy(bucket: str, object_key: str) -> bytes | None:
+        calls.append((bucket, object_key))
+        return await original(bucket, object_key)
+
+    monkeypatch.setattr(storage_service, "read_object", _spy)
+    return calls
 
 # --- Helper ---
 async def claim(client: AsyncClient, worker_id: Any = "worker-01", headers: dict[str, str] | None = None) -> Response:
@@ -109,6 +127,56 @@ def assert_no_content(res: Response) -> None:
     """204 không body."""
     assert res.status_code == 204, res.text
     assert res.content == b""
+
+
+async def processing_job(client: AsyncClient, auth_headers, db: AsyncSession, set_key: int = 0) -> str:
+    """"Job đang processing": JOB(S<k>) rồi CLAIM(); kiểm claim lấy đúng job vừa tạo."""
+    (job_id,) = await create_jobs(client, auth_headers, db, (set_key,))
+    assert assert_claimed(await claim(client))["job_id"] == job_id
+    return job_id
+
+
+async def get_source_video(client: AsyncClient, job_id: Any) -> Response:
+    """GET …/{job_id}/source-video với WH."""
+    return await client.get(f"{BASE}/{job_id}/source-video", headers=WH)
+
+
+async def post_failure(client: AsyncClient, job_id: Any, error_message: str = "x") -> Response:
+    """POST …/{job_id}/failure với WH."""
+    return await client.post(f"{BASE}/{job_id}/failure", json={"error_message": error_message}, headers=WH)
+
+
+async def write_source_file(db: AsyncSession, job_id: str, content: bytes) -> None:
+    """Ghi file video gốc của job vào kho local (fixture `local_storage`): LOCAL_STORAGE_DIR / bucket / object_key."""
+    sql = """
+    SELECT m.bucket, m.object_key FROM media.media_files m
+    JOIN ai.video_analysis_jobs j ON j.source_video_media_id = m.id
+    WHERE j.id = :id
+    """
+    row = (await db.execute(text(sql), {"id": job_id})).one()
+    path = Path(get_settings().LOCAL_STORAGE_DIR) / row.bucket / row.object_key
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+
+
+async def soft_delete_source_media(db: AsyncSession, job_id: str) -> None:
+    """Xoá mềm media video gốc của job."""
+    sql = """
+    UPDATE media.media_files SET deleted_at = now()
+    WHERE id = (SELECT source_video_media_id FROM ai.video_analysis_jobs WHERE id = :id)
+    """
+    await db.execute(text(sql), {"id": job_id})
+    await db.commit()
+
+
+async def analysis_analyzed_at(db: AsyncSession, job_id: str) -> Any:
+    """`analyzed_at` của pose_analyses gắn với job."""
+    sql = """
+    SELECT pa.analyzed_at FROM ai.pose_analyses pa
+    JOIN ai.video_analysis_jobs j ON j.pose_analysis_id = pa.id
+    WHERE j.id = :id
+    """
+    return (await db.execute(text(sql), {"id": job_id})).scalar_one()
 
 
 # --- VWK-01 ---
@@ -226,3 +294,134 @@ async def test_claim_compares_token_with_compare_digest_and_never_logs_it(
     assert all(len(args) == 2 and all(isinstance(arg, bytes) for arg in args) for args in calls)
     assert WT not in caplog.text
     assert wrong_token not in caplog.text
+
+
+# --- VWK-06 ---
+@pytest.mark.tc("VWK-06")
+@pytest.mark.usefixtures("worker_token", "local_storage", "queue_clear")
+async def test_get_source_video_processing_job_returns_original_bytes(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    job_id = await processing_job(client, auth_headers, db)
+    await write_source_file(db, job_id, CONTENT)
+
+    res = await get_source_video(client, job_id)
+
+    assert res.status_code == 200, res.text
+    assert res.content == CONTENT
+    assert res.headers["content-type"].startswith("video/mp4")
+    assert (await job_state(db, uuid.UUID(job_id)))["status"] == "processing"
+
+
+# --- VWK-07 ---
+@pytest.mark.tc("VWK-07")
+@pytest.mark.usefixtures("worker_token", "local_storage", "queue_clear")
+async def test_get_source_video_missing_or_not_processing_job_returns_error_without_reading_storage(
+    client: AsyncClient, auth_headers, db: AsyncSession, read_calls: list[tuple[str, str]]
+):
+    # (3) J2 processing → failure → không còn processing.
+    job_failed = await processing_job(client, auth_headers, db)
+    assert (await post_failure(client, job_failed)).status_code == 200
+    # (2) J1 còn queued (tạo sau khi claim để không bị claim mất).
+    (job_queued,) = await create_jobs(client, auth_headers, db, (0,))
+
+    assert_error(await get_source_video(client, uuid.uuid4()), 404, "not_found")
+    assert_error(await get_source_video(client, job_queued), 409, "conflict")
+    assert_error(await get_source_video(client, job_failed), 409, "conflict")
+    error = assert_error(await get_source_video(client, "abc"), 422, "validation_error")
+    assert any("job_id" in (detail["field"] or "") for detail in error["details"]), error
+
+    assert read_calls == []
+
+
+@pytest.mark.tc("VWK-07")
+@pytest.mark.usefixtures("worker_token", "local_storage", "queue_clear")
+async def test_get_source_video_deleted_media_or_session_returns_not_found_without_reading_storage(
+    client: AsyncClient, auth_headers, db: AsyncSession, read_calls: list[tuple[str, str]]
+):
+    sets = await squat_sets(db)
+    job_media_gone = await processing_job(client, auth_headers, db, set_key=0)
+    job_session_gone = await processing_job(client, auth_headers, db, set_key=1)
+    for job_id in (job_media_gone, job_session_gone):
+        await write_source_file(db, job_id, CONTENT)
+    await soft_delete_source_media(db, job_media_gone)
+    await soft_delete_session(db, sets[1]["session_id"])
+
+    assert_error(await get_source_video(client, job_media_gone), 404, "not_found")
+    assert_error(await get_source_video(client, job_session_gone), 404, "not_found")
+
+    assert read_calls == []
+
+
+@pytest.mark.tc("VWK-07")
+@pytest.mark.usefixtures("worker_token", "local_storage", "queue_clear")
+async def test_get_source_video_file_missing_in_storage_returns_not_found(
+    client: AsyncClient, auth_headers, db: AsyncSession, read_calls: list[tuple[str, str]]
+):
+    job_id = await processing_job(client, auth_headers, db)
+
+    assert_error(await get_source_video(client, job_id), 404, "not_found")
+
+    # Đã đi tới bước đọc kho: local read_object trả None vì không có file.
+    assert len(read_calls) == 1
+    assert (await job_state(db, uuid.UUID(job_id)))["status"] == "processing"
+
+
+@pytest.mark.tc("VWK-07")
+@pytest.mark.usefixtures("worker_token", "local_storage", "queue_clear")
+async def test_get_source_video_storage_error_returns_service_unavailable_without_leaking(
+    client: AsyncClient, auth_headers, db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+):
+    job_id = await processing_job(client, auth_headers, db)
+    await write_source_file(db, job_id, CONTENT)
+
+    async def _broken(bucket: str, object_key: str) -> bytes | None:
+        raise OSError("disk-hong")
+
+    monkeypatch.setattr(storage_service, "read_object", _broken)
+
+    res = await get_source_video(client, job_id)
+
+    error = assert_error(res, 503, "service_unavailable")
+    assert len(error["details"]) == 1
+    detail = error["details"][0]
+    assert set(detail) == {"field", "message", "code"}
+    assert (detail["field"], detail["code"]) == ("storage", "down")
+    assert isinstance(detail["message"], str) and detail["message"]
+    assert "disk-hong" not in res.text
+
+
+# --- VWK-13 ---
+@pytest.mark.tc("VWK-13")
+@pytest.mark.usefixtures("worker_token", "queue_clear")
+async def test_post_failure_processing_or_queued_job_marks_failed(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    s1, s2 = (row["set_id"] for row in await squat_sets(db))
+    job_processing = await processing_job(client, auth_headers, db, set_key=0)
+    (job_queued,) = await create_jobs(client, auth_headers, db, (1,))
+    before = (await set_snapshot(db, s1), await set_snapshot(db, s2))
+    message = "Không giải mã được video H.265"
+
+    assert_failed_job(await post_failure(client, job_processing, message), job_processing)
+    assert_failed_job(await post_failure(client, job_queued, "x"), job_queued)
+
+    state = await job_state(db, uuid.UUID(job_processing))
+    assert state["error_message"] == message
+    assert state["finished_at"] >= state["started_at"]
+    state = await job_state(db, uuid.UUID(job_queued))
+    assert state["started_at"] == state["finished_at"]
+    assert (await set_snapshot(db, s1), await set_snapshot(db, s2)) == before
+    assert await analysis_analyzed_at(db, job_processing) is None
+    assert await analysis_analyzed_at(db, job_queued) is None
+
+
+def assert_failed_job(res: Response, job_id: str) -> None:
+    """200 + body đúng KEYS_VJ của job `failed`, không lộ error_message/worker_id."""
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert set(body) == KEYS_VJ
+    assert "error_message" not in body
+    assert "worker_id" not in body
+    assert (body["id"], body["status"]) == (job_id, "failed")
+    assert body["finished_at"] is not None

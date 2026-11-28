@@ -22,8 +22,8 @@ FROM media.media_files
 WHERE id = :id AND deleted_at IS NULL AND status = 'available' AND mime_type LIKE 'video/%'
 """
 
-# SELECT dùng chung cho đọc một job và danh sách job của user (lọc thêm bằng `AND ...`).
-JOB_SELECT = """
+# Cột + JOIN chung của job; JOIN view nên job thuộc buổi đã xoá mềm không có dòng.
+_JOB_BASE_SELECT = """
 SELECT j.id, j.pose_analysis_id, d.set_id, d.session_id, d.exercise_id, d.exercise_name, j.status,
        j.source_video_media_id, j.result_video_media_id, d.model_name, d.model_version,
        d.overall_score, d.correct_form_pct, d.detected_rep_count, pa.feedback_summary,
@@ -31,7 +31,15 @@ SELECT j.id, j.pose_analysis_id, d.set_id, d.session_id, d.exercise_id, d.exerci
 FROM ai.video_analysis_jobs j
 JOIN ai.v_pose_analysis_details d ON d.pose_analysis_id = j.pose_analysis_id
 JOIN ai.pose_analyses pa ON pa.id = j.pose_analysis_id
-WHERE d.user_id = :user_id
+"""
+
+# SELECT dùng chung cho đọc một job và danh sách job của user (lọc thêm bằng `AND ...`).
+JOB_SELECT = _JOB_BASE_SELECT + "WHERE d.user_id = :user_id\n"
+
+_SOURCE_MEDIA_SQL = """
+SELECT bucket, object_key, mime_type
+FROM media.media_files
+WHERE id = :id AND deleted_at IS NULL AND status = 'available'
 """
 
 # Job queued còn lượt thử, buổi chưa xoá mềm; ưu tiên cao nhất rồi cũ nhất (dùng ix_video_analysis_jobs_queue).
@@ -142,3 +150,14 @@ async def claim_next_job_id(db: AsyncSession) -> uuid.UUID | None:
 async def get_claim_context(db: AsyncSession, job_id: uuid.UUID) -> Any | None:
     """Ngữ cảnh worker cần sau khi claim: hiệp, bài (id, slug), số lần thử, MIME video gốc; None nếu không có."""
     return (await db.execute(text(_CLAIM_CONTEXT_SQL), {"job_id": job_id})).mappings().first()
+
+
+async def get_worker_job(db: AsyncSession, job_id: uuid.UUID) -> Any | None:
+    """Một job bất kể chủ sở hữu (worker không có user); None nếu không có hoặc buổi đã xoá mềm."""
+    sql = _JOB_BASE_SELECT + " WHERE j.id = :job_id"
+    return (await db.execute(text(sql), {"job_id": job_id})).mappings().first()
+
+
+async def get_source_media(db: AsyncSession, media_id: uuid.UUID) -> Any | None:
+    """Vị trí kho + MIME của video gốc còn dùng được (chưa xoá, `available`); None nếu không có."""
+    return (await db.execute(text(_SOURCE_MEDIA_SQL), {"id": media_id})).mappings().first()
