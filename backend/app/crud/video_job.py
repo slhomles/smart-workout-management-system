@@ -7,7 +7,7 @@ Ngữ cảnh hiệp/buổi/bài lấy từ view `ai.v_pose_analysis_details` (đ
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.ai import PoseAnalysis, VideoAnalysisJob
 from app.models.enums import AnalysisMode
 from app.schemas.video_job import VideoJobListQuery
+
+if TYPE_CHECKING:
+    # Chỉ để khai kiểu tham số; crud không gọi service lúc chạy.
+    from app.services.storage_service import StoredObject
 
 _AVAILABLE_VIDEO_SQL = """
 SELECT id, uploaded_by_user_id
@@ -53,6 +57,16 @@ WHERE j.status = 'queued'
 ORDER BY j.priority DESC, j.queued_at, j.id
 LIMIT 1
 FOR UPDATE OF j SKIP LOCKED
+"""
+
+# Video kết quả do hệ thống sinh: không có người upload (COMMENT cột uploaded_by_user_id); đã có
+# size + checksum nên được đặt `available` ngay (ck_media_files_available).
+_INSERT_SYSTEM_VIDEO_SQL = """
+INSERT INTO media.media_files (uploaded_by_user_id, storage_provider, bucket, object_key, mime_type,
+                               size_bytes, checksum_sha256, status)
+VALUES (NULL, CAST(:provider AS media.storage_provider), :bucket, :object_key, 'video/mp4',
+        :size_bytes, :checksum_sha256, CAST('available' AS media.media_status))
+RETURNING id
 """
 
 _CLAIM_CONTEXT_SQL = """
@@ -161,3 +175,15 @@ async def get_worker_job(db: AsyncSession, job_id: uuid.UUID) -> Any | None:
 async def get_source_media(db: AsyncSession, media_id: uuid.UUID) -> Any | None:
     """Vị trí kho + MIME của video gốc còn dùng được (chưa xoá, `available`); None nếu không có."""
     return (await db.execute(text(_SOURCE_MEDIA_SQL), {"id": media_id})).mappings().first()
+
+
+async def insert_system_video(db: AsyncSession, stored: "StoredObject") -> uuid.UUID:
+    """Đăng ký video MP4 hệ thống vừa lưu vào kho (`available`, không người upload); chỉ flush, không commit."""
+    params = {
+        "provider": stored.provider.value,
+        "bucket": stored.bucket,
+        "object_key": stored.object_key,
+        "size_bytes": stored.size_bytes,
+        "checksum_sha256": stored.checksum_sha256,
+    }
+    return (await db.execute(text(_INSERT_SYSTEM_VIDEO_SQL), params)).scalar_one()

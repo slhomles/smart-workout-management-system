@@ -5,7 +5,9 @@ set-rep-tempo được import đích danh từ test_video_jobs_api.py (không im
 Dữ liệu chuẩn bị được `db.commit()` (chỉ release savepoint), cuối test fixture `db` vẫn rollback.
 """
 
+import hashlib
 import hmac
+import json
 import logging
 import uuid
 from pathlib import Path
@@ -17,7 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.services import storage_service
+from app.services import storage_service, video_job_worker_service
 from tests.integration.test_video_jobs_api import (
     KEYS_VJ,
     assert_error,
@@ -25,6 +27,7 @@ from tests.integration.test_video_jobs_api import (
     make_video,
     persona_user_id,
     post_job,
+    rep_event_count,
     set_attempt_count,
     set_snapshot,
     squat_exercise,
@@ -36,6 +39,16 @@ WT = "wt-test-" + "a" * 40
 WH = {"X-Worker-Token": WT}
 KEYS_CLAIM = {"job_id", "set_id", "exercise_id", "exercise_slug", "attempt_count", "source_video_content_type"}
 CONTENT = b"\x00\x00\x00\x18ftypisom" + bytes(range(256))
+MP4 = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 1000
+# REPS3 của set-rep-tempo §5 ở dạng JSON worker gửi (không import list RepEventInput của file kia).
+REPS3: list[dict[str, Any]] = [
+    {"rep_no": 1, "start_offset_ms": 0, "eccentric_ms": 3000, "pause_bottom_ms": 200, "concentric_ms": 1000,
+     "pause_top_ms": 300, "min_joint_angle_deg": 78.5, "max_joint_angle_deg": 172.0, "is_full_rom": True},
+    {"rep_no": 2, "start_offset_ms": 4600, "eccentric_ms": 2900, "pause_bottom_ms": 100, "concentric_ms": 1100,
+     "pause_top_ms": 300},
+    {"rep_no": 3, "start_offset_ms": 9000, "eccentric_ms": 3100, "pause_bottom_ms": 0, "concentric_ms": 900,
+     "pause_top_ms": 0, "is_full_rom": False},
+]
 
 
 # --- Fixture ---
@@ -73,6 +86,28 @@ def read_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
 
     monkeypatch.setattr(storage_service, "read_object", _spy)
     return calls
+
+
+@pytest.fixture
+def put_calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Spy bọc `storage_service.put_object` (vẫn gọi hàm gốc); trả danh sách object_key đã ghi."""
+    calls: list[str] = []
+    original = storage_service.put_object
+
+    async def _spy(object_key: str, data: bytes, mime_type: str) -> storage_service.StoredObject:
+        calls.append(object_key)
+        return await original(object_key, data, mime_type)
+
+    monkeypatch.setattr(storage_service, "put_object", _spy)
+    return calls
+
+
+@pytest.fixture
+def small_result_video_limit(monkeypatch: pytest.MonkeyPatch) -> int:
+    """Giới hạn video kết quả 100 byte (service đọc hằng số lúc chạy), để MP4 1012 byte bị coi là quá lớn."""
+    monkeypatch.setattr(video_job_worker_service, "MAX_RESULT_VIDEO_BYTES", 100)
+    return 100
+
 
 # --- Helper ---
 async def claim(client: AsyncClient, worker_id: Any = "worker-01", headers: dict[str, str] | None = None) -> Response:
@@ -167,6 +202,54 @@ async def soft_delete_source_media(db: AsyncSession, job_id: str) -> None:
     """
     await db.execute(text(sql), {"id": job_id})
     await db.commit()
+
+
+def resj(reps: list[dict[str, Any]], **overrides: Any) -> str:
+    """RESJ(reps) của spec §5 (chuỗi JSON part `result`); `overrides` thay/thêm key."""
+    payload = {
+        "model_name": "yolov8_pose", "model_version": "8.2.1", "overall_score": 85, "correct_form_pct": 90,
+        "feedback_summary": "Tempo đều, hạ chậm 3 giây", "rep_events": reps,
+    }
+    return json.dumps({**payload, **overrides})
+
+
+async def post_result(
+    client: AsyncClient, job_id: Any, video: bytes | None = MP4, result: str | None = resj(REPS3)
+) -> Response:
+    """POST_RESULT(job, video, result) của spec §5 với WH; `video`/`result` = None thì không gửi part đó."""
+    files = None if video is None else {"video": ("result.mp4", video, "video/mp4")}
+    data = None if result is None else {"result": result}
+    return await client.post(f"{BASE}/{job_id}/result", files=files, data=data, headers=WH)
+
+
+def rkey(job_id: Any) -> str:
+    """RKEY(job) của spec §5: object_key của video kết quả."""
+    return f"ai/video-jobs/{job_id}/result.mp4"
+
+
+async def media_by_key(db: AsyncSession, object_key: str) -> dict[str, Any] | None:
+    """Dòng media.media_files có object_key cho trước; None nếu không có."""
+    sql = """
+    SELECT id, uploaded_by_user_id, status::text AS status, mime_type, deleted_at, size_bytes,
+           checksum_sha256, bucket, object_key
+    FROM media.media_files WHERE object_key = :key
+    """
+    row = (await db.execute(text(sql), {"key": object_key})).mappings().first()
+    return None if row is None else dict(row)
+
+
+async def job_media(db: AsyncSession, job_id: str) -> tuple[Any, Any]:
+    """(source_video_media_id, result_video_media_id) của job, đọc thẳng qua db."""
+    sql = "SELECT source_video_media_id, result_video_media_id FROM ai.video_analysis_jobs WHERE id = :id"
+    row = (await db.execute(text(sql), {"id": job_id})).one()
+    return row[0], row[1]
+
+
+async def assert_result_not_stored(db: AsyncSession, job_id: str, status: str) -> None:
+    """Job vẫn ở `status`, chưa gắn video kết quả, không có media_files nào ở RKEY(job)."""
+    assert (await job_state(db, uuid.UUID(job_id)))["status"] == status
+    assert (await job_media(db, job_id))[1] is None
+    assert await media_by_key(db, rkey(job_id)) is None
 
 
 async def analysis_analyzed_at(db: AsyncSession, job_id: str) -> Any:
@@ -425,3 +508,182 @@ def assert_failed_job(res: Response, job_id: str) -> None:
     assert "worker_id" not in body
     assert (body["id"], body["status"]) == (job_id, "failed")
     assert body["finished_at"] is not None
+
+
+# --- VWK-08 ---
+@pytest.mark.tc("VWK-08")
+@pytest.mark.usefixtures("worker_token", "queue_clear")
+async def test_post_result_processing_job_stores_video_and_completes_job(
+    client: AsyncClient, auth_headers, db: AsyncSession, local_storage: Path
+):
+    s1 = (await squat_sets(db))[0]["set_id"]
+    job_id = await processing_job(client, auth_headers, db)
+    v_demo, _ = await job_media(db, job_id)
+    # Key thừa `result_video_media_id` phải bị bỏ qua: backend tự lưu video kết quả.
+    result = resj(REPS3, result_video_media_id=str(v_demo))
+
+    body = assert_completed_job(await post_result(client, job_id, result=result), job_id)
+
+    _assert_analysis_body(body, str(v_demo))
+    await _assert_result_media(db, job_id, body["result_video_media_id"], local_storage)
+    reps, source, _, _ = await set_snapshot(db, s1)
+    assert (reps, source) == (3, "ai_video")
+    assert await rep_event_count(db, s1) == 3
+    listed = await client.get(BASE, headers=await auth_headers("demo"))
+    assert listed.status_code == 200, listed.text
+    assert {item["id"]: item for item in listed.json()["data"]}[job_id] == body
+
+
+def assert_completed_job(res: Response, job_id: str) -> dict[str, Any]:
+    """200 + body đúng KEYS_VJ của job `completed`, không envelope; trả body."""
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert set(body) == KEYS_VJ
+    assert (body["id"], body["status"]) == (job_id, "completed")
+    return body
+
+
+def _assert_analysis_body(body: dict[str, Any], source_media_id: str) -> None:
+    """Kết quả RESJ(REPS3) trong body; video kết quả là media mới, khác video gốc."""
+    assert (body["model_version"], body["overall_score"], body["correct_form_pct"]) == ("8.2.1", 85.0, 90.0)
+    assert body["detected_rep_count"] == 3
+    assert body["result_video_media_id"] is not None
+    assert body["result_video_media_id"] != source_media_id
+    for key in ("finished_at", "analyzed_at"):
+        assert isinstance(body[key], str) and body[key].endswith("Z"), body
+
+
+async def _assert_result_media(db: AsyncSession, job_id: str, media_id: str, storage_root: Path) -> None:
+    bucket = get_settings().AWS_S3_BUCKET
+    media = await media_by_key(db, rkey(job_id))
+    assert media is not None
+    assert str(media.pop("id")) == media_id
+    assert media == {
+        "uploaded_by_user_id": None, "status": "available", "mime_type": "video/mp4", "deleted_at": None,
+        "size_bytes": len(MP4), "checksum_sha256": hashlib.sha256(MP4).hexdigest(), "bucket": bucket,
+        "object_key": rkey(job_id),
+    }
+    assert str((await job_media(db, job_id))[1]) == media_id
+    assert (storage_root / bucket / rkey(job_id)).read_bytes() == MP4
+
+
+# --- VWK-09 ---
+@pytest.mark.tc("VWK-09")
+@pytest.mark.usefixtures("worker_token", "local_storage", "queue_clear")
+async def test_post_result_queued_job_with_no_reps_completes_without_touching_set(
+    client: AsyncClient, auth_headers, db: AsyncSession
+):
+    s1 = (await squat_sets(db))[0]["set_id"]
+    (job_id,) = await create_jobs(client, auth_headers, db, (0,))
+    before = await set_snapshot(db, s1)
+
+    body = assert_completed_job(await post_result(client, job_id, result=resj([])), job_id)
+
+    assert body["detected_rep_count"] == 0
+    state = await job_state(db, uuid.UUID(job_id))
+    assert state["started_at"] is not None and state["started_at"] == state["finished_at"]
+    assert state["attempt_count"] == 0
+    assert await set_snapshot(db, s1) == before
+    assert await rep_event_count(db, s1) == 0
+
+
+# --- VWK-10 ---
+@pytest.mark.tc("VWK-10")
+@pytest.mark.usefixtures("worker_token", "local_storage", "queue_clear")
+async def test_post_result_invalid_parts_returns_validation_error_without_storing(
+    client: AsyncClient, auth_headers, db: AsyncSession, put_calls: list[str]
+):
+    s1 = (await squat_sets(db))[0]["set_id"]
+    job_id = await processing_job(client, auth_headers, db)
+    before = await set_snapshot(db, s1)
+    gapped = [{**REPS3[0], "rep_no": 1}, {**REPS3[2], "rep_no": 3}]
+    # (kwargs của POST_RESULT, field mong đợi của details[0], chỉ so tiền tố)
+    cases: list[tuple[dict[str, Any], str, bool]] = [
+        ({"video": None}, "video", False),
+        ({"result": None}, "result", False),
+        ({"result": "khong-phai-json"}, "result", False),
+        ({"result": resj(REPS3, overall_score=101)}, "result.overall_score", False),
+        ({"result": resj(gapped)}, "result.rep_events", True),
+        ({"video": b""}, "video", False),
+        ({"video": b"day-khong-phai-mp4" * 10}, "video", False),
+    ]
+    for kwargs, field, is_prefix in cases:
+        _assert_first_field(await post_result(client, job_id, **kwargs), field, is_prefix)
+
+    assert put_calls == []
+    await assert_result_not_stored(db, job_id, "processing")
+    assert await set_snapshot(db, s1) == before
+
+
+@pytest.mark.tc("VWK-10")
+@pytest.mark.usefixtures("worker_token", "local_storage", "queue_clear", "small_result_video_limit")
+async def test_post_result_video_over_limit_returns_validation_error_without_storing(
+    client: AsyncClient, auth_headers, db: AsyncSession, put_calls: list[str]
+):
+    s1 = (await squat_sets(db))[0]["set_id"]
+    job_id = await processing_job(client, auth_headers, db)
+    before = await set_snapshot(db, s1)
+
+    _assert_first_field(await post_result(client, job_id), "video", False)
+
+    assert put_calls == []
+    await assert_result_not_stored(db, job_id, "processing")
+    assert await set_snapshot(db, s1) == before
+
+
+def _assert_first_field(res: Response, field: str, is_prefix: bool) -> None:
+    error = assert_error(res, 422, "validation_error")
+    actual = error["details"][0]["field"]
+    assert actual.startswith(field) if is_prefix else actual == field, (field, error)
+
+
+# --- VWK-11 ---
+@pytest.mark.tc("VWK-11")
+@pytest.mark.usefixtures("worker_token", "local_storage", "queue_clear")
+async def test_post_result_missing_or_finished_job_returns_error_without_storing(
+    client: AsyncClient, auth_headers, db: AsyncSession, put_calls: list[str]
+):
+    sets = await squat_sets(db)
+    job_done = await processing_job(client, auth_headers, db, set_key=0)
+    job_failed = await processing_job(client, auth_headers, db, set_key=0)
+    job_session_gone = await processing_job(client, auth_headers, db, set_key=1)
+
+    assert_error(await post_result(client, uuid.uuid4()), 404, "not_found")
+    assert_error(await post_result(client, uuid.uuid4(), video=b"khong-phai-mp4"), 404, "not_found")
+    assert_completed_job(await post_result(client, job_done), job_done)
+    assert_error(await post_result(client, job_done), 409, "conflict")
+    assert (await post_failure(client, job_failed)).status_code == 200
+    assert_error(await post_result(client, job_failed), 409, "conflict")
+    await soft_delete_session(db, sets[1]["session_id"])
+    assert_error(await post_result(client, job_session_gone), 404, "not_found")
+
+    assert put_calls == [rkey(job_done)]
+    await assert_result_not_stored(db, job_failed, "failed")
+    await assert_result_not_stored(db, job_session_gone, "processing")
+
+
+# --- VWK-12 ---
+@pytest.mark.tc("VWK-12")
+@pytest.mark.usefixtures("worker_token", "queue_clear")
+async def test_post_result_storage_error_returns_service_unavailable_without_leaking(
+    client: AsyncClient, auth_headers, db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+):
+    s1 = (await squat_sets(db))[0]["set_id"]
+    job_id = await processing_job(client, auth_headers, db)
+
+    async def _broken(object_key: str, data: bytes, mime_type: str) -> storage_service.StoredObject:
+        raise OSError("s3-hong")
+
+    monkeypatch.setattr(storage_service, "put_object", _broken)
+
+    res = await post_result(client, job_id)
+
+    error = assert_error(res, 503, "service_unavailable")
+    assert len(error["details"]) == 1
+    detail = error["details"][0]
+    assert set(detail) == {"field", "message", "code"}
+    assert (detail["field"], detail["code"]) == ("storage", "down")
+    assert isinstance(detail["message"], str) and detail["message"]
+    assert "s3-hong" not in res.text
+    await assert_result_not_stored(db, job_id, "processing")
+    assert await rep_event_count(db, s1) == 0

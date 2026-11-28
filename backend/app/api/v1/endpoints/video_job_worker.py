@@ -6,7 +6,7 @@ khỏi `video_jobs.py` dù cùng prefix.
 
 import uuid
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -69,6 +69,31 @@ async def get_source_video(job_id: uuid.UUID, db: AsyncSession = Depends(get_db)
     """Trả byte video gốc của job cho worker."""
     data, mime = await video_job_worker_service.get_source_video(db, job_id)
     return Response(content=data, media_type=mime)
+
+
+@router.post(
+    "/{job_id}/result",
+    response_model=VideoJobResponse,
+    status_code=200,
+    responses={**ERROR_RESPONSES, 503: {"model": ErrorResponse, "description": "Kho lưu trữ không khả dụng"}},
+    summary="Worker gửi kết quả phân tích và video kết quả của job",
+    description=(
+        WORKER + " `multipart/form-data`: part `video` (MP4 kết quả đã vẽ khung xương, tối đa 200 MiB) và part "
+        "`result` (chuỗi JSON `VideoJobWorkerResult`, không có `result_video_media_id`). Job `queued`/`processing` "
+        "→ `completed`; backend lưu video vào kho, tạo `media_files` hệ thống, ghi kết quả phân tích và rep vào hiệp. "
+        "Lỗi: 404 `not_found` (job không có, buổi đã xoá); 409 `conflict` (job đã completed/failed/cancelled); "
+        "422 `validation_error` (thiếu part, `result` không phải JSON hợp lệ hoặc sai giá trị, `video` rỗng, quá lớn "
+        "hoặc không phải MP4, `job_id` không phải UUID); 503 `service_unavailable` (kho lưu trữ lỗi)."
+    ),
+)
+async def submit_result(
+    job_id: uuid.UUID,
+    video: UploadFile = File(..., description="Video kết quả MP4, 1 byte – 200 MiB"),
+    result: str = Form(..., description="Chuỗi JSON VideoJobWorkerResult"),
+    db: AsyncSession = Depends(get_db),
+) -> VideoJobResponse:
+    """Worker gửi kết quả phân tích kèm video kết quả."""
+    return await video_job_worker_service.submit_result(db, job_id, video, result)
 
 
 @router.post(
