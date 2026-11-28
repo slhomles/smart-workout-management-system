@@ -364,9 +364,8 @@ describe('createRepCounter: rep thiếu biên độ và nhiễu', () => {
     expect(counter.getReps()[0]?.pause_bottom_ms).toBe(0);
   });
 
-  // Spec §5 ghi kỳ vọng `eccentric_ms 1000`, `concentric_ms 1000` cho (b) và (c), nhưng leaveS = 1000,
-  // enterS = 2000 nên tổng hai pha chỉ có thể là 1000 (spec §2.5). Chờ người dùng trả lời câu hỏi Q1
-  // (state.json của agent flow); ở đây chỉ kiểm các field không mâu thuẫn và tổng hai pha theo §2.5.
+  // Giá trị pha của (b) và (c) chốt theo spec §2.5 (người dùng chọn phương án A cho Q1 ngày 28/11/2026):
+  // tTurn = leaveS = 1000 nên phase1 = 0, phase2 = 1000. Kỳ vọng "1000 + 1000" ở spec §5 lệch §2.5.
   it('POSE-11 (b) SQ: mẫu bằng partial_deg được tính là rep thiếu biên độ', () => {
     const updates = feed(createRepCounter(SQ), [
       [0, 170],
@@ -374,11 +373,18 @@ describe('createRepCounter: rep thiếu biên độ và nhiễu', () => {
       [2000, 170],
     ]);
     const last = at(updates, 2);
-    expect(last.completed_rep).toMatchObject({ rep_no: 1, start_offset_ms: 1000, is_full_rom: false });
+    expect(last.completed_rep).toMatchObject({
+      rep_no: 1,
+      start_offset_ms: 1000,
+      eccentric_ms: 0,
+      pause_bottom_ms: 0,
+      concentric_ms: 1000,
+      min_joint_angle_deg: 130,
+      max_joint_angle_deg: 170,
+      is_full_rom: false,
+    });
     expect(last.partial_mistake_code).toBe('SQUAT_SHALLOW_DEPTH');
     expect(last.rep_count).toBe(1);
-    const rep = last.completed_rep;
-    expect((rep?.eccentric_ms ?? -1) + (rep?.concentric_ms ?? -1)).toBe(1000);
   });
 
   it('POSE-11 (c) DL: rep thiếu biên độ, partial_mistake_code null', () => {
@@ -388,10 +394,17 @@ describe('createRepCounter: rep thiếu biên độ và nhiễu', () => {
       [2000, 95],
     ]);
     const last = at(updates, 2);
-    expect(last.completed_rep).toMatchObject({ rep_no: 1, start_offset_ms: 1000, is_full_rom: false });
+    expect(last.completed_rep).toMatchObject({
+      rep_no: 1,
+      start_offset_ms: 1000,
+      concentric_ms: 0,
+      pause_top_ms: 0,
+      eccentric_ms: 1000,
+      min_joint_angle_deg: 95,
+      max_joint_angle_deg: 130,
+      is_full_rom: false,
+    });
     expect(last.partial_mistake_code).toBeNull();
-    const rep = last.completed_rep;
-    expect((rep?.eccentric_ms ?? -1) + (rep?.concentric_ms ?? -1)).toBe(1000);
   });
 
   it('POSE-11 tTurn là mẫu ĐẦU TIÊN có góc cực trị', () => {
@@ -439,10 +452,8 @@ describe('createRepCounter: mẫu không hợp lệ, reset, ngưỡng sai', () =
     [3100, 165],
   ];
 
-  // Spec §5 ghi kỳ vọng `concentric_ms: 1000` cho mẫu (3100), nhưng theo §2.5 ý 4 mẫu (3100) đi thẳng
-  // từ O vào S nên leaveO = enterS = 3100 và concentric_ms = 0 (tổng các pha không thể vượt
-  // enterS − leaveS = 2000). Chờ người dùng trả lời câu hỏi Q1 (state.json của agent flow); ở đây
-  // kiểm các field không mâu thuẫn.
+  // concentric_ms của mẫu (3100) chốt theo spec §2.5 ý 4 (người dùng chọn phương án A cho Q1 ngày
+  // 28/11/2026): đi thẳng O → S nên leaveO = enterS = 3100, concentric_ms = 0. Kỳ vọng 1000 ở spec §5 lệch §2.5.
   it('POSE-12 (a) mẫu lỗi bị bỏ qua, không đổi trạng thái hay mốc thời gian', () => {
     const updates = feed(createRepCounter(SQ), POSE_12_SAMPLES);
     expect(at(updates, 0).state).toBe('idle');
@@ -457,6 +468,7 @@ describe('createRepCounter: mẫu không hợp lệ, reset, ngưỡng sai', () =
       start_offset_ms: 1000,
       eccentric_ms: 1000,
       pause_bottom_ms: 1000,
+      concentric_ms: 0,
       min_joint_angle_deg: 95,
       max_joint_angle_deg: 165,
     });
