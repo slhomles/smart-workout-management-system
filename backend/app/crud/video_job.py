@@ -1,6 +1,7 @@
-"""Truy vấn job phân tích video (ai.video_analysis_jobs + ai.pose_analyses) và đọc media video.
+"""Truy vấn job phân tích video (ai.video_analysis_jobs + ai.pose_analyses), hàng đợi worker và media video.
 
-`media.media_files` chỉ đọc bằng `text()` vì module Gallery chưa có service.
+`media.media_files` truy cập bằng `text()` vì module Gallery chưa có service công khai cho file
+hệ thống (spec be-video-worker-api §6 ý 6, Q3).
 Ngữ cảnh hiệp/buổi/bài lấy từ view `ai.v_pose_analysis_details` (đã lọc buổi xoá mềm).
 """
 
@@ -31,6 +32,29 @@ FROM ai.video_analysis_jobs j
 JOIN ai.v_pose_analysis_details d ON d.pose_analysis_id = j.pose_analysis_id
 JOIN ai.pose_analyses pa ON pa.id = j.pose_analysis_id
 WHERE d.user_id = :user_id
+"""
+
+# Job queued còn lượt thử, buổi chưa xoá mềm; ưu tiên cao nhất rồi cũ nhất (dùng ix_video_analysis_jobs_queue).
+# SKIP LOCKED để nhiều worker cùng claim không chờ nhau; j.id làm khoá phụ cho thứ tự tất định.
+_CLAIM_NEXT_SQL = """
+SELECT j.id
+FROM ai.video_analysis_jobs j
+WHERE j.status = 'queued'
+  AND j.attempt_count < j.max_attempts
+  AND EXISTS (SELECT 1 FROM ai.v_pose_analysis_details d WHERE d.pose_analysis_id = j.pose_analysis_id)
+ORDER BY j.priority DESC, j.queued_at, j.id
+LIMIT 1
+FOR UPDATE OF j SKIP LOCKED
+"""
+
+_CLAIM_CONTEXT_SQL = """
+SELECT j.id AS job_id, d.set_id, d.exercise_id, e.slug AS exercise_slug, j.attempt_count,
+       m.mime_type AS source_video_content_type
+FROM ai.video_analysis_jobs j
+JOIN ai.v_pose_analysis_details d ON d.pose_analysis_id = j.pose_analysis_id
+JOIN catalog.exercises e ON e.id = d.exercise_id
+JOIN media.media_files m ON m.id = j.source_video_media_id
+WHERE j.id = :job_id
 """
 
 
@@ -108,3 +132,13 @@ async def list_jobs(
         params["after_created_at"], params["after_id"] = after
     sql += " ORDER BY j.created_at DESC, j.id DESC LIMIT :limit"
     return list((await db.execute(text(sql), params)).mappings().all())
+
+
+async def claim_next_job_id(db: AsyncSession) -> uuid.UUID | None:
+    """Khoá và trả id job kế tiếp worker nên nhận (FOR UPDATE SKIP LOCKED); None nếu hàng đợi trống."""
+    return await db.scalar(text(_CLAIM_NEXT_SQL))
+
+
+async def get_claim_context(db: AsyncSession, job_id: uuid.UUID) -> Any | None:
+    """Ngữ cảnh worker cần sau khi claim: hiệp, bài (id, slug), số lần thử, MIME video gốc; None nếu không có."""
+    return (await db.execute(text(_CLAIM_CONTEXT_SQL), {"job_id": job_id})).mappings().first()

@@ -3,6 +3,7 @@ Giới hạn giá trị khớp cột/CHECK trong 07_ai.sql."""
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -37,12 +38,63 @@ class VideoJobListQuery(BaseModel):
     cursor: str | None = None
 
 
-class VideoJobResultRequest(BaseModel):
-    """Kết quả worker gửi về khi phân tích video xong."""
+_SAMPLE_REP_EVENTS = [
+    {"rep_no": 1, "start_offset_ms": 0, "eccentric_ms": 3000, "pause_bottom_ms": 200,
+     "concentric_ms": 1000, "pause_top_ms": 300, "min_joint_angle_deg": 78.5,
+     "max_joint_angle_deg": 172.0, "is_full_rom": True},
+    {"rep_no": 2, "start_offset_ms": 4600, "eccentric_ms": 2900, "pause_bottom_ms": 100,
+     "concentric_ms": 1100, "pause_top_ms": 300, "min_joint_angle_deg": 80.0,
+     "max_joint_angle_deg": 171.0, "is_full_rom": True},
+]
+_SAMPLE_WORKER_RESULT: dict[str, Any] = {
+    "model_name": "yolov8_pose",
+    "model_version": "8.2.1",
+    "overall_score": 85,
+    "correct_form_pct": 90,
+    "feedback_summary": "Tempo đều, hạ chậm 3 giây",
+    "rep_events": _SAMPLE_REP_EVENTS,
+}
+
+
+class ClaimVideoJobRequest(BaseModel):
+    """Worker xin nhận job tiếp theo trong hàng đợi (06-ai-contracts §3.2)."""
+
+    # Khớp cột ai.video_analysis_jobs.worker_id varchar(100).
+    worker_id: str = Field(..., min_length=1, max_length=100, description="Định danh worker nhận job")
+
+    model_config = ConfigDict(json_schema_extra={"example": {"worker_id": "worker-01"}})
+
+
+class ClaimedVideoJobResponse(BaseModel):
+    """Job worker vừa nhận: đủ ngữ cảnh để tải video gốc và chọn luật tư thế theo bài tập."""
+
+    job_id: uuid.UUID
+    set_id: int
+    exercise_id: int
+    exercise_slug: str
+    attempt_count: int = Field(..., description="Số lần thử, đã tính cả lần nhận này")
+    source_video_content_type: str = Field(..., description="MIME của video gốc (media_files.mime_type)")
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "job_id": _SAMPLE_JOB_ID,
+                "set_id": 1024,
+                "exercise_id": 10,
+                "exercise_slug": "barbell-back-squat",
+                "attempt_count": 1,
+                "source_video_content_type": "video/mp4",
+            }
+        },
+    )
+
+
+class VideoJobWorkerResult(BaseModel):
+    """Kết quả phân tích worker gửi trong part `result` (chưa có video kết quả, backend tự lưu)."""
 
     model_name: str = Field(..., min_length=1, max_length=50)
     model_version: str = Field(..., min_length=1, max_length=50)
-    result_video_media_id: uuid.UUID = Field(..., description="Video kết quả (đã vẽ khung xương) do hệ thống sinh")
     overall_score: float | None = Field(None, ge=0, le=100)
     correct_form_pct: float | None = Field(None, ge=0, le=100)
     feedback_summary: str | None = Field(None, max_length=2000)
@@ -60,24 +112,18 @@ class VideoJobResultRequest(BaseModel):
     model_config = ConfigDict(
         # Field `model_name`/`model_version` đặt theo cột DB; tắt cảnh báo trùng tiền tố `model_` của Pydantic.
         protected_namespaces=(),
-        json_schema_extra={
-            "example": {
-                "model_name": "yolov8_pose",
-                "model_version": "8.2.1",
-                "result_video_media_id": _SAMPLE_RESULT_VIDEO_ID,
-                "overall_score": 85,
-                "correct_form_pct": 90,
-                "feedback_summary": "Tempo đều, hạ chậm 3 giây",
-                "rep_events": [
-                    {"rep_no": 1, "start_offset_ms": 0, "eccentric_ms": 3000, "pause_bottom_ms": 200,
-                     "concentric_ms": 1000, "pause_top_ms": 300, "min_joint_angle_deg": 78.5,
-                     "max_joint_angle_deg": 172.0, "is_full_rom": True},
-                    {"rep_no": 2, "start_offset_ms": 4600, "eccentric_ms": 2900, "pause_bottom_ms": 100,
-                     "concentric_ms": 1100, "pause_top_ms": 300, "min_joint_angle_deg": 80.0,
-                     "max_joint_angle_deg": 171.0, "is_full_rom": True},
-                ],
-            }
-        },
+        json_schema_extra={"example": _SAMPLE_WORKER_RESULT},
+    )
+
+
+class VideoJobResultRequest(VideoJobWorkerResult):
+    """Kết quả worker gửi về khi phân tích video xong."""
+
+    result_video_media_id: uuid.UUID = Field(..., description="Video kết quả (đã vẽ khung xương) do hệ thống sinh")
+
+    model_config = ConfigDict(
+        protected_namespaces=(),
+        json_schema_extra={"example": {**_SAMPLE_WORKER_RESULT, "result_video_media_id": _SAMPLE_RESULT_VIDEO_ID}},
     )
 
 
