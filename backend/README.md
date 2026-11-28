@@ -49,8 +49,14 @@ Trên Postgres của VM (cùng server) có hai DB:
 Chạy backend cho app/demo bằng cách ghi đè biến môi trường, không sửa `backend/.env`:
 
 ```powershell
-$env:POSTGRES_DB = "smart_workout_app"; uvicorn app.main:app --host 0.0.0.0 --port 8000
+$env:POSTGRES_DB = "smart_workout_app"
+$env:STORAGE_BACKEND = "s3"
+# Lấy từ .env gốc (không commit): AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET (= S3_BUCKET_NAME), AWS_S3_REGION (= AWS_REGION)
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+
+`backend/.env` luôn để `STORAGE_BACKEND=local` và KHÔNG chứa AWS key: file này được chép vào worktree của agent flow
+và dùng cho test (test không được gọi S3 thật).
 
 Nạp lại nội dung bài tập (sau khi dựng lại `smart_workout_app`): clone dataset theo `AGENT_RESOURCES.md` §0 vào
 `resources/`, rồi `python scripts\import_exercise_content.py --database smart_workout_app` (thử trước với
