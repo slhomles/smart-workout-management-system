@@ -15,6 +15,7 @@ export type { AiTrainerCandidate } from './rules';
 export { checkPose } from './check';
 export { createRepCounter, phaseOf } from './rep-counter';
 export type { RepCounter } from './rep-counter';
+export { correctFormPct, summarizeTempo } from './tempo';
 export type {
   ExerciseRule,
   FormCheck,
