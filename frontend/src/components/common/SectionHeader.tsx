@@ -24,7 +24,7 @@ export function SectionHeader({ title, isNew = false, onMore, moreLabel = 'Thêm
       )}
       <View style={styles.spacer} />
       {onMore && (
-        <Pressable onPress={onMore} hitSlop={10} style={styles.more} accessibilityRole="button">
+        <Pressable onPress={onMore} hitSlop={10} style={styles.more} accessibilityRole="button" accessibilityLabel={moreLabel}>
           <AppText color={theme.link}>{moreLabel}</AppText>
           <Ionicons name="chevron-forward" size={18} color={theme.link} />
         </Pressable>

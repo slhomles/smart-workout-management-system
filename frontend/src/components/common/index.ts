@@ -1,5 +1,6 @@
 // Component dùng chung (frontend-standards §8.2). Màn hình import từ '@/components/common'.
 export { AppText } from './AppText';
+export { BMI_BOUNDS, BmiScale, bmiScalePosition } from './BmiScale';
 export { Chip, LevelChip } from './Chip';
 export { CountdownRing } from './CountdownRing';
 export { DetailSheet } from './DetailSheet';
@@ -8,6 +9,7 @@ export { FilterTile, type IconName } from './FilterTile';
 export { formatClock, FullscreenTimer } from './FullscreenTimer';
 export { GradientButton } from './GradientButton';
 export { HeroCard, type HeroStat } from './HeroCard';
+export { chartDomain, LineChartCard } from './LineChartCard';
 export { ListItem } from './ListItem';
 export { FRAME_INTERVAL_MS, MediaThumb } from './MediaThumb';
 export { Screen } from './Screen';
